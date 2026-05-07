@@ -1,0 +1,138 @@
+{
+  "entities": {
+    "Project": {
+      "title": "Project",
+      "description": "Represents a media project (photography/cinematography).",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "clientId": { "type": "string" },
+        "clientName": { "type": "string" },
+        "clientEmail": { "type": "string" },
+        "category": { "type": "string" },
+        "status": { "type": "string", "enum": ["Em Seleção", "Finalizado", "Aguardando Cliente"] },
+        "coverImage": { "type": "string" },
+        "progress": { "type": "number" },
+        "driveLink": { "type": "string" },
+        "creditsUsed": { "type": "number" },
+        "creditsTotal": { "type": "number" },
+        "includedItems": { "type": "number" },
+        "extraPrice": { "type": "number" },
+        "allowHighRes": { "type": "boolean" },
+        "watermarkUrl": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "clientId", "ownerId", "createdAt", "updatedAt"]
+    },
+    "Client": {
+      "title": "Client",
+      "description": "Represents a customer.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "email", "ownerId", "createdAt"]
+    },
+    "Category": {
+      "title": "Category",
+      "description": "Represents a project category or tag.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "ownerId", "createdAt"]
+    },
+    "GalleryConfig": {
+      "title": "Gallery Config",
+      "description": "Configuration for a project's gallery.",
+      "type": "object",
+      "properties": {
+        "driveLink": { "type": "string" },
+        "freeItems": { "type": "number" },
+        "pricePerExtra": { "type": "number" },
+        "allowHighRes": { "type": "boolean" },
+        "watermarkActive": { "type": "boolean" },
+        "projectId": { "type": "string" }
+      },
+      "required": ["projectId"]
+    },
+    "MediaItem": {
+      "title": "Media Item",
+      "description": "An image or video within a project.",
+      "type": "object",
+      "properties": {
+        "url": { "type": "string" },
+        "thumbnailUrl": { "type": "string" },
+        "type": { "type": "string", "enum": ["image", "video"] },
+        "isSelected": { "type": "boolean" },
+        "projectId": { "type": "string" },
+        "uploadedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["url", "projectId", "uploadedAt"]
+    },
+    "ClientAccess": {
+      "title": "Client Access",
+      "description": "Client details and permissions for a project.",
+      "type": "object",
+      "properties": {
+        "fullName": { "type": "string" },
+        "email": { "type": "string" },
+        "password": { "type": "string" },
+        "accessLink": { "type": "string" },
+        "projectId": { "type": "string" },
+        "permissions": { "type": "array", "items": { "type": "string" } },
+        "credits": { "type": "number" },
+        "pricingTier": { "type": "string" },
+        "invoiceCycle": { "type": "string" }
+      },
+      "required": ["fullName", "email", "projectId"]
+    },
+    "GlobalSettings": {
+      "title": "Global Settings",
+      "description": "Application-wide settings managed by admins.",
+      "type": "object",
+      "properties": {
+        "watermarkUrl": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      }
+    }
+  },
+  "firestore": {
+    "settings": {
+      "schema": "GlobalSettings",
+      "description": "Global settings for the application."
+    },
+    "projects": {
+      "schema": "Project",
+      "description": "Top-level collection for projects."
+    },
+    "clients": {
+      "schema": "Client",
+      "description": "Top-level collection for clients."
+    },
+    "categories": {
+      "schema": "Category",
+      "description": "Top-level collection for categories."
+    },
+    "projects/{projectId}/galleries/{galleryId}": {
+      "schema": "GalleryConfig",
+      "description": "Configuration for the project gallery."
+    },
+    "projects/{projectId}/media": {
+      "schema": "MediaItem",
+      "description": "Media items associated with a project."
+    },
+    "projects/{projectId}/access": {
+      "schema": "ClientAccess",
+      "description": "Client access details for a project."
+    }
+  }
+}
