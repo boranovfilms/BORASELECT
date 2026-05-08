@@ -187,13 +187,6 @@ export default function ProjectReview() {
 
   const getVideoUrl = (item: MediaItem | null) => {
     if (!item) return '';
-    
-    // Cloudflare Stream - usar HLS manifest (compatível com ReactPlayer)
-    if (item.externalId && item.url && item.url.includes('cloudflarestream.com')) {
-      return `https://customer-qm5on0nubla4rvdf.cloudflarestream.com/${item.externalId}/manifest/video.m3u8`;
-    }
-    
-    // Fallback: URL direta
     return item.url || '';
   };
 
@@ -437,6 +430,16 @@ export default function ProjectReview() {
                             <div className="absolute top-4 right-4 z-40 bg-black/50 backdrop-blur-md p-1.5 rounded-full border border-white/10">
                               <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                             </div>
+                          </div>
+                        ) : selectedPreview.externalId && selectedPreview.url?.includes('cloudflarestream.com') ? (
+                          <div className="w-full h-full relative overflow-hidden bg-black">
+                            <iframe 
+                              src={`https://customer-qm5on0nubla4rvdf.cloudflarestream.com/${selectedPreview.externalId}/iframe?autoplay=true&muted=true`}
+                              className="absolute inset-0 w-full h-full border-0"
+                              allow="autoplay; fullscreen"
+                              allowFullScreen
+                              onLoad={() => setIsVideoLoading(false)}
+                            />
                           </div>
                         ) : (
                           <Player
