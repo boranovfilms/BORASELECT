@@ -343,8 +343,10 @@ export default function ProjectConfig() {
           await mediaService.deleteMedia(id!, item.id);
         }
       }
-      setMedia([]);
-      alert('Catálogo limpo com sucesso.');
+            setMedia([]);
+      await projectService.updateProject(id!, { creditsUsed: 0 });
+      alert('Catálogo limpo com sucesso. Créditos resetados.');
+
     } catch (error) {
       console.error(error);
       alert('Erro ao limpar catálogo.');
