@@ -206,7 +206,11 @@ export default function ProjectConfig() {
             ...prev, 
             [uploadId]: { ...prev[uploadId], status: 'completed', progress: 100 } 
           }));
-          setTimeout(loadInitialData, 1000);
+          setTimeout(async () => {
+  const mediaData = await mediaService.getMedia(id!);
+  setMedia(mediaData);
+}, 1000);
+
         } else {
           console.error('[Upload] Erro:', xhr.status, xhr.responseText);
           alert(`Erro Cloudflare (${xhr.status}): ${xhr.responseText?.substring(0, 200)}`);
