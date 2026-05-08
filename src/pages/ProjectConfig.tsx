@@ -21,7 +21,8 @@ import {
   Pause,
   ChevronRight,
   CheckCircle2,
-  X
+  X,
+  FolderOpen
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { projectService, Project } from '../services/projectService';
@@ -49,6 +50,7 @@ export default function ProjectConfig() {
   const activeRequests = useRef<Record<string, XMLHttpRequest>>({});
 
   const [mediaLink, setMediaLink] = useState('');
+  const [originalDriveLink, setOriginalDriveLink] = useState('');
   const [clientEmail, setClientEmail] = useState('');
   const [includedItems, setIncludedItems] = useState(15);
   const [extraPrice, setExtraPrice] = useState('45,00');
@@ -74,6 +76,7 @@ export default function ProjectConfig() {
       if (projData) {
         setProject(projData);
         setMediaLink(projData.driveLink || '');
+        setOriginalDriveLink(projData.originalDriveLink || '');
         setClientEmail(projData.clientEmail || '');
         setIncludedItems(projData.includedItems || 15);
         setExtraPrice(projData.extraPrice?.toString().replace('.', ',') || '45,00');
@@ -93,6 +96,7 @@ export default function ProjectConfig() {
     try {
       await projectService.updateProject(id, {
         driveLink: mediaLink,
+        originalDriveLink,
         clientEmail,
         creditsTotal: includedItems,
         includedItems,
@@ -141,7 +145,6 @@ export default function ProjectConfig() {
     setUploads(prev => ({ ...prev, [uploadId]: { ...prev[uploadId], status: 'uploading', progress: 0 } }));
 
     try {
-      // 1. Pedir URL ao Worker (GET)
       const workerUrl = `https://nameless-dust-4193.boranovfilms.workers.dev/api/upload`;
       
       const response = await fetch(workerUrl, { 
@@ -164,7 +167,6 @@ export default function ProjectConfig() {
       console.log(`[Upload] UID: ${uid}`);
       console.log(`[Upload] uploadURL: ${uploadURL}`);
 
-      // 2. Upload DIRETO para Cloudflare Stream via POST + FormData
       const xhr = new XMLHttpRequest();
       activeRequests.current[uploadId] = xhr;
 
@@ -186,7 +188,6 @@ export default function ProjectConfig() {
       xhr.onload = async () => {
         delete activeRequests.current[uploadId];
         console.log(`[Upload] Cloudflare response status: ${xhr.status}`);
-        console.log(`[Upload] Cloudflare response body: ${xhr.responseText}`);
 
         if (xhr.status >= 200 && xhr.status < 300) {
           const streamUrl = `https://customer-qm5on0nubla4rvdf.cloudflarestream.com/${uid}/watch`;
@@ -351,6 +352,10 @@ export default function ProjectConfig() {
   const getThumbnailUrl = (item: MediaItem) => {
     if (!item.url) return item.thumbnailUrl || '';
     
+    if (item.externalId && item.url.includes('cloudflarestream.com')) {
+      return `https://customer-qm5on0nubla4rvdf.cloudflarestream.com/${item.externalId}/thumbnails/thumbnail.jpg`;
+    }
+
     if (item.url.includes('drive.google.com') || (item.url.length > 20 && !item.url.includes('/') && !item.url.includes('.'))) {
       const match = item.url.match(/(?:id=|\/d\/|\/file\/d\/)([a-zA-Z0-9_-]+)/);
       const fileId = match ? match[1] : item.url;
@@ -644,6 +649,24 @@ export default function ProjectConfig() {
 
                 <div className="space-y-4">
                   <label className="text-[10px] uppercase font-bold tracking-widest text-zinc-500 flex items-center gap-2">
+                    <FolderOpen className="w-3 h-3" />
+                    Link da Pasta do Drive (Originais sem marca)
+                  </label>
+                  <div className="relative">
+                    <FolderOpen className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-600" />
+                    <input 
+                      type="text" 
+                      value={originalDriveLink}
+                      onChange={(e) => setOriginalDriveLink(e.target.value)}
+                      placeholder="https://drive.google.com/drive/folders/..."
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-12 pr-4 py-4 text-white focus:border-[#ff5351] outline-none"
+                    />
+                  </div>
+                  <p className="text-[10px] text-zinc-600 ml-1">Pasta com os arquivos originais para download do cliente. O cliente não verá este link.</p>
+                </div>
+
+                <div className="space-y-4">
+                  <label className="text-[10px] uppercase font-bold tracking-widest text-zinc-500 flex items-center gap-2">
                     Mídias Inclusas (Gratuitas)
                     <Info className="w-3 h-3" />
                   </label>
@@ -763,7 +786,6 @@ export default function ProjectConfig() {
               >
                 <img 
                   src={getThumbnailUrl(item)}
-                  crossOrigin="anonymous"
                   className="w-full h-full object-cover opacity-60 group-hover:opacity-100 transition-all duration-700"
                   alt={item.name || 'Preview'}
                   onError={(e) => {
