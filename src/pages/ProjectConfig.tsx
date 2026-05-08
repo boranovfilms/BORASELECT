@@ -141,46 +141,37 @@ export default function ProjectConfig() {
     setUploads(prev => ({ ...prev, [uploadId]: { ...prev[uploadId], status: 'uploading', progress: 0 } }));
 
     try {
-      console.log(`[Upload] 1. Solicitando URL ao Worker...`);
-      
-      // CORRIGIDO: POST em vez de GET, com body JSON
+      // 1. Pedir URL ao Worker (GET)
       const workerUrl = `https://nameless-dust-4193.boranovfilms.workers.dev/api/upload`;
       
       const response = await fetch(workerUrl, { 
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fileName: upload.file.name,
-          fileType: upload.file.type
-        })
+        method: 'GET',
+        headers: { 'Accept': 'application/json' }
       });
       
-      console.log(`[Upload] Status Worker: ${response.status}`);
+      if (!response.ok) {
+        throw new Error(`Worker Error: ${response.status}`);
+      }
       
       const data = await response.json();
-      console.log(`[Upload] Resposta Worker:`, JSON.stringify(data));
+      console.log('[Upload] Worker response:', JSON.stringify(data));
       
-      if (!data.success) {
-        throw new Error(data.error || 'Worker retornou erro');
+      if (!data.success || !data.result?.uploadURL) {
+        throw new Error('Worker não retornou URL');
       }
       
-      // CORRIGIDO: Aceitar vários formatos de resposta
-      let uploadURL = data.uploadURL || data.result?.uploadURL || data.url || data.upload_url;
-      let uid = data.uid || data.result?.uid || data.id;
-      
+      const { uid, uploadURL } = data.result;
       console.log(`[Upload] UID: ${uid}`);
-      console.log(`[Upload] URL: ${uploadURL}`);
+      console.log(`[Upload] uploadURL: ${uploadURL}`);
 
-      if (!uploadURL) {
-        throw new Error(`Worker não retornou URL. Resposta: ${JSON.stringify(data)}`);
-      }
-
-      // CORRIGIDO: Upload com PUT direto
+      // 2. Upload DIRETO para Cloudflare Stream via POST + FormData
       const xhr = new XMLHttpRequest();
       activeRequests.current[uploadId] = xhr;
 
-      xhr.open('PUT', uploadURL, true);
-      xhr.setRequestHeader('Content-Type', upload.file.type);
+      const formData = new FormData();
+      formData.append('file', upload.file);
+
+      xhr.open('POST', uploadURL, true);
 
       xhr.upload.onprogress = (event) => {
         if (event.lengthComputable) {
@@ -194,23 +185,15 @@ export default function ProjectConfig() {
 
       xhr.onload = async () => {
         delete activeRequests.current[uploadId];
-        console.log(`[Upload] Status XHR: ${xhr.status}`);
+        console.log(`[Upload] Cloudflare response status: ${xhr.status}`);
+        console.log(`[Upload] Cloudflare response body: ${xhr.responseText}`);
 
-        if (xhr.status === 200 || xhr.status === 201 || xhr.status === 204) {
-          if (!uid && uploadURL) {
-            const match = uploadURL.match(/\/([a-f0-9-]+)\/+/i);
-            if (match) uid = match[1];
-          }
-          
-          const streamUrl = uid 
-            ? `https://customer-qm5on0nubla4rvdf.cloudflarestream.com/${uid}/watch`
-            : uploadURL;
-          const thumbnailUrl = uid 
-            ? `https://customer-qm5on0nubla4rvdf.cloudflarestream.com/${uid}/thumbnails/thumbnail.jpg`
-            : uploadURL;
+        if (xhr.status >= 200 && xhr.status < 300) {
+          const streamUrl = `https://customer-qm5on0nubla4rvdf.cloudflarestream.com/${uid}/watch`;
+          const thumbnailUrl = `https://customer-qm5on0nubla4rvdf.cloudflarestream.com/${uid}/thumbnails/thumbnail.jpg`;
 
           await mediaService.addMedia(id!, {
-            externalId: uid || uploadURL,
+            externalId: uid,
             name: upload.file.name,
             url: streamUrl,
             thumbnailUrl: thumbnailUrl,
@@ -224,24 +207,19 @@ export default function ProjectConfig() {
           }));
           setTimeout(loadInitialData, 1000);
         } else {
-          console.error('[Upload] Erro XHR:', xhr.status, xhr.responseText);
-          let errorMsg = `Erro no Servidor (${xhr.status})`;
-          if (xhr.status === 413) {
-            errorMsg = "Arquivo muito grande. Limite do Cloudflare Stream é 60GB.";
-          }
-          alert(errorMsg);
+          console.error('[Upload] Erro:', xhr.status, xhr.responseText);
+          alert(`Erro Cloudflare (${xhr.status}): ${xhr.responseText?.substring(0, 200)}`);
           setUploads(prev => ({ ...prev, [uploadId]: { ...prev[uploadId], status: 'error' } }));
         }
       };
 
       xhr.onerror = () => {
         delete activeRequests.current[uploadId];
-        console.error('[Upload] Erro de Rede');
-        alert('Erro de conexão com o Cloudflare. Verifique CORS.');
+        alert('Erro de conexão com Cloudflare. Verifique CORS.');
         setUploads(prev => ({ ...prev, [uploadId]: { ...prev[uploadId], status: 'error' } }));
       };
 
-      xhr.send(upload.file);
+      xhr.send(formData);
     } catch (error: any) {
       console.error('Upload Error:', error);
       alert(`Erro: ${error.message}`);
