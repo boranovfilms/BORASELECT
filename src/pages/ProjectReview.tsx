@@ -434,7 +434,7 @@ export default function ProjectReview() {
                         ) : selectedPreview.externalId && selectedPreview.url?.includes('cloudflarestream.com') ? (
                           <div className="w-full h-full relative overflow-hidden bg-black">
                             <iframe 
-                              src={`https://customer-qm5on0nubla4rvdf.cloudflarestream.com/${selectedPreview.externalId}/iframe`}
+                              src={`https://customer-qm5on0nubla4rvdf.cloudflarestream.com/${selectedPreview.externalId}/iframe?autoplay=true`}
                               className="absolute inset-0 w-full h-full border-0"
                               allow="autoplay; fullscreen"
                               allowFullScreen
