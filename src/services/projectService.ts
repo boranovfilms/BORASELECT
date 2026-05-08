@@ -14,6 +14,7 @@ export interface Project {
   deliveryDate?: any;
   progress: number;
   driveLink?: string;
+  originalDriveLink?: string;
   includedItems?: number;
   extraPrice?: number;
   allowHighRes?: boolean;
@@ -97,7 +98,6 @@ export const projectService = {
   createProject: async (data: Partial<Project>) => {
     if (!auth.currentUser) throw new Error('Not authenticated');
     
-    // Normalize client email to lowercase to match login email
     const normalizedData = {
       ...data,
       clientEmail: data.clientEmail ? data.clientEmail.toLowerCase().trim() : '',
