@@ -3,12 +3,15 @@ import { db, auth } from '../lib/firebase';
 
 export interface MediaItem {
   id?: string;
-  externalId?: string; // Cloudflare Stream ID or unique reference
+  externalId?: string;
   name?: string;
   url: string;
   thumbnailUrl: string;
   type: 'image' | 'video';
   isSelected: boolean;
+  isDownloaded?: boolean;
+  downloadedAt?: any;
+  downloadCount?: number;
   projectId: string;
   uploadedAt: any;
 }
@@ -38,5 +41,18 @@ export const mediaService = {
   updateMedia: async (projectId: string, mediaId: string, data: Partial<MediaItem>) => {
     const docRef = doc(db, 'projects', projectId, 'media', mediaId);
     return await updateDoc(docRef, data as any);
+  },
+
+  markAsDownloaded: async (projectId: string, mediaId: string) => {
+    const docRef = doc(db, 'projects', projectId, 'media', mediaId);
+    const snapshot = await getDocs(query(collection(db, 'projects', projectId, 'media')));
+    const mediaDoc = snapshot.docs.find(d => d.id === mediaId);
+    const currentCount = mediaDoc?.data()?.downloadCount || 0;
+    
+    return await updateDoc(docRef, {
+      isDownloaded: true,
+      downloadedAt: serverTimestamp(),
+      downloadCount: currentCount + 1
+    });
   }
 };
