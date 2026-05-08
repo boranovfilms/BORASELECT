@@ -46,10 +46,8 @@ export default function ProjectConfig() {
   const [fetchingDrive, setFetchingDrive] = useState(false);
   const [activeTab, setActiveTab] = useState('all');
 
-  // Controladores de XHR para cancelamento (fora do state para performance)
   const activeRequests = useRef<Record<string, XMLHttpRequest>>({});
 
-  // Form State
   const [mediaLink, setMediaLink] = useState('');
   const [clientEmail, setClientEmail] = useState('');
   const [includedItems, setIncludedItems] = useState(15);
@@ -118,7 +116,6 @@ export default function ProjectConfig() {
     const newUploads: Record<string, UploadProgress> = {};
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
-      // Ignorar arquivos que não são video ou imagem para evitar erros
       if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) continue;
       
       const uploadId = `${Date.now()}-${file.name}-${Math.random().toString(36).substr(2, 9)}`;
@@ -134,7 +131,6 @@ export default function ProjectConfig() {
 
     setUploads(prev => ({ ...prev, ...newUploads }));
     
-    // Resetar input para permitir selecionar os mesmos arquivos novamente se necessário
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -145,48 +141,46 @@ export default function ProjectConfig() {
     setUploads(prev => ({ ...prev, [uploadId]: { ...prev[uploadId], status: 'uploading', progress: 0 } }));
 
     try {
-      console.log(`[Upload] 1. Solicitando URL única ao Worker...`);
-      const timestamp = Date.now();
-      const workerUrl = `https://nameless-dust-4193.boranovfilms.workers.dev/api/upload?t=${timestamp}`;
+      console.log(`[Upload] 1. Solicitando URL ao Worker...`);
+      
+      // CORRIGIDO: POST em vez de GET, com body JSON
+      const workerUrl = `https://nameless-dust-4193.boranovfilms.workers.dev/api/upload`;
       
       const response = await fetch(workerUrl, { 
-        method: 'GET',
-        headers: { 'Accept': 'application/json' },
-        mode: 'cors'
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fileName: upload.file.name,
+          fileType: upload.file.type
+        })
       });
       
-      if (!response.ok) {
-        throw new Error(`Worker Error: ${response.status}`);
-      }
+      console.log(`[Upload] Status Worker: ${response.status}`);
       
       const data = await response.json();
+      console.log(`[Upload] Resposta Worker:`, JSON.stringify(data));
       
-      if (!data.success || !data.result?.uploadURL) {
-        throw new Error('Worker não retornou URL do Cloudflare Stream.');
+      if (!data.success) {
+        throw new Error(data.error || 'Worker retornou erro');
       }
       
-      const { uid, uploadURL } = data.result;
+      // CORRIGIDO: Aceitar vários formatos de resposta
+      let uploadURL = data.uploadURL || data.result?.uploadURL || data.url || data.upload_url;
+      let uid = data.uid || data.result?.uid || data.id;
+      
       console.log(`[Upload] UID: ${uid}`);
-      console.log(`[Upload] Destino: ${uploadURL}`);
+      console.log(`[Upload] URL: ${uploadURL}`);
 
-      // Validação Crítica: A URL deve começar com https:// e idealmente ser do cloudflare
-      if (!uploadURL || !uploadURL.startsWith('https://')) {
-        throw new Error(`URL de upload inválida recebida: ${uploadURL}`);
+      if (!uploadURL) {
+        throw new Error(`Worker não retornou URL. Resposta: ${JSON.stringify(data)}`);
       }
 
-      // 2. Upload DIRETO usando POST e FormData (O padrão mais suportado pelo Cloudflare Stream)
+      // CORRIGIDO: Upload com PUT direto
       const xhr = new XMLHttpRequest();
       activeRequests.current[uploadId] = xhr;
 
-      const formData = new FormData();
-      // O Cloudflare Stream espera o arquivo no campo 'file'
-      formData.append('file', upload.file);
-
-      // Abrimos a conexão
-      xhr.open('POST', uploadURL, true);
-      
-      // NÃO definir Content-Type manualmente ao usar FormData!
-      // O browser fará isso com o boundary correto.
+      xhr.open('PUT', uploadURL, true);
+      xhr.setRequestHeader('Content-Type', upload.file.type);
 
       xhr.upload.onprogress = (event) => {
         if (event.lengthComputable) {
@@ -200,14 +194,23 @@ export default function ProjectConfig() {
 
       xhr.onload = async () => {
         delete activeRequests.current[uploadId];
-        console.log(`[Upload] Status Resposta: ${xhr.status}`);
+        console.log(`[Upload] Status XHR: ${xhr.status}`);
 
         if (xhr.status === 200 || xhr.status === 201 || xhr.status === 204) {
-          const streamUrl = `https://customer-qm5on0nubla4rvdf.cloudflarestream.com/${uid}/watch`;
-          const thumbnailUrl = `https://customer-qm5on0nubla4rvdf.cloudflarestream.com/${uid}/thumbnails/thumbnail.jpg`;
+          if (!uid && uploadURL) {
+            const match = uploadURL.match(/\/([a-f0-9-]+)\/+/i);
+            if (match) uid = match[1];
+          }
+          
+          const streamUrl = uid 
+            ? `https://customer-qm5on0nubla4rvdf.cloudflarestream.com/${uid}/watch`
+            : uploadURL;
+          const thumbnailUrl = uid 
+            ? `https://customer-qm5on0nubla4rvdf.cloudflarestream.com/${uid}/thumbnails/thumbnail.jpg`
+            : uploadURL;
 
           await mediaService.addMedia(id!, {
-            externalId: uid,
+            externalId: uid || uploadURL,
             name: upload.file.name,
             url: streamUrl,
             thumbnailUrl: thumbnailUrl,
@@ -222,10 +225,9 @@ export default function ProjectConfig() {
           setTimeout(loadInitialData, 1000);
         } else {
           console.error('[Upload] Erro XHR:', xhr.status, xhr.responseText);
-          // Se o erro for 413, capturamos para o usuário
           let errorMsg = `Erro no Servidor (${xhr.status})`;
           if (xhr.status === 413) {
-            errorMsg = "Arquivo Rejeitado (413). O servidor ou proxy bloqueou o arquivo por tamanho. Tente abrir o app em uma NOVA GUIA e testar novamente.";
+            errorMsg = "Arquivo muito grande. Limite do Cloudflare Stream é 60GB.";
           }
           alert(errorMsg);
           setUploads(prev => ({ ...prev, [uploadId]: { ...prev[uploadId], status: 'error' } }));
@@ -235,15 +237,14 @@ export default function ProjectConfig() {
       xhr.onerror = () => {
         delete activeRequests.current[uploadId];
         console.error('[Upload] Erro de Rede');
-        alert('Erro de conexão ou CORS ao enviar para o Cloudflare.');
+        alert('Erro de conexão com o Cloudflare. Verifique CORS.');
         setUploads(prev => ({ ...prev, [uploadId]: { ...prev[uploadId], status: 'error' } }));
       };
 
-      // Iniciamos o envio do FormData
-      xhr.send(formData);
+      xhr.send(upload.file);
     } catch (error: any) {
       console.error('Upload Error:', error);
-      alert(`Falha no Processo: ${error.message}`);
+      alert(`Erro: ${error.message}`);
       setUploads(prev => ({ ...prev, [uploadId]: { ...prev[uploadId], status: 'error' } }));
     }
   };
@@ -354,7 +355,6 @@ export default function ProjectConfig() {
     if (!window.confirm('Deseja apagar TODO o catálogo? Esta ação é irreversível.')) return;
     setLoading(true);
     try {
-      // In production, we'd use a batch or cloud function for better performance
       for (const item of media) {
         if (item.id) {
           await mediaService.deleteMedia(id!, item.id);
@@ -373,14 +373,12 @@ export default function ProjectConfig() {
   const getThumbnailUrl = (item: MediaItem) => {
     if (!item.url) return item.thumbnailUrl || '';
     
-    // Suporte especial para Google Drive
     if (item.url.includes('drive.google.com') || (item.url.length > 20 && !item.url.includes('/') && !item.url.includes('.'))) {
       const match = item.url.match(/(?:id=|\/d\/|\/file\/d\/)([a-zA-Z0-9_-]+)/);
       const fileId = match ? match[1] : item.url;
       return `https://drive.google.com/thumbnail?id=${fileId}&sz=w1000`;
     }
 
-    // Robust encoding based on URL segments
     let finalUrl = item.url;
     
     try {
@@ -458,15 +456,13 @@ export default function ProjectConfig() {
       </header>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        {/* Main Settings Area */}
         <div className="lg:col-span-12 flex flex-col gap-8">
-          {/* Upload de Mídia */}
           <section className="bg-[#1f1f1f] border border-zinc-800 rounded-3xl p-8 space-y-8 shadow-2xl relative overflow-hidden">
             <div className="absolute top-0 right-0 w-64 h-64 bg-[#ff5351]/5 blur-[100px] -z-10" />
             
             <div className="flex justify-between items-center border-b border-zinc-800 pb-4">
               <h2 className="text-xl font-bold text-white uppercase tracking-tight">1. Upload de Mídia</h2>
-              <span className="px-3 py-1 bg-[#ff5351]/10 border border-[#ff5351]/20 rounded text-[10px] font-bold uppercase tracking-widest text-[#ff5351]">R2 Storage Direct</span>
+              <span className="px-3 py-1 bg-[#ff5351]/10 border border-[#ff5351]/20 rounded text-[10px] font-bold uppercase tracking-widest text-[#ff5351]">Cloudflare Stream Direct</span>
             </div>
 
             <div className="space-y-6">
@@ -497,7 +493,6 @@ export default function ProjectConfig() {
                 <p className="text-[10px] text-zinc-700 mt-4 font-mono uppercase tracking-widest border border-zinc-800 px-3 py-1 rounded-full group-hover:border-[#ff5351]/30">JPG, PNG, MP4, MOV</p>
               </div>
 
-              {/* Uploads em andamento */}
               {Object.keys(uploads).length > 0 && (
                 <div className="space-y-4 pt-6 border-t border-zinc-800">
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
@@ -599,7 +594,6 @@ export default function ProjectConfig() {
               )}
             </div>
 
-            {/* Alternativa: Link Sync (Apenas se quiser manter) */}
             <div className="pt-8 border-t border-zinc-800">
               <button 
                 onClick={() => setMediaLink(mediaLink ? '' : ' ')} 
@@ -635,7 +629,6 @@ export default function ProjectConfig() {
             </div>
           </section>
 
-          {/* Regras de Acesso */}
           <section className="bg-[#1f1f1f] border border-zinc-800 rounded-3xl p-8 shadow-2xl">
             <h2 className="text-xl font-bold text-white mb-8 border-b border-zinc-800 pb-4 uppercase tracking-tight">2. Regras de Acesso</h2>
             
@@ -741,7 +734,6 @@ export default function ProjectConfig() {
         </div>
       </div>
 
-      {/* Media Catalog Preview */}
       <section className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
         <div className="flex flex-col md:flex-row md:items-end justify-between border-b border-zinc-800 pb-4 gap-4">
           <div>
