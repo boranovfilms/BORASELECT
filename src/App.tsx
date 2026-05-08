@@ -6,6 +6,7 @@ import AppLayout from './components/layout/AppLayout';
 import Dashboard from './pages/Dashboard';
 import ProjectConfig from './pages/ProjectConfig';
 import ProjectReview from './pages/ProjectReview';
+import ProjectDownload from './pages/ProjectDownload';
 import ClientAccess from './pages/ClientAccess';
 import VideoTest from './pages/VideoTest';
 import Login from './pages/Login';
@@ -20,7 +21,6 @@ export default function App() {
       setUser(u);
       setLoading(false);
       
-      // Update last access for clients
       if (u && u.email && u.email !== 'boranovfilms@gmail.com') {
         import('./services/clientService').then(({ clientService }) => {
           clientService.updateLastAccess(u.email!).catch(err => {
@@ -48,15 +48,14 @@ export default function App() {
         <Route path="/login" element={user ? <Navigate to="/" /> : <Login />} />
         <Route path="/register" element={user ? <Navigate to="/" /> : <Register />} />
         
-        <Route path="/" element={user ? <AppLayout><Dashboard /></AppLayout> : <Navigate to="/login" />} />
+        <Route path="/" element={user ? <AppLayout><Dashboard /></AppLayout> : <Navigate to="/" />} />
         <Route path="/projects/:id/config" element={user && isAdmin ? <AppLayout><ProjectConfig /></AppLayout> : <Navigate to="/" />} />
         <Route path="/clients" element={user && isAdmin ? <AppLayout><ClientAccess /></AppLayout> : <Navigate to="/" />} />
         <Route path="/video-test" element={user && isAdmin ? <AppLayout><VideoTest /></AppLayout> : <Navigate to="/" />} />
         
-        {/* Public Route for Clients - Now using same layout for consistency */}
         <Route path="/review/:id" element={user ? <AppLayout><ProjectReview /></AppLayout> : <Navigate to="/login" />} />
+        <Route path="/download/:id" element={user ? <AppLayout><ProjectDownload /></AppLayout> : <Navigate to="/login" />} />
         
-        {/* Fallback */}
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </Router>
