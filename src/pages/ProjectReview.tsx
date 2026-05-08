@@ -377,10 +377,14 @@ export default function ProjectReview() {
                  </div>
 
                  <div className="pb-0">
-                    <button className="h-[64px] px-10 bg-[#ff5351] text-white rounded-2xl font-black uppercase tracking-[0.2em] text-[10px] hover:brightness-110 active:scale-95 transition-all shadow-[0_0_30px_rgba(255,83,81,0.2)] flex items-center justify-center gap-3">
-                      <CheckCircle2 className="w-5 h-5" />
-                      ENVIAR SELEÇÃO
-                    </button>
+                    <button 
+  onClick={() => navigate(`/download/${id}`)}
+  className="h-[64px] px-10 bg-[#ff5351] text-white rounded-2xl font-black uppercase tracking-[0.2em] text-[10px] hover:brightness-110 active:scale-95 transition-all shadow-[0_0_30px_rgba(255,83,81,0.2)] flex items-center justify-center gap-3"
+>
+  <CheckCircle2 className="w-5 h-5" />
+  ENVIAR SELEÇÃO
+</button>
+
                  </div>
               </div>
             </div>
