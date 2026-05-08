@@ -58,7 +58,6 @@ export default function ProjectReview() {
     };
   }, [id]);
 
-  // Monitor loading state
   useEffect(() => {
     if (isVideoLoading && selectedPreview) {
       setLoadTimeout(false);
@@ -105,7 +104,7 @@ export default function ProjectReview() {
   const handleVideoError = async (e?: any) => {
     if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
     
-    console.error("Erro ao carregar vídeo do Cloudflare/R2:", e || 'Timeout');
+    console.error("Erro ao carregar vídeo:", e || 'Timeout');
     if (selectedPreview) {
       console.error("URL que falhou:", getVideoUrl(selectedPreview));
     }
@@ -132,6 +131,11 @@ export default function ProjectReview() {
   const getThumbnailUrl = (item: MediaItem) => {
     if (!item.url) return item.thumbnailUrl || '';
     
+    // Cloudflare Stream - usar endpoint de thumbnail correto
+    if (item.externalId && item.url.includes('cloudflarestream.com')) {
+      return `https://customer-qm5on0nubla4rvdf.cloudflarestream.com/${item.externalId}/thumbnails/thumbnail.jpg`;
+    }
+
     // Suporte especial para Google Drive
     if (isGoogleDriveUrl(item.url)) {
       const match = item.url.match(/(?:id=|\/d\/|\/file\/d\/)([a-zA-Z0-9_-]+)/);
@@ -139,25 +143,17 @@ export default function ProjectReview() {
       return `https://drive.google.com/thumbnail?id=${fileId}&sz=w1000`;
     }
 
-    // If it's already a full URL, we just need to ensure the seeker fragment #t=
-    // is preserved while potentially fixing unencoded '#' in the filename.
     let finalUrl = item.url;
     
     try {
-      // Use URL parser to safely handle parts
       const urlObj = new URL(item.url);
-      
-      // If the pathname has an unencoded '#', it might have been parsed as hash
-      // But R2 URLs won't have hash unless it's the seeker.
       let path = urlObj.pathname;
-      let hash = urlObj.hash; // e.g. #t=0.1 or #Something
+      let hash = urlObj.hash;
       
-      // Enforce seeker hash for thumbnails
       if (!hash || !hash.startsWith('#t=')) {
         hash = '#t=0.1';
       }
 
-      // Encode path segments if they aren't already
       const encodedPath = path.split('/').map(segment => {
         if (!segment) return '';
         if (segment.includes('%')) return segment;
@@ -171,7 +167,6 @@ export default function ProjectReview() {
 
       finalUrl = `${urlObj.origin}${encodedPath}${urlObj.search}${hash}`;
     } catch (e) {
-      // Fallback for non-url strings or old data
       finalUrl = item.url.replace(/#/g, '%23') + '#t=0.1';
     }
 
@@ -193,9 +188,9 @@ export default function ProjectReview() {
   const getVideoUrl = (item: MediaItem | null) => {
     if (!item) return '';
     
-    // Se tem externalId (Cloudflare), usar formato do Cloudflare
-    if (item.externalId && item.externalId.length > 10) {
-      return `https://customer-qm5on0nubla4rvdf.cloudflarestream.com/${item.externalId}/watch`;
+    // Cloudflare Stream - usar HLS manifest (compatível com ReactPlayer)
+    if (item.externalId && item.url && item.url.includes('cloudflarestream.com')) {
+      return `https://customer-qm5on0nubla4rvdf.cloudflarestream.com/${item.externalId}/manifest/video.m3u8`;
     }
     
     // Fallback: URL direta
@@ -334,9 +329,6 @@ export default function ProjectReview() {
         </div>
       )}
 
-      {/* Removal of Player Toggle Control as Cloudflare works natively */}
-
-
       <div className="max-w-[1400px] mx-auto w-full px-4 sm:px-6">
         <div className="sticky top-16 z-[150] bg-[#131313] py-6 -mt-8 -mx-4 px-4 sm:-mx-6 sm:px-6 mb-4 border-b-2 border-[#ff5351] shadow-[0_15px_30px_rgba(0,0,0,0.5)]">
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
@@ -442,7 +434,6 @@ export default function ProjectReview() {
                               allow="autoplay"
                               onLoad={() => setIsVideoLoading(false)}
                             />
-                            {/* Visual Blocker Overlay for Drive Player UI */}
                             <div className="absolute top-4 right-4 z-40 bg-black/50 backdrop-blur-md p-1.5 rounded-full border border-white/10">
                               <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                             </div>
@@ -466,7 +457,6 @@ export default function ProjectReview() {
                             config={{
                               file: {
                                 attributes: {
-                                  crossOrigin: 'anonymous',
                                   style: { width: '100%', height: '100%', objectFit: 'cover' },
                                   controlsList: 'nodownload'
                                 }
@@ -487,7 +477,6 @@ export default function ProjectReview() {
                     <>
                       <img 
                         src={getThumbnailUrl(item)} 
-                        crossOrigin="anonymous"
                         className={cn(
                           "w-full h-full object-cover transition-transform duration-700",
                           selectedPreview?.id === item.id ? "brightness-110 shadow-inner" : "brightness-[0.4] group-hover/item:brightness-75"
@@ -497,7 +486,6 @@ export default function ProjectReview() {
                         onError={(e) => {
                           const target = e.target as HTMLImageElement;
                           if (item.type === 'video' && !target.src.includes('drive.google.com')) {
-                            // If video thumbnail fails (e.g. no #t= support), use a placeholder or try again without #t=0.1
                             if (target.src.includes('#t=0.1')) {
                               target.src = target.src.split('#')[0];
                             }
