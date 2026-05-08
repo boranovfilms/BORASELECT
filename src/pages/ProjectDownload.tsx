@@ -92,9 +92,16 @@ export default function ProjectDownload() {
           : m
       ));
 
-      // Abrir download
-      window.open(file.downloadUrl, '_blank');
-      toast.success('Download iniciado!');
+      // Download via link invisível (sem abrir nova aba)
+      const link = document.createElement('a');
+      link.href = file.downloadUrl;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      toast.success(`Download: ${item.name}`);
     } catch (error: any) {
       console.error(error);
       toast.error('Erro ao buscar arquivo: ' + error.message);
@@ -104,11 +111,66 @@ export default function ProjectDownload() {
   };
 
   const handleDownloadAll = async () => {
-    for (const item of media) {
-      await handleDownload(item);
-      // Pequeno delay entre downloads para não sobrecarregar
-      await new Promise(resolve => setTimeout(resolve, 1000));
+    if (!project?.originalDriveLink) {
+      toast.error('Link do Drive não configurado neste projeto.');
+      return;
     }
+
+    const folderId = extractFolderId(project.originalDriveLink);
+    if (!folderId) {
+      toast.error('Link do Drive inválido.');
+      return;
+    }
+
+    toast.success(`Iniciando download de ${media.length} arquivos...`);
+
+    for (let i = 0; i < media.length; i++) {
+      const item = media[i];
+      setDownloading(item.id!);
+
+      try {
+        const response = await fetch(`/api/drive-files?folderId=${encodeURIComponent(folderId)}&fileName=${encodeURIComponent(item.name || '')}`);
+        const data = await response.json();
+
+        if (!data.success || !data.files || data.files.length === 0) {
+          toast.error(`"${item.name}" não encontrado no Drive.`);
+          continue;
+        }
+
+        const file = data.files[0];
+
+        await mediaService.markAsDownloaded(id!, item.id!);
+
+        setMedia(prev => prev.map(m => 
+          m.id === item.id 
+            ? { ...m, isDownloaded: true, downloadCount: (m.downloadCount || 0) + 1 } 
+            : m
+        ));
+
+        // Download via iframe invisível (não abre aba, não bloqueia popup)
+        const iframe = document.createElement('iframe');
+        iframe.style.display = 'none';
+        iframe.src = file.downloadUrl;
+        document.body.appendChild(iframe);
+        
+        // Remover iframe após 10 segundos
+        setTimeout(() => {
+          document.body.removeChild(iframe);
+        }, 10000);
+
+        toast.success(`(${i + 1}/${media.length}) ${item.name}`);
+      } catch (error: any) {
+        toast.error(`Erro: ${item.name}`);
+      }
+
+      // Delay entre downloads para não sobrecarregar
+      if (i < media.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+    }
+
+    setDownloading(null);
+    toast.success('Todos os downloads foram iniciados!');
   };
 
   if (loading) {
