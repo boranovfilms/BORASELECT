@@ -3,7 +3,7 @@ import { toast } from "react-hot-toast";
 export const emailService = {
   sendInvite: async (clientEmail: string, clientName: string, inviteLink: string, isRegistered: boolean = false) => {
     try {
-      const response = await fetch('/api-v2/send-invite', {
+      const response = await fetch('/api/send-invite', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
