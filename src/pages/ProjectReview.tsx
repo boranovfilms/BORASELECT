@@ -207,6 +207,12 @@ export default function ProjectReview() {
 
   const handleToggleSelect = async (item: MediaItem) => {
     if (!id || !project) return;
+
+    // TRAVA: se já foi baixado, não permite alterar
+    if (item.isDownloaded) {
+      toast('Este item já foi baixado e não pode ser alterado.', { icon: '🔒' });
+      return;
+    }
     
     if (!item.isSelected && (project.creditsTotal - project.creditsUsed) <= 0) {
       setShowCreditModal(true);
@@ -563,7 +569,11 @@ export default function ProjectReview() {
                     }}
                     className="absolute top-3 left-3 md:top-6 md:left-6 z-50 transition-transform active:scale-90"
                   >
-                    {item.isSelected ? (
+                    {item.isDownloaded ? (
+                      <div className="w-[26px] h-[26px] md:w-[30px] md:h-[30px] bg-amber-500 rounded-full flex items-center justify-center shadow-lg border border-white/20">
+                        <Lock className="w-3.5 h-3.5 md:w-4 md:h-4 text-white" />
+                      </div>
+                    ) : item.isSelected ? (
                       <div className="w-[26px] h-[26px] md:w-[30px] md:h-[30px] bg-[#22c55e] rounded-full flex items-center justify-center shadow-lg border border-white/20">
                         <CheckCircle2 className="w-3.5 h-3.5 md:w-4 md:h-4 text-white" />
                       </div>
