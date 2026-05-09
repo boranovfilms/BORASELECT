@@ -56,6 +56,10 @@ export default function ProjectDownload() {
     return null;
   };
 
+  const isMobile = () => {
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  };
+
   const handleDownload = async (item: MediaItem) => {
     if (!project?.originalDriveLink) {
       toast.error('Link do Drive não configurado neste projeto.');
@@ -92,14 +96,19 @@ export default function ProjectDownload() {
           : m
       ));
 
-      // Download via iframe invisível (não abre aba)
-      const iframe = document.createElement('iframe');
-      iframe.style.display = 'none';
-      iframe.src = file.downloadUrl;
-      document.body.appendChild(iframe);
-      setTimeout(() => {
-        document.body.removeChild(iframe);
-      }, 10000);
+      if (isMobile()) {
+        // Mobile: abrir link direto (único jeito que funciona)
+        window.location.href = file.downloadUrl;
+      } else {
+        // Desktop: iframe invisível (não abre aba)
+        const iframe = document.createElement('iframe');
+        iframe.style.display = 'none';
+        iframe.src = file.downloadUrl;
+        document.body.appendChild(iframe);
+        setTimeout(() => {
+          document.body.removeChild(iframe);
+        }, 10000);
+      }
 
       toast.success(`Download: ${item.name}`);
     } catch (error: any) {
