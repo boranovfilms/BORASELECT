@@ -26,7 +26,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       to: [to],
       subject,
       html: `
-        <div style="background-color: #ffffff; padding: 40px 20px; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #ffffff;">
+        <div style="background-color: #0a0a0a; padding: 40px 20px; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #ffffff;">
           <div style="max-width: 600px; margin: 0 auto; background-color: #111111; padding: 48px; border-radius: 24px; border: 1px solid #222222;">
             <h1 style="margin: 0 0 24px 0; font-size: 24px; font-weight: 700; color: #ffffff;">Olá, ${clientName}!</h1>
             <p style="margin: 0 0 16px 0; font-size: 16px; line-height: 1.6; color: #e0e0e0;">Separei com muito cuidado o seu material e agora chegou a melhor parte: você escolher o que mais gostou.</p>
