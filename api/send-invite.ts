@@ -15,9 +15,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { Resend } = await import('resend');
   const resend = new Resend(apiKey);
 
-  let from = 'BoraSelect <onboarding@resend.dev>';
-  const envFromEmail = process.env.RESEND_FROM_EMAIL;
-  if (envFromEmail) from = envFromEmail;
+  const from = 'Boraselect <contato@boranov.com.br>';
 
   const buttonText = isRegistered ? "ACESSAR MEU MATERIAL" : "CRIAR ACESSO E VER MEU MATERIAL";
   const subject = isRegistered ? "📸 Seu material novo já está disponível" : "📸 Seu material já está pronto para seleção";
@@ -31,7 +29,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         <div style="background-color: #0a0a0a; padding: 40px 20px; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #ffffff;">
           <div style="max-width: 600px; margin: 0 auto; background-color: #111111; padding: 48px; border-radius: 24px; border: 1px solid #222222;">
             <h1 style="margin: 0 0 24px 0; font-size: 24px; font-weight: 700; color: #ffffff;">Olá, ${clientName}!</h1>
-            <p style="margin: 0 0 16px 0; font-size: 16px; line-height: 1.6; color: #e0e0e0;">Separei com muito cuidado o seu material — fotos e vídeos — e agora chegou a melhor parte: você escolher o que mais gostou.</p>
+            <p style="margin: 0 0 16px 0; font-size: 16px; line-height: 1.6; color: #e0e0e0;">Separei com muito cuidado o seu material (fotos e vídeos) — e agora chegou a melhor parte: você escolher o que mais gostou.</p>
             <div style="text-align: center; margin: 30px 0;">
               <a href="${inviteLink}" style="display: inline-block; background-color: #ff5351; color: #ffffff; padding: 18px 32px; font-size: 15px; font-weight: 800; text-decoration: none; border-radius: 12px; text-transform: uppercase; letter-spacing: 0.5px;">${buttonText}</a>
             </div>
