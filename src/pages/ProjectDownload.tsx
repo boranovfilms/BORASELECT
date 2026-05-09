@@ -92,14 +92,14 @@ export default function ProjectDownload() {
           : m
       ));
 
-      // Download via link invisível (sem abrir nova aba)
-      const link = document.createElement('a');
-      link.href = file.downloadUrl;
-      link.target = '_blank';
-      link.rel = 'noopener noreferrer';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      // Download via iframe invisível (não abre aba)
+      const iframe = document.createElement('iframe');
+      iframe.style.display = 'none';
+      iframe.src = file.downloadUrl;
+      document.body.appendChild(iframe);
+      setTimeout(() => {
+        document.body.removeChild(iframe);
+      }, 10000);
 
       toast.success(`Download: ${item.name}`);
     } catch (error: any) {
@@ -207,7 +207,7 @@ export default function ProjectDownload() {
           <button 
             onClick={handleDownloadAll}
             disabled={downloading !== null}
-            className="px-8 py-4 rounded-xl bg-[#ff5351] text-white font-black uppercase tracking-widest hover:brightness-110 transition-all text-sm shadow-2xl shadow-[#ff5351]/20 flex items-center gap-2 disabled:opacity-50"
+            className="hidden md:flex px-8 py-4 rounded-xl bg-[#ff5351] text-white font-black uppercase tracking-widest hover:brightness-110 transition-all text-sm shadow-2xl shadow-[#ff5351]/20 items-center gap-2 disabled:opacity-50"
           >
             <Download className="w-4 h-4" />
             Baixar Todos
@@ -234,28 +234,29 @@ export default function ProjectDownload() {
           
           <div className="divide-y divide-zinc-800">
             {media.map((item) => (
-              <div key={item.id} className="px-8 py-6 flex items-center justify-between hover:bg-zinc-800/30 transition-all group">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-xl bg-zinc-800 flex items-center justify-center">
-                    <FileVideo className="w-5 h-5 text-[#ff5351]" />
+              <div key={item.id} className="px-4 md:px-8 py-4 md:py-6 flex items-center justify-between hover:bg-zinc-800/30 transition-all group">
+                <div className="flex items-center gap-3 md:gap-4 flex-1 min-w-0">
+                  <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-zinc-800 flex items-center justify-center shrink-0">
+                    <FileVideo className="w-4 h-4 md:w-5 md:h-5 text-[#ff5351]" />
                   </div>
-                  <div>
-                    <p className="text-white font-bold text-sm">{item.name}</p>
-                    <div className="flex items-center gap-4 mt-1">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-white font-bold text-xs md:text-sm truncate">{item.name}</p>
+                    <div className="flex items-center gap-2 md:gap-4 mt-1 flex-wrap">
                       {item.uploadedAt && (
-                        <span className="text-[10px] text-zinc-500 flex items-center gap-1">
+                        <span className="hidden md:flex text-[10px] text-zinc-500 items-center gap-1">
                           <Calendar className="w-3 h-3" />
                           Upload: {new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short' }).format(item.uploadedAt?.toDate?.() || new Date())}
                         </span>
                       )}
                       {item.isDownloaded && (
-                        <span className="text-[10px] text-emerald-500 flex items-center gap-1">
+                        <span className="text-[10px] text-amber-400 md:text-emerald-500 flex items-center gap-1">
                           <Hash className="w-3 h-3" />
-                          Downloads: {item.downloadCount || 1}
+                          <span className="md:hidden">Baixado</span>
+                          <span className="hidden md:inline">Downloads: {item.downloadCount || 1}</span>
                         </span>
                       )}
                       {item.downloadedAt && (
-                        <span className="text-[10px] text-zinc-500 flex items-center gap-1">
+                        <span className="hidden md:flex text-[10px] text-zinc-500 items-center gap-1">
                           <Calendar className="w-3 h-3" />
                           Último: {new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(item.downloadedAt?.toDate?.() || new Date())}
                         </span>
@@ -268,9 +269,9 @@ export default function ProjectDownload() {
                   onClick={() => handleDownload(item)}
                   disabled={downloading === item.id}
                   className={cn(
-                    "flex items-center gap-2 px-6 py-3 rounded-xl font-black uppercase tracking-widest text-[10px] transition-all",
+                    "flex items-center gap-2 px-4 md:px-6 py-3 rounded-xl font-black uppercase tracking-widest text-[10px] transition-all shrink-0 ml-2",
                     item.isDownloaded
-                      ? "bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20"
+                      ? "bg-amber-500/10 border border-amber-500/30 text-amber-400 md:bg-emerald-500/10 md:border-emerald-500/30 md:text-emerald-400 md:hover:bg-emerald-500/20"
                       : "bg-[#ff5351] text-white hover:brightness-110 shadow-lg shadow-[#ff5351]/20"
                   )}
                 >
@@ -281,7 +282,8 @@ export default function ProjectDownload() {
                   ) : (
                     <Download className="w-4 h-4" />
                   )}
-                  {downloading === item.id ? 'Buscando...' : item.isDownloaded ? 'Baixar Novamente' : 'Download'}
+                  <span className="hidden md:inline">{downloading === item.id ? 'Buscando...' : item.isDownloaded ? 'Baixar Novamente' : 'Download'}</span>
+                  <span className="md:hidden">{downloading === item.id ? '...' : item.isDownloaded ? '' : 'Baixar'}</span>
                 </button>
               </div>
             ))}
