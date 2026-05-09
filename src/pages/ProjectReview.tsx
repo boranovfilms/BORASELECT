@@ -131,12 +131,10 @@ export default function ProjectReview() {
   const getThumbnailUrl = (item: MediaItem) => {
     if (!item.url) return item.thumbnailUrl || '';
     
-    // Cloudflare Stream - usar endpoint de thumbnail correto
     if (item.externalId && item.url.includes('cloudflarestream.com')) {
       return `https://customer-qm5on0nubla4rvdf.cloudflarestream.com/${item.externalId}/thumbnails/thumbnail.jpg`;
     }
 
-    // Suporte especial para Google Drive
     if (isGoogleDriveUrl(item.url)) {
       const match = item.url.match(/(?:id=|\/d\/|\/file\/d\/)([a-zA-Z0-9_-]+)/);
       const fileId = match ? match[1] : item.url;
@@ -297,13 +295,13 @@ export default function ProjectReview() {
       {showCreditModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 sm:p-0">
           <div className="absolute inset-0 bg-black/90 backdrop-blur-md" onClick={() => setShowCreditModal(false)} />
-          <div className="relative bg-[#1a1a1a] border border-zinc-800 rounded-[3rem] p-12 max-w-md w-full text-center shadow-[0_0_100px_rgba(255,83,81,0.2)] animate-in zoom-in duration-300">
-            <div className="w-24 h-24 bg-[#ff5351]/10 rounded-full flex items-center justify-center mx-auto mb-8 relative">
+          <div className="relative bg-[#1a1a1a] border border-zinc-800 rounded-[3rem] p-8 md:p-12 max-w-md w-full text-center shadow-[0_0_100px_rgba(255,83,81,0.2)] animate-in zoom-in duration-300">
+            <div className="w-16 h-16 md:w-24 md:h-24 bg-[#ff5351]/10 rounded-full flex items-center justify-center mx-auto mb-6 md:mb-8 relative">
               <div className="absolute inset-0 bg-[#ff5351]/5 rounded-full animate-ping" />
-              <CreditCard className="w-12 h-12 text-[#ff5351]" />
+              <CreditCard className="w-8 h-8 md:w-12 md:h-12 text-[#ff5351]" />
             </div>
-            <h3 className="text-3xl font-black text-white uppercase italic tracking-tighter mb-4">Limite Atingido</h3>
-            <p className="text-zinc-400 text-sm font-bold leading-relaxed mb-10">
+            <h3 className="text-2xl md:text-3xl font-black text-white uppercase italic tracking-tighter mb-4">Limite Atingido</h3>
+            <p className="text-zinc-400 text-xs md:text-sm font-bold leading-relaxed mb-8 md:mb-10">
               Você atingiu o seu limite de seleções. Para continuar escolhendo novos materiais, adicione mais créditos à sua conta.
             </p>
             <div className="space-y-4">
@@ -313,7 +311,7 @@ export default function ProjectReview() {
                   setIsCreditBlinking(true);
                   setTimeout(() => setIsCreditBlinking(false), 10000);
                 }}
-                className="w-full bg-[#ff5351] text-white py-5 rounded-2xl font-black uppercase tracking-widest text-xs hover:brightness-110 active:scale-95 transition-all shadow-xl shadow-[#ff5351]/30"
+                className="w-full bg-[#ff5351] text-white py-4 md:py-5 rounded-2xl font-black uppercase tracking-widest text-xs hover:brightness-110 active:scale-95 transition-all shadow-xl shadow-[#ff5351]/30"
               >
                 ENTENDIDO
               </button>
@@ -322,9 +320,47 @@ export default function ProjectReview() {
         </div>
       )}
 
-      <div className="max-w-[1400px] mx-auto w-full px-4 sm:px-6">
-        <div className="sticky top-16 z-[150] bg-[#131313] py-6 -mt-8 -mx-4 px-4 sm:-mx-6 sm:px-6 mb-4 border-b-2 border-[#ff5351] shadow-[0_15px_30px_rgba(0,0,0,0.5)]">
-          <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+      <div className="max-w-[1400px] mx-auto w-full px-3 sm:px-6">
+        {/* HEADER - Compacto no mobile */}
+        <div className="sticky top-16 z-[150] bg-[#131313] py-3 md:py-6 -mt-8 -mx-3 px-3 sm:-mx-6 sm:px-6 mb-2 md:mb-4 border-b-2 border-[#ff5351] shadow-[0_15px_30px_rgba(0,0,0,0.5)]">
+          
+          {/* Mobile Header */}
+          <div className="md:hidden">
+            <div className="flex items-center justify-between mb-2">
+              <button 
+                onClick={() => navigate('/')} 
+                className="flex items-center gap-1 text-zinc-500 text-[10px] font-black uppercase tracking-widest"
+              >
+                <ChevronLeft className="w-3 h-3" />
+                Voltar
+              </button>
+              <p className="text-[#ff5351] font-bold text-[10px] uppercase tracking-widest">{project.category || (project as any).type || 'PODCAST'}</p>
+            </div>
+            
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1.5 bg-[#1a1a1a] border border-zinc-800/50 rounded-lg px-2.5 py-1.5">
+                  <span className="text-sm font-black text-white">{media.length}</span>
+                  <span className="text-[7px] font-black uppercase text-[#ff5351]">vid</span>
+                </div>
+                <div className="flex items-center gap-1.5 bg-[#1a1a1a] border border-zinc-800/50 rounded-lg px-2.5 py-1.5">
+                  <span className="text-sm font-black text-white">{project.creditsTotal - project.creditsUsed}</span>
+                  <span className="text-[7px] font-black uppercase text-zinc-500">/{project.creditsTotal}</span>
+                </div>
+              </div>
+              
+              <button 
+                onClick={() => navigate(`/download/${id}`)}
+                className="bg-[#ff5351] text-white rounded-lg px-3 py-2 font-black uppercase tracking-wider text-[8px] active:scale-95 transition-all flex items-center gap-1.5"
+              >
+                <CheckCircle2 className="w-3 h-3" />
+                ENVIAR
+              </button>
+            </div>
+          </div>
+
+          {/* Desktop Header */}
+          <div className="hidden md:flex flex-row items-end justify-between gap-4">
             <div className="space-y-6">
               <button 
                 onClick={() => navigate('/')} 
@@ -335,7 +371,7 @@ export default function ProjectReview() {
               </button>
               
               <div className="space-y-1 border-l-[3px] border-[#ff5351] pl-5 py-0.5">
-                <h1 className="text-3xl md:text-3xl font-black italic tracking-tighter text-white uppercase leading-none">
+                <h1 className="text-3xl font-black italic tracking-tighter text-white uppercase leading-none">
                   PROJETO DE SELEÇÃO
                 </h1>
                 <p className="text-[#ff5351] font-bold text-[11px] uppercase tracking-widest italic opacity-90">{project.category || (project as any).type || 'PODCAST'}</p>
@@ -343,7 +379,7 @@ export default function ProjectReview() {
             </div>
 
             <div className="space-y-4">
-              <div className="flex flex-wrap items-end justify-center md:justify-start gap-3">
+              <div className="flex flex-wrap items-end justify-start gap-3">
                  <div className="space-y-1.5">
                     <div className="w-[110px] h-[64px] bg-[#1a1a1a] border border-zinc-800/50 rounded-2xl flex flex-col items-center justify-center gap-0 shadow-lg">
                        <span className="text-xl font-black text-white italic tracking-tighter">{media.length}</span>
@@ -352,7 +388,7 @@ export default function ProjectReview() {
                  </div>
 
                  <div className="space-y-1.5">
-                    <h2 className="text-[9px] font-black text-[#ff5351] uppercase tracking-[0.22em] italic opacity-80 text-center md:text-left ml-1">SELEÇÕES</h2>
+                    <h2 className="text-[9px] font-black text-[#ff5351] uppercase tracking-[0.22em] italic opacity-80 text-left ml-1">SELEÇÕES</h2>
                     <div className="w-[110px] h-[64px] bg-[#1a1a1a] border border-zinc-800/50 rounded-2xl flex flex-col items-center justify-center gap-0 group hover:border-zinc-700 transition-all shadow-lg">
                        <div className="flex items-baseline gap-0.5">
                           <span className="text-xl font-black text-white">{project.creditsTotal - project.creditsUsed}</span>
@@ -378,24 +414,23 @@ export default function ProjectReview() {
 
                  <div className="pb-0">
                     <button 
-  onClick={() => navigate(`/download/${id}`)}
-  className="h-[64px] px-10 bg-[#ff5351] text-white rounded-2xl font-black uppercase tracking-[0.2em] text-[10px] hover:brightness-110 active:scale-95 transition-all shadow-[0_0_30px_rgba(255,83,81,0.2)] flex items-center justify-center gap-3"
->
-  <CheckCircle2 className="w-5 h-5" />
-  ENVIAR SELEÇÃO
-</button>
-
+                      onClick={() => navigate(`/download/${id}`)}
+                      className="h-[64px] px-10 bg-[#ff5351] text-white rounded-2xl font-black uppercase tracking-[0.2em] text-[10px] hover:brightness-110 active:scale-95 transition-all shadow-[0_0_30px_rgba(255,83,81,0.2)] flex items-center justify-center gap-3"
+                    >
+                      <CheckCircle2 className="w-5 h-5" />
+                      ENVIAR SELEÇÃO
+                    </button>
                  </div>
               </div>
             </div>
           </div>
         </div>
 
-        <section className="space-y-4 pt-4">
+        <section className="space-y-4 pt-2 md:pt-4">
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 pb-10">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 md:gap-4 pb-10">
             {[...media].sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { numeric: true, sensitivity: 'base' })).map((item) => (
-              <div key={item.id} className="space-y-2 group/item">
+              <div key={item.id} className="space-y-1.5 md:space-y-2 group/item">
                 <div 
                   onContextMenu={(e) => e.preventDefault()}
                   onClick={() => {
@@ -408,7 +443,7 @@ export default function ProjectReview() {
                     }
                   }}
                   className={cn(
-                    "relative aspect-[9/16] rounded-[2.5rem] overflow-hidden cursor-pointer border-2 transition-all duration-500 bg-[#0c0c0c]",
+                    "relative aspect-[9/16] rounded-2xl md:rounded-[2.5rem] overflow-hidden cursor-pointer border-2 transition-all duration-500 bg-[#0c0c0c]",
                     selectedPreview?.id === item.id 
                       ? "border-[#ff5351] shadow-[0_0_60px_rgba(255,83,81,0.25)]" 
                       : "border-white/5 hover:border-white/10"
@@ -501,8 +536,8 @@ export default function ProjectReview() {
                       />
 
                       <div className="absolute inset-0 flex items-center justify-center opacity-70 group-hover/item:opacity-100 transition-opacity">
-                        <div className="w-12 h-12 bg-white/10 backdrop-blur-md rounded-full flex items-center justify-center border border-white/20">
-                          <Play className="w-5 h-5 ml-0.5 text-white fill-current" />
+                        <div className="w-10 h-10 md:w-12 md:h-12 bg-white/10 backdrop-blur-md rounded-full flex items-center justify-center border border-white/20">
+                          <Play className="w-4 h-4 md:w-5 md:h-5 ml-0.5 text-white fill-current" />
                         </div>
                       </div>
                     </>
@@ -513,27 +548,27 @@ export default function ProjectReview() {
                       e.stopPropagation();
                       handleToggleSelect(item);
                     }}
-                    className="absolute top-6 left-6 z-50 transition-transform active:scale-90"
+                    className="absolute top-3 left-3 md:top-6 md:left-6 z-50 transition-transform active:scale-90"
                   >
                     {item.isSelected ? (
-                      <div className="w-[30px] h-[30px] bg-[#22c55e] rounded-full flex items-center justify-center shadow-lg border border-white/20">
-                        <CheckCircle2 className="w-4 h-4 text-white" />
+                      <div className="w-[26px] h-[26px] md:w-[30px] md:h-[30px] bg-[#22c55e] rounded-full flex items-center justify-center shadow-lg border border-white/20">
+                        <CheckCircle2 className="w-3.5 h-3.5 md:w-4 md:h-4 text-white" />
                       </div>
                     ) : (
-                      <div className="w-[30px] h-[30px] rounded-full border-2 border-white/30 backdrop-blur-sm bg-black/20 hover:border-[#22c55e] hover:bg-[#22c55e]/10" />
+                      <div className="w-[26px] h-[26px] md:w-[30px] md:h-[30px] rounded-full border-2 border-white/30 backdrop-blur-sm bg-black/20 hover:border-[#22c55e] hover:bg-[#22c55e]/10" />
                     )}
                   </div>
 
                   </div>
 
                 <div className={cn(
-                  "bg-[#111111] p-4 rounded-3xl border transition-all duration-300 min-h-[72px] flex items-center justify-center text-center",
+                  "bg-[#111111] p-2.5 md:p-4 rounded-xl md:rounded-3xl border transition-all duration-300 min-h-[48px] md:min-h-[72px] flex items-center justify-center text-center",
                   selectedPreview?.id === item.id 
                     ? "border-[#ff5351]/30 bg-[#151515]" 
                     : "border-white/5 group-hover/item:border-white/10"
                 )}>
                   <p className={cn(
-                    "text-[10px] font-black uppercase tracking-widest italic line-clamp-3 leading-tight transition-colors",
+                    "text-[8px] md:text-[10px] font-black uppercase tracking-widest italic line-clamp-2 md:line-clamp-3 leading-tight transition-colors",
                     selectedPreview?.id === item.id ? "text-[#ff5351]" : "text-zinc-600"
                   )}>
                     {item.name}
