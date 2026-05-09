@@ -15,7 +15,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { Resend } = await import('resend');
   const resend = new Resend(apiKey);
 
-  const from = 'Boraselect <contato@boranov.com.br>';
+  const from = 'Bora <contato@boranov.com.br>';
 
   const buttonText = isRegistered ? "ACESSAR MEU MATERIAL" : "CRIAR ACESSO E VER MEU MATERIAL";
   const subject = isRegistered ? "📸 Seu material novo já está disponível" : "📸 Seu material já está pronto para seleção";
