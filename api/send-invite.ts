@@ -18,7 +18,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const from = 'BoraSelect <contato@boranov.com.br>';
 
   const buttonText = isRegistered ? "ACESSAR MEU MATERIAL" : "CRIAR ACESSO E VER MEU MATERIAL";
-  const subject = isRegistered ? "📸 Os cortes do Vitrine Talk já está disponível" : "📸 Seu material já está pronto para seleção";
+  const subject = isRegistered ? "📸 Os cortes do Vitrine Talk já estão disponíveis" : "📸 Seu material já está pronto para seleção";
 
   try {
     const { data, error } = await resend.emails.send({
