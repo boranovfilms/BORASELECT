@@ -325,8 +325,9 @@ export default function ProjectReview() {
         <div className="sticky top-16 z-[150] bg-[#131313] py-3 md:py-6 -mt-8 -mx-3 px-3 sm:-mx-6 sm:px-6 mb-2 md:mb-4 border-b-2 border-[#ff5351] shadow-[0_15px_30px_rgba(0,0,0,0.5)]">
           
           {/* Mobile Header */}
-          <div className="md:hidden">
-            <div className="flex items-center justify-between mb-1.5">
+          <div className="md:hidden space-y-3">
+            {/* Linha 1: Voltar + Categoria */}
+            <div className="flex items-center justify-between">
               <button 
                 onClick={() => navigate('/')} 
                 className="flex items-center gap-1 text-zinc-500 text-[10px] font-black uppercase tracking-widest"
@@ -337,34 +338,33 @@ export default function ProjectReview() {
               <p className="text-[#ff5351] font-bold text-[10px] uppercase tracking-widest">{project.category || (project as any).type || 'PODCAST'}</p>
             </div>
 
-            <p className="text-white font-black text-sm italic uppercase tracking-tight mb-2 truncate">{project.title}</p>
+            {/* Linha 2: Título do Projeto */}
+            <p className="text-white font-black text-lg italic uppercase tracking-tight leading-none truncate">{project.title}</p>
             
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <div className="flex items-center gap-1.5 bg-[#1a1a1a] border border-zinc-800/50 rounded-lg px-2.5 py-1.5">
-                  <span className="text-sm font-black text-white">{media.length}</span>
-                  <span className="text-[7px] font-black uppercase text-[#ff5351]">vid</span>
-                </div>
-                <div className="flex items-center gap-1.5 bg-[#1a1a1a] border border-zinc-800/50 rounded-lg px-2.5 py-1.5">
-                  <span className="text-sm font-black text-white">{project.creditsTotal - project.creditsUsed}</span>
-                  <span className="text-[7px] font-black uppercase text-zinc-500">/{project.creditsTotal}</span>
-                </div>
-                <button 
-                  onClick={() => setIsCreditBlinking(false)}
-                  className={cn(
-                    "rounded-lg px-2.5 py-1.5 font-black uppercase text-[7px] tracking-wider transition-all",
-                    isCreditBlinking 
-                      ? "animate-subtle-blink" 
-                      : "bg-[#1a1a1a] border border-zinc-800/50 text-zinc-400 active:scale-95"
-                  )}
-                >
-                  +CRED
-                </button>
+            {/* Linha 3: Cards + Botões */}
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 bg-[#1a1a1a] border border-zinc-800/50 rounded-xl px-3 py-2">
+                <span className="text-base font-black text-white italic">{media.length}</span>
+                <span className="text-[8px] font-black uppercase text-[#ff5351] tracking-wider">vídeos</span>
               </div>
-              
+              <div className="flex items-center gap-1.5 bg-[#1a1a1a] border border-zinc-800/50 rounded-xl px-3 py-2">
+                <span className="text-base font-black text-white italic">{project.creditsTotal - project.creditsUsed}</span>
+                <span className="text-[8px] font-black uppercase text-zinc-500 tracking-wider">/{project.creditsTotal}</span>
+              </div>
+              <button 
+                onClick={() => setIsCreditBlinking(false)}
+                className={cn(
+                  "rounded-xl px-3 py-2 font-black uppercase text-[8px] tracking-wider transition-all border",
+                  isCreditBlinking 
+                    ? "animate-subtle-blink border-[#ff5351]/50" 
+                    : "bg-[#1a1a1a] border-zinc-800/50 text-zinc-400 active:scale-95"
+                )}
+              >
+                +CRÉDITOS
+              </button>
               <button 
                 onClick={() => navigate(`/download/${id}`)}
-                className="bg-[#ff5351] text-white rounded-lg px-3 py-2 font-black uppercase tracking-wider text-[8px] active:scale-95 transition-all flex items-center gap-1.5"
+                className="flex-1 bg-[#ff5351] text-white rounded-xl px-3 py-2 font-black uppercase tracking-wider text-[8px] active:scale-95 transition-all flex items-center justify-center gap-1.5"
               >
                 <CheckCircle2 className="w-3 h-3" />
                 ENVIAR
@@ -581,10 +581,10 @@ export default function ProjectReview() {
                     : "border-white/5 group-hover/item:border-white/10"
                 )}>
                   <p className={cn(
-                    "text-[8px] md:text-[10px] font-black uppercase tracking-widest italic line-clamp-2 md:line-clamp-3 leading-tight transition-colors",
-                    selectedPreview?.id === item.id ? "text-[#ff5351]" : "text-zinc-600"
+                    "text-[10px] font-medium capitalize tracking-wide leading-tight transition-colors line-clamp-2",
+                    selectedPreview?.id === item.id ? "text-[#ff5351]" : "text-zinc-500"
                   )}>
-                    {item.name}
+                    {item.name?.toLowerCase()}
                   </p>
                 </div>
               </div>
