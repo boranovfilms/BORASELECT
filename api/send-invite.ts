@@ -33,7 +33,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             <div style="text-align: center; margin: 30px 0;">
               <a href="${inviteLink}" style="display: inline-block; background-color: #ff5351; color: #ffffff; padding: 18px 32px; font-size: 15px; font-weight: 800; text-decoration: none; border-radius: 12px; text-transform: uppercase; letter-spacing: 0.5px;">${buttonText}</a>
             </div>
-            <div style="border-top: 1px solid #222222; padding-top: 24px; color: #888888; font-size: 15px;">Abraço,<br><span style="color: #ffffff; font-weight: 600; font-size: 16px;">Ronaldo</span><br><span style="color: #ff5351; font-weight: 500;">Boranov Films</span></div>
+            <div style="border-top: 1px solid #222222; padding-top: 24px; color: #888888; font-size: 15px;">Abraço,<br><span style="color: #ffffff; font-weight: 600; font-size: 16px;">Ronaldo Bispo</span><br><span style="color: #ff5351; font-weight: 500;">Boranov (19) 99802.9252</span></div>
           </div>
         </div>
       `,
