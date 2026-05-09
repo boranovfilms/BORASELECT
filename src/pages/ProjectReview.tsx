@@ -326,7 +326,7 @@ export default function ProjectReview() {
           
           {/* Mobile Header */}
           <div className="md:hidden">
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center justify-between mb-1.5">
               <button 
                 onClick={() => navigate('/')} 
                 className="flex items-center gap-1 text-zinc-500 text-[10px] font-black uppercase tracking-widest"
@@ -336,9 +336,11 @@ export default function ProjectReview() {
               </button>
               <p className="text-[#ff5351] font-bold text-[10px] uppercase tracking-widest">{project.category || (project as any).type || 'PODCAST'}</p>
             </div>
+
+            <p className="text-white font-black text-sm italic uppercase tracking-tight mb-2 truncate">{project.title}</p>
             
             <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
                 <div className="flex items-center gap-1.5 bg-[#1a1a1a] border border-zinc-800/50 rounded-lg px-2.5 py-1.5">
                   <span className="text-sm font-black text-white">{media.length}</span>
                   <span className="text-[7px] font-black uppercase text-[#ff5351]">vid</span>
@@ -347,6 +349,17 @@ export default function ProjectReview() {
                   <span className="text-sm font-black text-white">{project.creditsTotal - project.creditsUsed}</span>
                   <span className="text-[7px] font-black uppercase text-zinc-500">/{project.creditsTotal}</span>
                 </div>
+                <button 
+                  onClick={() => setIsCreditBlinking(false)}
+                  className={cn(
+                    "rounded-lg px-2.5 py-1.5 font-black uppercase text-[7px] tracking-wider transition-all",
+                    isCreditBlinking 
+                      ? "animate-subtle-blink" 
+                      : "bg-[#1a1a1a] border border-zinc-800/50 text-zinc-400 active:scale-95"
+                  )}
+                >
+                  +CRED
+                </button>
               </div>
               
               <button 
