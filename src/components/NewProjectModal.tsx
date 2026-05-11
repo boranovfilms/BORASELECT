@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { X, UserPlus, Tag, Check, Plus, Search, Loader2 } from 'lucide-react';
+import { X, Check, Search, Loader2, ChevronLeft } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { clientService, Client } from '../services/clientService';
 import { categoryService, Category } from '../services/categoryService';
 import { projectService } from '../services/projectService';
 import { cn } from '../lib/utils';
-
 import { emailService } from '../services/emailService';
 
 interface NewProjectModalProps {
@@ -14,20 +14,18 @@ interface NewProjectModalProps {
 }
 
 export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProjectModalProps) {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [title, setTitle] = useState('');
   const [sendInviteEmail, setSendInviteEmail] = useState(true);
-  
-  // Clients Logic
+
   const [clients, setClients] = useState<Client[]>([]);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
-  const [clientSearch, setClientSearch] = useState('');
   const [isCreatingClient, setIsCreatingClient] = useState(false);
   const [newClientName, setNewClientName] = useState('');
   const [newClientEmail, setNewClientEmail] = useState('');
 
-  // Categories Logic
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategory, setSelectedCategory] = useState('');
   const [isCreatingCategory, setIsCreatingCategory] = useState(false);
@@ -54,41 +52,51 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
     }
   };
 
+  const resetForm = () => {
+    setTitle('');
+    setSelectedClient(null);
+    setSelectedCategory('');
+    setNewClientName('');
+    setNewClientEmail('');
+    setNewCategoryName('');
+    setIsCreatingClient(false);
+    setIsCreatingCategory(false);
+    setIncludedCredits(15);
+    setSendInviteEmail(true);
+    setError(null);
+  };
+
   const handleCreateProject = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
-    console.log('Starting project creation...');
-    
+
     try {
       let finalClientId = selectedClient?.id;
       let finalClientName = selectedClient?.name || '';
       let finalClientEmail = selectedClient?.email || '';
 
-      // 1. Se estiver criando cliente novo
       if (isCreatingClient) {
-        console.log('Creating new client:', newClientName);
         if (!newClientName || !newClientEmail) {
           throw new Error('Nome e e-mail do cliente são obrigatórios');
         }
+
         const clientRef = await clientService.createClient({
           name: newClientName,
           email: newClientEmail.toLowerCase().trim()
         });
+
         finalClientId = clientRef.id;
         finalClientName = newClientName;
         finalClientEmail = newClientEmail.toLowerCase().trim();
-        console.log('Client created with ID:', finalClientId);
       }
 
       if (!finalClientId) {
         throw new Error('Selecione ou cadastre um cliente para o projeto');
       }
 
-      // 2. Se estiver criando categoria nova
       let finalCategory = selectedCategory;
       if (isCreatingCategory && newCategoryName) {
-        console.log('Creating new category:', newCategoryName);
         await categoryService.createCategory(newCategoryName);
         finalCategory = newCategoryName;
       }
@@ -97,17 +105,9 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
         finalCategory = 'Geral';
       }
 
-      // 3. Criar projeto
-      console.log('Creating project document with data:', {
-        title,
-        clientId: finalClientId,
-        clientName: finalClientName,
-        clientEmail: finalClientEmail,
-        category: finalCategory,
-      });
       const clientStatus = await clientService.checkGlobalStatus(finalClientEmail);
 
-      await projectService.createProject({
+      const projectRef = await projectService.createProject({
         title,
         clientId: finalClientId,
         clientName: finalClientName,
@@ -122,17 +122,14 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
         includedItems: includedCredits
       });
 
-      console.log('Project created successfully!');
-
       if (sendInviteEmail && finalClientEmail) {
-        // Check global status to decide which link and message to send
         const status = await clientService.checkGlobalStatus(finalClientEmail);
         const isRegistered = status === 'confirmed';
-        
-        const inviteLink = isRegistered 
+
+        const inviteLink = isRegistered
           ? `${window.location.origin}/login`
           : `${window.location.origin}/register?email=${encodeURIComponent(finalClientEmail)}`;
-          
+
         try {
           await emailService.sendInvite(finalClientEmail, finalClientName, inviteLink, isRegistered);
         } catch (emailErr) {
@@ -141,17 +138,9 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
       }
 
       onSuccess();
+      resetForm();
       onClose();
-      // Reset form
-      setTitle('');
-      setSelectedClient(null);
-      setClientSearch('');
-      setSelectedCategory('');
-      setNewClientName('');
-      setNewClientEmail('');
-      setNewCategoryName('');
-      setIsCreatingClient(false);
-      setIsCreatingCategory(false);
+      navigate(`/projects/${projectRef.id}/config`);
     } catch (err: any) {
       console.error('Project creation failed:', err);
       setError(err.message || 'Ocorreu um erro ao criar o projeto. Verifique suas permissões.');
@@ -163,28 +152,38 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
-      
-      <div className="relative w-full max-w-2xl bg-[#1a1a1a] border border-zinc-800 rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
-        <header className="p-6 border-b border-zinc-800 flex items-center justify-between shadow-lg">
-          <h2 className="text-2xl font-bold text-white">Novo Projeto</h2>
-          <button onClick={onClose} className="p-2 hover:bg-zinc-800 rounded-full transition-all">
-            <X className="w-6 h-6 text-zinc-500" />
+    <div className="space-y-12 pb-20">
+      <header className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+        <div>
+          <button
+            onClick={() => {
+              resetForm();
+              onClose();
+            }}
+            className="mb-4 flex items-center gap-2 text-zinc-500 hover:text-white transition-all text-xs font-bold uppercase tracking-widest"
+          >
+            <ChevronLeft className="w-4 h-4" />
+            Voltar
           </button>
-        </header>
+          <div className="flex flex-col gap-1">
+            <h1 className="text-4xl font-black tracking-tight text-white uppercase italic">Novo Projeto</h1>
+            <p className="text-[#ff5351] font-bold text-lg">Criação de projeto</p>
+          </div>
+        </div>
+      </header>
 
-        <form onSubmit={handleCreateProject} className="p-8 space-y-8 overflow-y-auto custom-scrollbar">
+      <section className="bg-[#1f1f1f] border border-zinc-800 rounded-3xl p-6 md:p-8 shadow-2xl">
+        <form onSubmit={handleCreateProject} className="space-y-8">
           {error && (
             <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-500 text-sm font-semibold animate-in fade-in zoom-in-95">
               {error}
             </div>
           )}
-          {/* Título do Projeto */}
+
           <div className="space-y-2">
             <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1">Título do Projeto</label>
-            <input 
-              type="text" 
+            <input
+              type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Ex: Casamento Luiza & Marcos"
@@ -193,11 +192,10 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
             />
           </div>
 
-          {/* Seleção de Cliente */}
           <div className="space-y-4">
             <div className="flex items-center justify-between ml-1">
               <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Informações do Cliente</label>
-              <button 
+              <button
                 type="button"
                 onClick={() => setIsCreatingClient(!isCreatingClient)}
                 className="text-[10px] font-black uppercase tracking-widest text-[#ff5351] hover:underline flex items-center gap-1"
@@ -208,16 +206,16 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
 
             {isCreatingClient ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-2">
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   placeholder="Nome do Cliente"
                   value={newClientName}
                   onChange={(e) => setNewClientName(e.target.value)}
                   className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-5 py-4 text-white focus:border-[#ff5351] outline-none"
                   required
                 />
-                <input 
-                  type="email" 
+                <input
+                  type="email"
                   placeholder="E-mail"
                   value={newClientEmail}
                   onChange={(e) => setNewClientEmail(e.target.value)}
@@ -228,7 +226,7 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
             ) : (
               <div className="relative group">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-600 group-focus-within:text-[#ff5351]" />
-                <select 
+                <select
                   className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-12 pr-4 py-4 text-white focus:border-[#ff5351] outline-none appearance-none cursor-pointer"
                   value={selectedClient?.id || ''}
                   onChange={(e) => {
@@ -239,7 +237,9 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
                 >
                   <option value="">Selecione um cliente...</option>
                   {clients.map(c => (
-                    <option key={c.id} value={c.id}>{c.name} ({c.email})</option>
+                    <option key={c.id} value={c.id}>
+                      {c.name} ({c.email})
+                    </option>
                   ))}
                 </select>
                 <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
@@ -249,11 +249,10 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
             )}
           </div>
 
-          {/* Categoria / Tags */}
           <div className="space-y-4">
             <div className="flex items-center justify-between ml-1">
               <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Categoria do Serviço</label>
-              <button 
+              <button
                 type="button"
                 onClick={() => setIsCreatingCategory(!isCreatingCategory)}
                 className="text-[10px] font-black uppercase tracking-widest text-[#ff5351] hover:underline"
@@ -264,8 +263,8 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
 
             {isCreatingCategory ? (
               <div className="flex gap-2 animate-in fade-in slide-in-from-top-2">
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   placeholder="Ex: Podcast, Institucional..."
                   value={newCategoryName}
                   onChange={(e) => setNewCategoryName(e.target.value)}
@@ -281,39 +280,40 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
                     type="button"
                     onClick={() => setSelectedCategory(cat)}
                     className={cn(
-                      "px-4 py-2 rounded-full border text-xs font-bold transition-all",
-                      selectedCategory === cat 
-                        ? "bg-[#ff5351] border-[#ff5351] text-white" 
-                        : "border-zinc-800 text-zinc-500 hover:border-zinc-700 hover:text-zinc-300"
+                      'px-4 py-2 rounded-full border text-xs font-bold transition-all',
+                      selectedCategory === cat
+                        ? 'bg-[#ff5351] border-[#ff5351] text-white'
+                        : 'border-zinc-800 text-zinc-500 hover:border-zinc-700 hover:text-zinc-300'
                     )}
                   >
                     {cat}
                   </button>
                 ))}
-                {categories.filter(c => !['Casamento', 'Ensaio', 'Evento', 'Podcast', 'Vídeo Clipe'].includes(c.name)).map((cat) => (
-                  <button
-                    key={cat.id}
-                    type="button"
-                    onClick={() => setSelectedCategory(cat.name)}
-                    className={cn(
-                      "px-4 py-2 rounded-full border text-xs font-bold transition-all",
-                      selectedCategory === cat.name 
-                        ? "bg-[#ff5351] border-[#ff5351] text-white" 
-                        : "border-zinc-800 text-zinc-500 hover:border-zinc-700 hover:text-zinc-300"
-                    )}
-                  >
-                    {cat.name}
-                  </button>
-                ))}
+                {categories
+                  .filter(c => !['Casamento', 'Ensaio', 'Evento', 'Podcast', 'Vídeo Clipe'].includes(c.name))
+                  .map((cat) => (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      onClick={() => setSelectedCategory(cat.name)}
+                      className={cn(
+                        'px-4 py-2 rounded-full border text-xs font-bold transition-all',
+                        selectedCategory === cat.name
+                          ? 'bg-[#ff5351] border-[#ff5351] text-white'
+                          : 'border-zinc-800 text-zinc-500 hover:border-zinc-700 hover:text-zinc-300'
+                      )}
+                    >
+                      {cat.name}
+                    </button>
+                  ))}
               </div>
             )}
           </div>
 
-          {/* Créditos Inclusos */}
           <div className="space-y-2">
             <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1">Mídias Inclusas (Créditos)</label>
-            <input 
-              type="number" 
+            <input
+              type="number"
               value={includedCredits}
               onChange={(e) => setIncludedCredits(parseInt(e.target.value))}
               placeholder="Ex: 15"
@@ -322,28 +322,36 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
             />
           </div>
 
-          <div className="flex items-center gap-3 p-4 bg-zinc-900/50 rounded-2xl border border-zinc-800 hover:border-zinc-700 transition-all cursor-pointer group" onClick={() => setSendInviteEmail(!sendInviteEmail)}>
-             <div className={cn(
-               "w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all",
-               sendInviteEmail ? "bg-[#ff5351] border-[#ff5351]" : "border-zinc-700 group-hover:border-zinc-600"
-             )}>
-                {sendInviteEmail && <Check className="w-4 h-4 text-white" />}
-             </div>
-             <div>
-               <div className="text-xs font-bold text-white uppercase tracking-widest">Enviar convite por e-mail</div>
-               <div className="text-[10px] text-zinc-500 font-medium">O cliente receberá o link para criar sua senha e acessar.</div>
-             </div>
+          <div
+            className="flex items-center gap-3 p-4 bg-zinc-900/50 rounded-2xl border border-zinc-800 hover:border-zinc-700 transition-all cursor-pointer group"
+            onClick={() => setSendInviteEmail(!sendInviteEmail)}
+          >
+            <div
+              className={cn(
+                'w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all',
+                sendInviteEmail ? 'bg-[#ff5351] border-[#ff5351]' : 'border-zinc-700 group-hover:border-zinc-600'
+              )}
+            >
+              {sendInviteEmail && <Check className="w-4 h-4 text-white" />}
+            </div>
+            <div>
+              <div className="text-xs font-bold text-white uppercase tracking-widest">Enviar convite por e-mail</div>
+              <div className="text-[10px] text-zinc-500 font-medium">O cliente receberá o link para criar sua senha e acessar.</div>
+            </div>
           </div>
 
           <footer className="pt-4 flex gap-4">
-            <button 
-              type="button" 
-              onClick={onClose}
+            <button
+              type="button"
+              onClick={() => {
+                resetForm();
+                onClose();
+              }}
               className="flex-1 py-4 rounded-xl border border-zinc-800 text-white font-bold hover:bg-zinc-800 transition-all"
             >
               Cancelar
             </button>
-            <button 
+            <button
               type="submit"
               disabled={loading}
               className="flex-[2] py-4 rounded-xl bg-[#ff5351] text-white font-bold hover:opacity-90 transition-all shadow-xl shadow-[#ff5351]/20 flex items-center justify-center gap-2"
@@ -352,7 +360,7 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
             </button>
           </footer>
         </form>
-      </div>
+      </section>
     </div>
   );
 }
