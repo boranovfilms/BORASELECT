@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Pencil, Trash2, ChevronRight, ArrowLeft, Save, X, PackagePlus } from 'lucide-react';
+import { Plus, Pencil, Trash2, ChevronRight, ArrowLeft, Save, X, PackagePlus, Copy } from 'lucide-react';
 
 type ServicePackage = {
   id: string;
@@ -387,42 +387,58 @@ export default function Packages() {
               {selectedPackage.name}
             </h1>
             <p className="text-zinc-500 text-base md:text-lg mt-3 max-w-3xl">
-              Serviço vinculado: {selectedService.name}
+              Serviço: {selectedService.name}
             </p>
+          </div>
+
+          <div className="flex flex-wrap gap-3">
+            <button className="h-11 px-5 rounded-xl border border-zinc-700 text-zinc-200 font-black uppercase tracking-widest text-xs hover:bg-zinc-800 transition-all flex items-center gap-2">
+              <Pencil className="w-4 h-4" />
+              Editar pacote
+            </button>
+            <button className="h-11 px-5 rounded-xl border border-zinc-700 text-zinc-200 font-black uppercase tracking-widest text-xs hover:bg-zinc-800 transition-all flex items-center gap-2">
+              <Copy className="w-4 h-4" />
+              Duplicar
+            </button>
+            <button className="h-11 px-5 rounded-xl border border-red-500/30 text-red-400 font-black uppercase tracking-widest text-xs hover:bg-red-500/10 transition-all flex items-center gap-2">
+              <Trash2 className="w-4 h-4" />
+              Apagar
+            </button>
           </div>
         </header>
 
         <section className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="rounded-2xl border border-zinc-800 bg-[#151515] p-4">
+          <div className="rounded-2xl border border-zinc-800 bg-[#151515] p-5">
             <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">Valor</p>
-            <p className="text-white text-xl font-black">{selectedPackage.price}</p>
+            <p className="text-white text-2xl font-black">{selectedPackage.price}</p>
           </div>
 
-          <div className="rounded-2xl border border-zinc-800 bg-[#151515] p-4">
+          <div className="rounded-2xl border border-zinc-800 bg-[#151515] p-5">
             <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">Libera</p>
-            <p className="text-white text-xl font-black">
-              {selectedPackage.includedSelections} {selectedService.selectionUnit.toLowerCase()}
+            <p className="text-white text-2xl font-black">
+              {selectedPackage.includedSelections}
             </p>
+            <p className="text-zinc-500 text-xs mt-1">{selectedService.selectionUnit.toLowerCase()}</p>
           </div>
 
-          <div className="rounded-2xl border border-zinc-800 bg-[#151515] p-4">
+          <div className="rounded-2xl border border-zinc-800 bg-[#151515] p-5">
             <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">Adicional</p>
             <p className="text-white text-xl font-black">{selectedPackage.additionalPrice}</p>
           </div>
 
-          <div className="rounded-2xl border border-zinc-800 bg-[#151515] p-4">
+          <div className="rounded-2xl border border-zinc-800 bg-[#151515] p-5">
             <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">Itens</p>
-            <p className="text-white text-xl font-black">{selectedPackage.items.length}</p>
+            <p className="text-white text-2xl font-black">{selectedPackage.items.length}</p>
           </div>
         </section>
 
         <section className="bg-[#141414] border border-zinc-800 rounded-3xl shadow-2xl overflow-hidden">
           <div className="px-5 md:px-6 py-5 border-b border-zinc-800">
             <p className="text-[10px] uppercase tracking-[0.25em] text-zinc-500 font-black mb-2">
-              Conteúdo
+              Conteúdo do pacote
             </p>
             <h2 className="text-white font-black uppercase tracking-tight text-2xl">
-              Itens inclusos no pacote
+              Itens inclusos
             </h2>
             {selectedPackage.description && (
               <p className="text-zinc-500 text-sm mt-2">{selectedPackage.description}</p>
@@ -431,13 +447,11 @@ export default function Packages() {
 
           <div className="divide-y divide-zinc-800">
             {selectedPackage.items.map((item, index) => (
-              <div key={index} className="px-5 md:px-6 py-4 flex items-center justify-between gap-4">
-                <div className="flex items-center gap-4">
-                  <div className="w-8 h-8 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-400 text-xs font-black">
-                    {String(index + 1).padStart(2, '0')}
-                  </div>
-                  <p className="text-white text-sm font-medium">{item}</p>
+              <div key={index} className="px-5 md:px-6 py-4 flex items-center gap-4">
+                <div className="w-8 h-8 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-400 text-xs font-black shrink-0">
+                  {String(index + 1).padStart(2, '0')}
                 </div>
+                <p className="text-white text-sm font-medium">{item}</p>
               </div>
             ))}
           </div>
@@ -445,12 +459,12 @@ export default function Packages() {
 
         <section className="bg-[#141414] border border-zinc-800 rounded-3xl p-5 md:p-6 shadow-2xl">
           <p className="text-[10px] uppercase tracking-[0.25em] text-zinc-500 font-black mb-3">
-            Uso futuro no projeto
+            Aplicação futura
           </p>
           <div className="space-y-2 text-sm text-zinc-300">
-            <p>• Ao escolher este pacote no cadastro do projeto, o sistema poderá carregar automaticamente a quantidade liberada.</p>
-            <p>• Nesse exemplo, ele liberaria <span className="text-white font-black">{selectedPackage.includedSelections} {selectedService.selectionUnit.toLowerCase()}</span>.</p>
-            <p>• O valor adicional configurado ficará em <span className="text-white font-black">{selectedPackage.additionalPrice}</span>.</p>
+            <p>• Ao escolher este pacote no projeto, o sistema poderá carregar automaticamente a quantidade liberada.</p>
+            <p>• Neste caso: <span className="text-white font-black">{selectedPackage.includedSelections} {selectedService.selectionUnit.toLowerCase()}</span>.</p>
+            <p>• O valor do adicional ficará em <span className="text-white font-black">{selectedPackage.additionalPrice}</span>.</p>
           </div>
         </section>
       </div>
