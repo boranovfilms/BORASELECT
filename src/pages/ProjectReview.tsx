@@ -4,13 +4,13 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
 import ReactPlayer from 'react-player';
 const Player = ReactPlayer as any;
-import { 
-  ChevronLeft, 
-  ChevronRight, 
-  Play, 
-  Pause, 
-  Maximize2, 
-  CheckCircle2, 
+import {
+  ChevronLeft,
+  ChevronRight,
+  Play,
+  Pause,
+  Maximize2,
+  CheckCircle2,
   CreditCard,
   ShoppingBag,
   Info,
@@ -49,6 +49,7 @@ export default function ProjectReview() {
 
   const [showCreditModal, setShowCreditModal] = useState(false);
   const [isCreditBlinking, setIsCreditBlinking] = useState(false);
+  const [isTogglingId, setIsTogglingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (id) loadData();
@@ -62,12 +63,12 @@ export default function ProjectReview() {
     if (isVideoLoading && selectedPreview) {
       setLoadTimeout(false);
       if (globalTimeoutRef.current) clearTimeout(globalTimeoutRef.current);
-      
+
       globalTimeoutRef.current = setTimeout(() => {
         if (isVideoLoading) {
           setLoadTimeout(true);
         }
-      }, 8000); 
+      }, 8000);
     } else {
       setLoadTimeout(false);
       if (globalTimeoutRef.current) clearTimeout(globalTimeoutRef.current);
@@ -103,10 +104,10 @@ export default function ProjectReview() {
 
   const handleVideoError = async (e?: any) => {
     if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
-    
-    console.error("Erro ao carregar vídeo:", e || 'Timeout');
+
+    console.error('Erro ao carregar vídeo:', e || 'Timeout');
     if (selectedPreview) {
-      console.error("URL que falhou:", getVideoUrl(selectedPreview));
+      console.error('URL que falhou:', getVideoUrl(selectedPreview));
     }
     setIsVideoError(true);
     setIsVideoLoading(false);
@@ -116,7 +117,7 @@ export default function ProjectReview() {
     if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
     loadingTimeoutRef.current = setTimeout(() => {
       if (isVideoLoading) {
-        console.warn("Video loading timeout reached");
+        console.warn('Video loading timeout reached');
         handleVideoError();
       }
     }, 12000);
@@ -130,7 +131,7 @@ export default function ProjectReview() {
 
   const getThumbnailUrl = (item: MediaItem) => {
     if (!item.url) return item.thumbnailUrl || '';
-    
+
     if (item.externalId && item.url.includes('cloudflarestream.com')) {
       return `https://customer-qm5on0nubla4rvdf.cloudflarestream.com/${item.externalId}/thumbnails/thumbnail.jpg`;
     }
@@ -142,12 +143,12 @@ export default function ProjectReview() {
     }
 
     let finalUrl = item.url;
-    
+
     try {
       const urlObj = new URL(item.url);
       let path = urlObj.pathname;
       let hash = urlObj.hash;
-      
+
       if (!hash || !hash.startsWith('#t=')) {
         hash = '#t=0.1';
       }
@@ -176,7 +177,7 @@ export default function ProjectReview() {
     if (match && match[1]) {
       return `https://drive.google.com/file/d/${match[1]}/preview`;
     }
-    return "";
+    return '';
   };
 
   const isGoogleDriveUrl = (inputUrl: string) => {
@@ -207,27 +208,29 @@ export default function ProjectReview() {
 
   const handleToggleSelect = async (item: MediaItem) => {
     if (!id || !project) return;
+    if (!item.id || isTogglingId) return;
 
-    // TRAVA: se já foi baixado, não permite alterar
     if (item.isDownloaded) {
       toast('Este item já foi baixado e não pode ser alterado.', { icon: '🔒' });
       return;
     }
-    
+
     if (!item.isSelected && (project.creditsTotal - project.creditsUsed) <= 0) {
       setShowCreditModal(true);
       return;
     }
 
     try {
+      setIsTogglingId(item.id);
+
       const newStatus = !item.isSelected;
-      await mediaService.updateMedia(id, item.id!, { isSelected: newStatus });
-      
+      await mediaService.updateMedia(id, item.id, { isSelected: newStatus });
+
       setMedia(prev => prev.map(m => m.id === item.id ? { ...m, isSelected: newStatus } : m));
-      
+
       const updatedCreditsUsed = newStatus ? project.creditsUsed + 1 : Math.max(0, project.creditsUsed - 1);
       await projectService.updateProject(id, { creditsUsed: updatedCreditsUsed });
-      
+
       setProject(prev => {
         if (!prev) return null;
         return {
@@ -241,10 +244,12 @@ export default function ProjectReview() {
     } catch (error) {
       console.error('Update error:', error);
       toast.error('Erro ao atualizar seleção');
+    } finally {
+      setIsTogglingId(current => current === item.id ? null : current);
     }
   };
 
-  const currentIndex = selectedPreview 
+  const currentIndex = selectedPreview
     ? media.findIndex(m => m.id === selectedPreview.id)
     : -1;
 
@@ -311,7 +316,7 @@ export default function ProjectReview() {
               Você atingiu o seu limite de seleções. Para continuar escolhendo novos materiais, adicione mais créditos à sua conta.
             </p>
             <div className="space-y-4">
-              <button 
+              <button
                 onClick={() => {
                   setShowCreditModal(false);
                   setIsCreditBlinking(true);
@@ -327,15 +332,11 @@ export default function ProjectReview() {
       )}
 
       <div className="max-w-[1400px] mx-auto w-full px-3 sm:px-6">
-        {/* HEADER - Compacto no mobile */}
         <div className="sticky top-16 z-[150] bg-[#131313] py-3 md:py-6 -mt-8 -mx-3 px-3 sm:-mx-6 sm:px-6 mb-2 md:mb-4 border-b-2 border-[#ff5351] shadow-[0_15px_30px_rgba(0,0,0,0.5)]">
-          
-          {/* Mobile Header */}
           <div className="md:hidden space-y-3">
-            {/* Linha 1: Voltar + Categoria */}
             <div className="flex items-center justify-between">
-              <button 
-                onClick={() => navigate('/')} 
+              <button
+                onClick={() => navigate('/')}
                 className="flex items-center gap-1 text-zinc-500 text-[10px] font-black uppercase tracking-widest"
               >
                 <ChevronLeft className="w-3 h-3" />
@@ -344,10 +345,8 @@ export default function ProjectReview() {
               <p className="text-[#ff5351] font-bold text-[10px] uppercase tracking-widest">{project.category || (project as any).type || 'PODCAST'}</p>
             </div>
 
-            {/* Linha 2: Título do Projeto */}
             <p className="text-white font-black text-lg italic uppercase tracking-tight leading-none truncate">{project.title}</p>
-            
-            {/* Linha 3: Cards + Botões */}
+
             <div className="flex items-center gap-2">
               <div className="flex items-center gap-1.5 bg-[#1a1a1a] border border-zinc-800/50 rounded-xl px-3 py-2">
                 <span className="text-base font-black text-white italic">{media.length}</span>
@@ -357,18 +356,18 @@ export default function ProjectReview() {
                 <span className="text-base font-black text-white italic">{project.creditsTotal - project.creditsUsed}</span>
                 <span className="text-[8px] font-black uppercase text-zinc-500 tracking-wider">/{project.creditsTotal}</span>
               </div>
-              <button 
+              <button
                 onClick={() => setIsCreditBlinking(false)}
                 className={cn(
-                  "rounded-xl px-3 py-2 font-black uppercase text-[8px] tracking-wider transition-all border",
-                  isCreditBlinking 
-                    ? "animate-subtle-blink border-[#ff5351]/50" 
-                    : "bg-[#1a1a1a] border-zinc-800/50 text-zinc-400 active:scale-95"
+                  'rounded-xl px-3 py-2 font-black uppercase text-[8px] tracking-wider transition-all border',
+                  isCreditBlinking
+                    ? 'animate-subtle-blink border-[#ff5351]/50'
+                    : 'bg-[#1a1a1a] border-zinc-800/50 text-zinc-400 active:scale-95'
                 )}
               >
                 +CRÉDITOS
               </button>
-              <button 
+              <button
                 onClick={() => navigate(`/download/${id}`)}
                 className="flex-1 bg-[#ff5351] text-white rounded-xl px-3 py-2 font-black uppercase tracking-wider text-[8px] active:scale-95 transition-all flex items-center justify-center gap-1.5"
               >
@@ -378,17 +377,16 @@ export default function ProjectReview() {
             </div>
           </div>
 
-          {/* Desktop Header */}
           <div className="hidden md:flex flex-row items-end justify-between gap-4">
             <div className="space-y-6">
-              <button 
-                onClick={() => navigate('/')} 
+              <button
+                onClick={() => navigate('/')}
                 className="flex items-center gap-2 text-zinc-500 hover:text-white transition-all text-xs font-black uppercase tracking-widest group"
               >
                 <ChevronLeft className="w-4 h-4 transition-transform group-hover:-translate-x-1" />
                 VOLTAR AO PAINEL
               </button>
-              
+
               <div className="space-y-1 border-l-[3px] border-[#ff5351] pl-5 py-0.5">
                 <h1 className="text-3xl font-black italic tracking-tighter text-white uppercase leading-none">
                   PROJETO DE SELEÇÃO
@@ -399,58 +397,57 @@ export default function ProjectReview() {
 
             <div className="space-y-4">
               <div className="flex flex-wrap items-end justify-start gap-3">
-                 <div className="space-y-1.5">
-                    <div className="w-[110px] h-[64px] bg-[#1a1a1a] border border-zinc-800/50 rounded-2xl flex flex-col items-center justify-center gap-0 shadow-lg">
-                       <span className="text-xl font-black text-white italic tracking-tighter">{media.length}</span>
-                       <span className="text-[7px] font-black uppercase tracking-widest text-[#ff5351] mt-0.5">VÍDEOS</span>
+                <div className="space-y-1.5">
+                  <div className="w-[110px] h-[64px] bg-[#1a1a1a] border border-zinc-800/50 rounded-2xl flex flex-col items-center justify-center gap-0 shadow-lg">
+                    <span className="text-xl font-black text-white italic tracking-tighter">{media.length}</span>
+                    <span className="text-[7px] font-black uppercase tracking-widest text-[#ff5351] mt-0.5">VÍDEOS</span>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <h2 className="text-[9px] font-black text-[#ff5351] uppercase tracking-[0.22em] italic opacity-80 text-left ml-1">SELEÇÕES</h2>
+                  <div className="w-[110px] h-[64px] bg-[#1a1a1a] border border-zinc-800/50 rounded-2xl flex flex-col items-center justify-center gap-0 group hover:border-zinc-700 transition-all shadow-lg">
+                    <div className="flex items-baseline gap-0.5">
+                      <span className="text-xl font-black text-white">{project.creditsTotal - project.creditsUsed}</span>
+                      <span className="text-sm font-bold text-zinc-600">/ {project.creditsTotal}</span>
                     </div>
-                 </div>
+                    <span className="text-[7px] font-black uppercase tracking-widest text-zinc-600 mt-0.5">Disponíveis</span>
+                  </div>
+                </div>
 
-                 <div className="space-y-1.5">
-                    <h2 className="text-[9px] font-black text-[#ff5351] uppercase tracking-[0.22em] italic opacity-80 text-left ml-1">SELEÇÕES</h2>
-                    <div className="w-[110px] h-[64px] bg-[#1a1a1a] border border-zinc-800/50 rounded-2xl flex flex-col items-center justify-center gap-0 group hover:border-zinc-700 transition-all shadow-lg">
-                       <div className="flex items-baseline gap-0.5">
-                          <span className="text-xl font-black text-white">{project.creditsTotal - project.creditsUsed}</span>
-                          <span className="text-sm font-bold text-zinc-600">/ {project.creditsTotal}</span>
-                       </div>
-                       <span className="text-[7px] font-black uppercase tracking-widest text-zinc-600 mt-0.5">Disponíveis</span>
-                    </div>
-                 </div>
+                <div className="pb-0">
+                  <button
+                    onClick={() => setIsCreditBlinking(false)}
+                    className={cn(
+                      'h-[64px] px-6 rounded-2xl font-black uppercase tracking-[0.2em] text-[8px] transition-all shadow-xl flex items-center justify-center text-center leading-tight',
+                      isCreditBlinking
+                        ? 'animate-subtle-blink'
+                        : 'bg-[#1a1a1a] border border-zinc-800 text-zinc-400 hover:bg-zinc-800 hover:text-white active:scale-95'
+                    )}
+                  >
+                    ADICIONAR<br />CREDITOS
+                  </button>
+                </div>
 
-                 <div className="pb-0">
-                    <button 
-                      onClick={() => setIsCreditBlinking(false)}
-                      className={cn(
-                        "h-[64px] px-6 rounded-2xl font-black uppercase tracking-[0.2em] text-[8px] transition-all shadow-xl flex items-center justify-center text-center leading-tight",
-                        isCreditBlinking 
-                         ? "animate-subtle-blink" 
-                         : "bg-[#1a1a1a] border border-zinc-800 text-zinc-400 hover:bg-zinc-800 hover:text-white active:scale-95"
-                      )}
-                    >
-                       ADICIONAR<br />CREDITOS
-                    </button>
-                 </div>
-
-                 <div className="pb-0">
-                    <button 
-                      onClick={() => navigate(`/download/${id}`)}
-                      className="h-[64px] px-10 bg-[#ff5351] text-white rounded-2xl font-black uppercase tracking-[0.2em] text-[10px] hover:brightness-110 active:scale-95 transition-all shadow-[0_0_30px_rgba(255,83,81,0.2)] flex items-center justify-center gap-3"
-                    >
-                      <CheckCircle2 className="w-5 h-5" />
-                      ENVIAR SELEÇÃO
-                    </button>
-                 </div>
+                <div className="pb-0">
+                  <button
+                    onClick={() => navigate(`/download/${id}`)}
+                    className="h-[64px] px-10 bg-[#ff5351] text-white rounded-2xl font-black uppercase tracking-[0.2em] text-[10px] hover:brightness-110 active:scale-95 transition-all shadow-[0_0_30px_rgba(255,83,81,0.2)] flex items-center justify-center gap-3"
+                  >
+                    <CheckCircle2 className="w-5 h-5" />
+                    ENVIAR SELEÇÃO
+                  </button>
+                </div>
               </div>
             </div>
           </div>
         </div>
 
         <section className="space-y-4 pt-2 md:pt-4">
-
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 md:gap-4 pb-10">
             {[...media].sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { numeric: true, sensitivity: 'base' })).map((item) => (
               <div key={item.id} className="space-y-1.5 md:space-y-2 group/item">
-                <div 
+                <div
                   onContextMenu={(e) => e.preventDefault()}
                   onClick={() => {
                     if (selectedPreview?.id !== item.id) {
@@ -462,24 +459,24 @@ export default function ProjectReview() {
                     }
                   }}
                   className={cn(
-                    "relative aspect-[9/16] rounded-2xl md:rounded-[2.5rem] overflow-hidden cursor-pointer border-2 transition-all duration-500 bg-[#0c0c0c]",
-                    selectedPreview?.id === item.id 
-                      ? "border-[#ff5351] shadow-[0_0_60px_rgba(255,83,81,0.25)]" 
-                      : "border-white/5 hover:border-white/10"
+                    'relative aspect-[9/16] rounded-2xl md:rounded-[2.5rem] overflow-hidden cursor-pointer border-2 transition-all duration-500 bg-[#0c0c0c]',
+                    selectedPreview?.id === item.id
+                      ? 'border-[#ff5351] shadow-[0_0_60px_rgba(255,83,81,0.25)]'
+                      : 'border-white/5 hover:border-white/10'
                   )}
                 >
                   {selectedPreview?.id === item.id && item.type === 'video' ? (
                     <div className="w-full h-full relative" onClick={(e) => e.stopPropagation()}>
                       {isVideoLoading && (
                         <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 backdrop-blur-sm z-[60]">
-                           <Loader2 className="w-8 h-8 text-[#ff5351] animate-spin" />
+                          <Loader2 className="w-8 h-8 text-[#ff5351] animate-spin" />
                         </div>
                       )}
-                      
+
                       {!isVideoError && selectedPreview ? (
                         isGoogleDriveUrl(selectedPreview.url) ? (
                           <div className="w-full h-full relative overflow-hidden bg-black">
-                            <iframe 
+                            <iframe
                               src={`${getDriveEmbedUrl(selectedPreview.url)}?rm=minimal`}
                               className="absolute top-0 left-[-108%] w-[316%] h-full border-0 z-30"
                               allow="autoplay"
@@ -491,7 +488,7 @@ export default function ProjectReview() {
                           </div>
                         ) : selectedPreview.externalId && selectedPreview.url?.includes('cloudflarestream.com') ? (
                           <div className="w-full h-full relative overflow-hidden bg-black">
-                            <iframe 
+                            <iframe
                               src={`https://customer-qm5on0nubla4rvdf.cloudflarestream.com/${selectedPreview.externalId}/iframe?autoplay=true`}
                               className="absolute inset-0 w-full h-full border-0"
                               allow="autoplay; fullscreen"
@@ -529,18 +526,18 @@ export default function ProjectReview() {
                         <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center text-[#ff5351]">
                           <AlertTriangle className="w-8 h-8 mb-2" />
                           <p className="text-[10px] uppercase font-black tracking-widest leading-tight">
-                            Erro no player.<br/>Verifique sua conexão ou formato.
+                            Erro no player.<br />Verifique sua conexão ou formato.
                           </p>
                         </div>
                       )}
                     </div>
                   ) : (
                     <>
-                      <img 
-                        src={getThumbnailUrl(item)} 
+                      <img
+                        src={getThumbnailUrl(item)}
                         className={cn(
-                          "w-full h-full object-cover transition-transform duration-700",
-                          selectedPreview?.id === item.id ? "brightness-110 shadow-inner" : "brightness-[0.4] group-hover/item:brightness-75"
+                          'w-full h-full object-cover transition-transform duration-700',
+                          selectedPreview?.id === item.id ? 'brightness-110 shadow-inner' : 'brightness-[0.4] group-hover/item:brightness-75'
                         )}
                         alt={item.name}
                         loading="lazy"
@@ -562,14 +559,23 @@ export default function ProjectReview() {
                     </>
                   )}
 
-                  <div 
+                  <button
+                    type="button"
                     onClick={(e) => {
                       e.stopPropagation();
                       handleToggleSelect(item);
                     }}
-                    className="absolute top-3 left-3 md:top-6 md:left-6 z-50 transition-transform active:scale-90"
+                    disabled={Boolean(isTogglingId)}
+                    className={cn(
+                      'absolute top-3 left-3 md:top-6 md:left-6 z-50 transition-transform active:scale-90',
+                      isTogglingId && 'pointer-events-none opacity-70'
+                    )}
                   >
-                    {item.isDownloaded ? (
+                    {isTogglingId === item.id ? (
+                      <div className="w-[26px] h-[26px] md:w-[30px] md:h-[30px] bg-black/70 rounded-full flex items-center justify-center shadow-lg border border-white/20">
+                        <Loader2 className="w-3.5 h-3.5 md:w-4 md:h-4 text-white animate-spin" />
+                      </div>
+                    ) : item.isDownloaded ? (
                       <div className="w-[26px] h-[26px] md:w-[30px] md:h-[30px] bg-amber-500 rounded-full flex items-center justify-center shadow-lg border border-white/20">
                         <Lock className="w-3.5 h-3.5 md:w-4 md:h-4 text-white" />
                       </div>
@@ -580,20 +586,23 @@ export default function ProjectReview() {
                     ) : (
                       <div className="w-[26px] h-[26px] md:w-[30px] md:h-[30px] rounded-full border-2 border-white/30 backdrop-blur-sm bg-black/20 hover:border-[#22c55e] hover:bg-[#22c55e]/10" />
                     )}
-                  </div>
+                  </button>
+                </div>
 
-                  </div>
-
-                <div className={cn(
-                  "bg-[#111111] p-2.5 md:p-4 rounded-xl md:rounded-3xl border transition-all duration-300 min-h-[48px] md:min-h-[72px] flex items-center justify-center text-center",
-                  selectedPreview?.id === item.id 
-                    ? "border-[#ff5351]/30 bg-[#151515]" 
-                    : "border-white/5 group-hover/item:border-white/10"
-                )}>
-                  <p className={cn(
-                    "text-[10px] font-medium capitalize tracking-wide leading-tight transition-colors line-clamp-2",
-                    selectedPreview?.id === item.id ? "text-[#ff5351]" : "text-zinc-500"
-                  )}>
+                <div
+                  className={cn(
+                    'bg-[#111111] p-2.5 md:p-4 rounded-xl md:rounded-3xl border transition-all duration-300 min-h-[48px] md:min-h-[72px] flex items-center justify-center text-center',
+                    selectedPreview?.id === item.id
+                      ? 'border-[#ff5351]/30 bg-[#151515]'
+                      : 'border-white/5 group-hover/item:border-white/10'
+                  )}
+                >
+                  <p
+                    className={cn(
+                      'text-[10px] font-medium capitalize tracking-wide leading-tight transition-colors line-clamp-2',
+                      selectedPreview?.id === item.id ? 'text-[#ff5351]' : 'text-zinc-500'
+                    )}
+                  >
                     {item.name?.toLowerCase()}
                   </p>
                 </div>
@@ -604,5 +613,4 @@ export default function ProjectReview() {
       </div>
     </div>
   );
-
 }
