@@ -450,6 +450,7 @@ export default function ProjectReview() {
                 <div
                   onContextMenu={(e) => e.preventDefault()}
                   onClick={() => {
+                    if (isTogglingId) return;
                     if (selectedPreview?.id !== item.id) {
                       setIsVideoError(false);
                       setIsVideoLoading(true);
@@ -568,7 +569,7 @@ export default function ProjectReview() {
                     disabled={Boolean(isTogglingId)}
                     className={cn(
                       'absolute top-3 left-3 md:top-6 md:left-6 z-50 transition-transform active:scale-90',
-                      isTogglingId && 'pointer-events-none opacity-70'
+                      isTogglingId === item.id && 'opacity-70'
                     )}
                   >
                     {isTogglingId === item.id ? (
