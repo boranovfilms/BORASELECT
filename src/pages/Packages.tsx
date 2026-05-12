@@ -393,92 +393,119 @@ export default function Packages() {
           </div>
         </header>
 
-        <section className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="rounded-2xl border border-zinc-800 bg-[#151515] p-4">
-            <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">ID</p>
-            <p className="text-white text-lg font-black">{selectedService.id}</p>
-          </div>
-
-          <div className="rounded-2xl border border-zinc-800 bg-[#151515] p-4">
-            <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">Categoria</p>
-            <p className="text-white text-lg font-black">{selectedService.category}</p>
-          </div>
-
-          <div className="rounded-2xl border border-zinc-800 bg-[#151515] p-4">
-            <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">Unidade</p>
-            <p className="text-white text-lg font-black">{selectedService.selectionUnit}</p>
-          </div>
-
-          <div className="rounded-2xl border border-zinc-800 bg-[#151515] p-4">
-            <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">Pacotes</p>
-            <p className="text-white text-lg font-black">{selectedService.packageCount}</p>
-          </div>
-        </section>
-
-        <section className="bg-[#141414] border border-zinc-800 rounded-3xl overflow-hidden shadow-2xl">
-          <div className="px-6 py-5 border-b border-zinc-800 flex items-center justify-between">
+        <section className="bg-[#141414] border border-zinc-800 rounded-3xl shadow-2xl overflow-hidden">
+          <div className="px-5 md:px-6 py-5 border-b border-zinc-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
               <p className="text-[10px] uppercase tracking-[0.25em] text-zinc-500 font-black mb-2">
-                Pacotes do serviço
+                Resumo
               </p>
               <h2 className="text-white font-black uppercase tracking-tight text-2xl">
-                Pacotes cadastrados
+                Pacotes do serviço
               </h2>
             </div>
 
-            <div className="text-[10px] uppercase tracking-widest font-black text-zinc-500">
-              {selectedService.packages.length} pacotes
+            <div className="flex flex-wrap gap-2 text-[10px] uppercase tracking-widest font-black">
+              <span className="px-3 py-2 rounded-full border border-zinc-800 bg-zinc-900 text-zinc-400">
+                {selectedService.id}
+              </span>
+              <span className="px-3 py-2 rounded-full border border-zinc-800 bg-zinc-900 text-zinc-400">
+                {selectedService.category}
+              </span>
+              <span className="px-3 py-2 rounded-full border border-zinc-800 bg-zinc-900 text-zinc-400">
+                {selectedService.packageCount} pacotes
+              </span>
+              <span className="px-3 py-2 rounded-full border border-zinc-800 bg-zinc-900 text-zinc-400">
+                {selectedService.status}
+              </span>
             </div>
           </div>
 
-          <div className="divide-y divide-zinc-800">
-            {selectedService.packages.map((pkg) => (
-              <div key={pkg.id} className="px-6 py-5">
-                <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-5">
-                  <div className="space-y-3">
-                    <div>
-                      <p className="text-white text-2xl font-black uppercase tracking-tight">{pkg.name}</p>
-                      <p className="text-zinc-500 text-xs mt-1">{pkg.id}</p>
-                    </div>
+          <div className="overflow-hidden">
+            <table className="w-full table-fixed">
+              <thead>
+                <tr className="border-b border-zinc-800 bg-black/20">
+                  <th className="text-left px-4 md:px-6 py-4 text-[10px] uppercase tracking-[0.25em] text-zinc-500 font-black w-[100px]">
+                    ID
+                  </th>
+                  <th className="text-left px-4 md:px-6 py-4 text-[10px] uppercase tracking-[0.25em] text-zinc-500 font-black">
+                    Pacote
+                  </th>
+                  <th className="text-left px-4 md:px-6 py-4 text-[10px] uppercase tracking-[0.25em] text-zinc-500 font-black w-[150px]">
+                    Valor
+                  </th>
+                  <th className="text-left px-4 md:px-6 py-4 text-[10px] uppercase tracking-[0.25em] text-zinc-500 font-black w-[130px]">
+                    Liberado
+                  </th>
+                  <th className="text-left px-4 md:px-6 py-4 text-[10px] uppercase tracking-[0.25em] text-zinc-500 font-black w-[180px]">
+                    Adicional
+                  </th>
+                  <th className="text-right px-4 md:px-6 py-4 text-[10px] uppercase tracking-[0.25em] text-zinc-500 font-black w-[120px]">
+                    Ações
+                  </th>
+                </tr>
+              </thead>
 
-                    {pkg.description && (
-                      <p className="text-zinc-400 text-sm max-w-2xl">{pkg.description}</p>
-                    )}
-                  </div>
+              <tbody>
+                {selectedService.packages.map((pkg) => (
+                  <tr
+                    key={pkg.id}
+                    className="border-b border-zinc-800/70 hover:bg-zinc-900/40 transition-all"
+                  >
+                    <td className="px-4 md:px-6 py-4 text-sm text-zinc-400 font-mono align-top">
+                      {pkg.id}
+                    </td>
 
-                  <div className="text-left lg:text-right">
-                    <p className="text-[#ff5351] text-3xl font-black">{pkg.price}</p>
-                    <p className="text-zinc-500 text-sm mt-1">
+                    <td className="px-4 md:px-6 py-4 align-top">
+                      <p className="text-white font-black uppercase text-sm tracking-wide leading-tight">
+                        {pkg.name}
+                      </p>
+                      {pkg.description && (
+                        <p className="text-zinc-500 text-xs mt-1">
+                          {pkg.description}
+                        </p>
+                      )}
+                    </td>
+
+                    <td className="px-4 md:px-6 py-4 text-white font-black text-sm align-top whitespace-nowrap">
+                      {pkg.price}
+                    </td>
+
+                    <td className="px-4 md:px-6 py-4 text-zinc-300 text-sm align-top">
                       {pkg.includedSelections} {selectedService.selectionUnit.toLowerCase()}
-                    </p>
-                  </div>
-                </div>
+                    </td>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-5">
-                  <div className="rounded-2xl border border-zinc-800 bg-zinc-900/70 p-4">
-                    <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">
-                      Valor adicional
-                    </p>
-                    <p className="text-white font-black">{pkg.additionalPrice}</p>
-                  </div>
+                    <td className="px-4 md:px-6 py-4 text-zinc-400 text-sm align-top">
+                      {pkg.additionalPrice}
+                    </td>
 
-                  <div className="rounded-2xl border border-zinc-800 bg-zinc-900/70 p-4">
-                    <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">
-                      Itens inclusos
-                    </p>
-                    <p className="text-white font-black">{pkg.items.length} itens</p>
-                  </div>
-                </div>
+                    <td className="px-4 md:px-6 py-4 align-top">
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          className="w-9 h-9 rounded-xl border border-zinc-800 bg-zinc-900 text-zinc-400 hover:text-white hover:border-zinc-700 transition-all flex items-center justify-center"
+                          title="Editar pacote"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
 
-                <div className="mt-5 space-y-2">
-                  {pkg.items.map((item, index) => (
-                    <p key={index} className="text-sm text-zinc-300">
-                      • {item}
-                    </p>
-                  ))}
-                </div>
-              </div>
-            ))}
+                        <button
+                          className="w-9 h-9 rounded-xl border border-zinc-800 bg-zinc-900 text-zinc-400 hover:text-red-400 hover:border-red-500/40 transition-all flex items-center justify-center"
+                          title="Apagar pacote"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+
+                        <button
+                          className="w-9 h-9 rounded-xl border border-zinc-800 bg-zinc-900 text-zinc-500 hover:text-[#ff5351] hover:border-[#ff5351]/30 transition-all flex items-center justify-center"
+                          title="Visualizar pacote"
+                        >
+                          <ChevronRight className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </section>
       </div>
