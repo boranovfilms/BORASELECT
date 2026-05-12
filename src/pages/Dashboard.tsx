@@ -7,11 +7,13 @@ import { projectService, Project } from '../services/projectService';
 import { auth } from '../lib/firebase';
 import { cn } from '../lib/utils';
 import { format } from 'date-fns';
+import NewProjectModal from '../components/NewProjectModal';
 
 export default function Dashboard() {
   const [adminProjects, setAdminProjects] = useState<Project[]>([]);
   const [clientProjects, setClientProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -90,6 +92,16 @@ export default function Dashboard() {
   const isAdminUser = auth.currentUser?.email === 'boranovfilms@gmail.com';
   const isOnlyClient = !isAdminUser;
 
+  if (isModalOpen) {
+    return (
+      <NewProjectModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onSuccess={loadProjects}
+      />
+    );
+  }
+
   return (
     <div className="space-y-12">
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-6">
@@ -106,7 +118,7 @@ export default function Dashboard() {
 
         {!isOnlyClient && (
           <button
-            onClick={() => navigate('/projects/new')}
+            onClick={() => setIsModalOpen(true)}
             className="flex items-center gap-2 bg-[#ff5351] text-white px-8 py-4 rounded-xl font-bold uppercase tracking-wider hover:opacity-90 transition-all shadow-lg shadow-[#ff5351]/20 active:scale-95"
           >
             <Plus className="w-5 h-5" />
@@ -132,7 +144,7 @@ export default function Dashboard() {
 
           {isAdminUser && (
             <button
-              onClick={() => navigate('/projects/new')}
+              onClick={() => setIsModalOpen(true)}
               className="mt-4 text-[#ff5351] font-bold hover:underline font-black uppercase tracking-widest text-xs"
             >
               Criar primeiro projeto
