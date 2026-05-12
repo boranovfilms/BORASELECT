@@ -161,12 +161,13 @@ const emptyPackageDraft = {
   items: [] as string[]
 };
 
-type ViewMode = 'list' | 'details' | 'form';
+type ViewMode = 'list' | 'service-details' | 'package-details' | 'form';
 
 export default function Packages() {
   const [services, setServices] = useState<ServiceType[]>(initialServices);
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [selectedService, setSelectedService] = useState<ServiceType | null>(null);
+  const [selectedPackage, setSelectedPackage] = useState<ServicePackage | null>(null);
   const [editingServiceId, setEditingServiceId] = useState<string | null>(null);
 
   const [serviceName, setServiceName] = useState('');
@@ -212,9 +213,16 @@ export default function Packages() {
     setViewMode('form');
   };
 
-  const openDetails = (service: ServiceType) => {
+  const openServiceDetails = (service: ServiceType) => {
     setSelectedService(service);
-    setViewMode('details');
+    setSelectedPackage(null);
+    setViewMode('service-details');
+  };
+
+  const openPackageDetails = (service: ServiceType, pkg: ServicePackage) => {
+    setSelectedService(service);
+    setSelectedPackage(pkg);
+    setViewMode('package-details');
   };
 
   const openEditForm = (service: ServiceType) => {
@@ -239,6 +247,7 @@ export default function Packages() {
 
     if (selectedService?.id === serviceId) {
       setSelectedService(null);
+      setSelectedPackage(null);
       setViewMode('list');
     }
   };
@@ -359,7 +368,96 @@ export default function Packages() {
     setViewMode('list');
   };
 
-  if (viewMode === 'details' && selectedService) {
+  if (viewMode === 'package-details' && selectedService && selectedPackage) {
+    return (
+      <div className="space-y-8 pb-20">
+        <header className="flex flex-col lg:flex-row lg:items-end justify-between gap-6">
+          <div>
+            <button
+              onClick={() => setViewMode('service-details')}
+              className="mb-4 flex items-center gap-2 text-zinc-500 hover:text-white transition-all text-xs font-bold uppercase tracking-widest"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Voltar para pacotes
+            </button>
+            <p className="text-[11px] uppercase tracking-[0.3em] text-[#ff5351] font-black mb-3">
+              Detalhes do Pacote
+            </p>
+            <h1 className="text-4xl md:text-5xl font-black tracking-tight text-white uppercase italic">
+              {selectedPackage.name}
+            </h1>
+            <p className="text-zinc-500 text-base md:text-lg mt-3 max-w-3xl">
+              Serviço vinculado: {selectedService.name}
+            </p>
+          </div>
+        </header>
+
+        <section className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="rounded-2xl border border-zinc-800 bg-[#151515] p-4">
+            <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">Valor</p>
+            <p className="text-white text-xl font-black">{selectedPackage.price}</p>
+          </div>
+
+          <div className="rounded-2xl border border-zinc-800 bg-[#151515] p-4">
+            <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">Libera</p>
+            <p className="text-white text-xl font-black">
+              {selectedPackage.includedSelections} {selectedService.selectionUnit.toLowerCase()}
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-zinc-800 bg-[#151515] p-4">
+            <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">Adicional</p>
+            <p className="text-white text-xl font-black">{selectedPackage.additionalPrice}</p>
+          </div>
+
+          <div className="rounded-2xl border border-zinc-800 bg-[#151515] p-4">
+            <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">Itens</p>
+            <p className="text-white text-xl font-black">{selectedPackage.items.length}</p>
+          </div>
+        </section>
+
+        <section className="bg-[#141414] border border-zinc-800 rounded-3xl shadow-2xl overflow-hidden">
+          <div className="px-5 md:px-6 py-5 border-b border-zinc-800">
+            <p className="text-[10px] uppercase tracking-[0.25em] text-zinc-500 font-black mb-2">
+              Conteúdo
+            </p>
+            <h2 className="text-white font-black uppercase tracking-tight text-2xl">
+              Itens inclusos no pacote
+            </h2>
+            {selectedPackage.description && (
+              <p className="text-zinc-500 text-sm mt-2">{selectedPackage.description}</p>
+            )}
+          </div>
+
+          <div className="divide-y divide-zinc-800">
+            {selectedPackage.items.map((item, index) => (
+              <div key={index} className="px-5 md:px-6 py-4 flex items-center justify-between gap-4">
+                <div className="flex items-center gap-4">
+                  <div className="w-8 h-8 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-400 text-xs font-black">
+                    {String(index + 1).padStart(2, '0')}
+                  </div>
+                  <p className="text-white text-sm font-medium">{item}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="bg-[#141414] border border-zinc-800 rounded-3xl p-5 md:p-6 shadow-2xl">
+          <p className="text-[10px] uppercase tracking-[0.25em] text-zinc-500 font-black mb-3">
+            Uso futuro no projeto
+          </p>
+          <div className="space-y-2 text-sm text-zinc-300">
+            <p>• Ao escolher este pacote no cadastro do projeto, o sistema poderá carregar automaticamente a quantidade liberada.</p>
+            <p>• Nesse exemplo, ele liberaria <span className="text-white font-black">{selectedPackage.includedSelections} {selectedService.selectionUnit.toLowerCase()}</span>.</p>
+            <p>• O valor adicional configurado ficará em <span className="text-white font-black">{selectedPackage.additionalPrice}</span>.</p>
+          </div>
+        </section>
+      </div>
+    );
+  }
+
+  if (viewMode === 'service-details' && selectedService) {
     return (
       <div className="space-y-8 pb-20">
         <header className="flex flex-col lg:flex-row lg:items-end justify-between gap-6">
@@ -372,13 +470,13 @@ export default function Packages() {
               Voltar para lista
             </button>
             <p className="text-[11px] uppercase tracking-[0.3em] text-[#ff5351] font-black mb-3">
-              Visualização do Serviço
+              Serviço Selecionado
             </p>
             <h1 className="text-4xl md:text-5xl font-black tracking-tight text-white uppercase italic">
               {selectedService.name}
             </h1>
             <p className="text-zinc-500 text-base md:text-lg mt-3 max-w-3xl">
-              {selectedService.description || 'Sem descrição cadastrada.'}
+              Clique em um pacote para visualizar os detalhes.
             </p>
           </div>
 
@@ -393,30 +491,41 @@ export default function Packages() {
           </div>
         </header>
 
+        <section className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="rounded-2xl border border-zinc-800 bg-[#151515] p-4">
+            <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">ID</p>
+            <p className="text-white text-lg font-black">{selectedService.id}</p>
+          </div>
+
+          <div className="rounded-2xl border border-zinc-800 bg-[#151515] p-4">
+            <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">Categoria</p>
+            <p className="text-white text-lg font-black">{selectedService.category}</p>
+          </div>
+
+          <div className="rounded-2xl border border-zinc-800 bg-[#151515] p-4">
+            <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">Unidade</p>
+            <p className="text-white text-lg font-black">{selectedService.selectionUnit}</p>
+          </div>
+
+          <div className="rounded-2xl border border-zinc-800 bg-[#151515] p-4">
+            <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">Pacotes</p>
+            <p className="text-white text-lg font-black">{selectedService.packages.length}</p>
+          </div>
+        </section>
+
         <section className="bg-[#141414] border border-zinc-800 rounded-3xl shadow-2xl overflow-hidden">
-          <div className="px-5 md:px-6 py-5 border-b border-zinc-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="px-5 md:px-6 py-5 border-b border-zinc-800 flex items-center justify-between">
             <div>
               <p className="text-[10px] uppercase tracking-[0.25em] text-zinc-500 font-black mb-2">
-                Resumo
+                Lista
               </p>
               <h2 className="text-white font-black uppercase tracking-tight text-2xl">
                 Pacotes do serviço
               </h2>
             </div>
 
-            <div className="flex flex-wrap gap-2 text-[10px] uppercase tracking-widest font-black">
-              <span className="px-3 py-2 rounded-full border border-zinc-800 bg-zinc-900 text-zinc-400">
-                {selectedService.id}
-              </span>
-              <span className="px-3 py-2 rounded-full border border-zinc-800 bg-zinc-900 text-zinc-400">
-                {selectedService.category}
-              </span>
-              <span className="px-3 py-2 rounded-full border border-zinc-800 bg-zinc-900 text-zinc-400">
-                {selectedService.packageCount} pacotes
-              </span>
-              <span className="px-3 py-2 rounded-full border border-zinc-800 bg-zinc-900 text-zinc-400">
-                {selectedService.status}
-              </span>
+            <div className="text-[10px] uppercase tracking-widest font-black text-zinc-500">
+              {selectedService.packages.length} pacotes
             </div>
           </div>
 
@@ -434,7 +543,7 @@ export default function Packages() {
                     Valor
                   </th>
                   <th className="text-left px-4 md:px-6 py-4 text-[10px] uppercase tracking-[0.25em] text-zinc-500 font-black w-[130px]">
-                    Liberado
+                    Libera
                   </th>
                   <th className="text-left px-4 md:px-6 py-4 text-[10px] uppercase tracking-[0.25em] text-zinc-500 font-black w-[180px]">
                     Adicional
@@ -449,7 +558,8 @@ export default function Packages() {
                 {selectedService.packages.map((pkg) => (
                   <tr
                     key={pkg.id}
-                    className="border-b border-zinc-800/70 hover:bg-zinc-900/40 transition-all"
+                    onClick={() => openPackageDetails(selectedService, pkg)}
+                    className="border-b border-zinc-800/70 hover:bg-zinc-900/40 transition-all cursor-pointer"
                   >
                     <td className="px-4 md:px-6 py-4 text-sm text-zinc-400 font-mono align-top">
                       {pkg.id}
@@ -481,6 +591,7 @@ export default function Packages() {
                     <td className="px-4 md:px-6 py-4 align-top">
                       <div className="flex items-center justify-end gap-2">
                         <button
+                          onClick={(e) => e.stopPropagation()}
                           className="w-9 h-9 rounded-xl border border-zinc-800 bg-zinc-900 text-zinc-400 hover:text-white hover:border-zinc-700 transition-all flex items-center justify-center"
                           title="Editar pacote"
                         >
@@ -488,6 +599,7 @@ export default function Packages() {
                         </button>
 
                         <button
+                          onClick={(e) => e.stopPropagation()}
                           className="w-9 h-9 rounded-xl border border-zinc-800 bg-zinc-900 text-zinc-400 hover:text-red-400 hover:border-red-500/40 transition-all flex items-center justify-center"
                           title="Apagar pacote"
                         >
@@ -495,6 +607,10 @@ export default function Packages() {
                         </button>
 
                         <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openPackageDetails(selectedService, pkg);
+                          }}
                           className="w-9 h-9 rounded-xl border border-zinc-800 bg-zinc-900 text-zinc-500 hover:text-[#ff5351] hover:border-[#ff5351]/30 transition-all flex items-center justify-center"
                           title="Visualizar pacote"
                         >
@@ -913,7 +1029,7 @@ export default function Packages() {
               {services.map((service) => (
                 <tr
                   key={service.id}
-                  onClick={() => openDetails(service)}
+                  onClick={() => openServiceDetails(service)}
                   className="border-b border-zinc-800/70 hover:bg-zinc-900/40 transition-all cursor-pointer"
                 >
                   <td className="px-4 md:px-6 py-4 text-sm text-zinc-400 font-mono align-top">
@@ -968,7 +1084,7 @@ export default function Packages() {
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          openDetails(service);
+                          openServiceDetails(service);
                         }}
                         className="w-9 h-9 rounded-xl border border-zinc-800 bg-zinc-900 text-zinc-500 hover:text-[#ff5351] hover:border-[#ff5351]/30 transition-all flex items-center justify-center"
                         title="Visualizar"
