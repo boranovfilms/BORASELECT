@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Check, Search, Loader2, ChevronLeft, FolderOpen } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { clientService, Client } from '../services/clientService';
@@ -6,6 +6,7 @@ import { categoryService, Category } from '../services/categoryService';
 import { projectService } from '../services/projectService';
 import { cn } from '../lib/utils';
 import { emailService } from '../services/emailService';
+import { settingsService, ServiceCatalog, ServicePackageConfig } from '../services/settingsService';
 
 interface NewProjectModalProps {
   isOpen: boolean;
@@ -13,9 +14,12 @@ interface NewProjectModalProps {
   onSuccess: () => void;
 }
 
+const baseCategories = ['Casamento', 'Ensaio', 'Evento', 'Podcast', 'Vídeo Clipe'];
+
 export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProjectModalProps) {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
+  const [loadingReferences, setLoadingReferences] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [title, setTitle] = useState('');
   const [sendInviteEmail, setSendInviteEmail] = useState(true);
@@ -30,8 +34,12 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
   const [selectedCategory, setSelectedCategory] = useState('');
   const [isCreatingCategory, setIsCreatingCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
-  const [includedCredits, setIncludedCredits] = useState(15);
 
+  const [serviceCatalogs, setServiceCatalogs] = useState<ServiceCatalog[]>([]);
+  const [selectedServiceId, setSelectedServiceId] = useState('');
+  const [selectedPackageId, setSelectedPackageId] = useState('');
+
+  const [includedCredits, setIncludedCredits] = useState(15);
   const [originalDriveLink, setOriginalDriveLink] = useState('');
 
   useEffect(() => {
@@ -42,16 +50,62 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
   }, [isOpen]);
 
   const loadInitialData = async () => {
+    setLoadingReferences(true);
     try {
-      const [cls, cats] = await Promise.all([
+      const [cls, cats, catalogs] = await Promise.all([
         clientService.searchClients(''),
-        categoryService.getCategories()
+        categoryService.getCategories(),
+        settingsService.getServiceCatalogs()
       ]);
+
       setClients(cls);
       setCategories(cats);
-    } catch (error) {
-      console.error('Error loading initial data:', error);
+      setServiceCatalogs(catalogs.filter((service) => service.status === 'Ativo'));
+    } catch (loadError) {
+      console.error('Error loading initial data:', loadError);
+    } finally {
+      setLoadingReferences(false);
     }
+  };
+
+  const allCategories = useMemo(() => {
+    const dynamicCategories = categories.map((category) => category.name);
+    const serviceCategories = serviceCatalogs.map((service) => service.category);
+    return Array.from(new Set([...baseCategories, ...dynamicCategories, ...serviceCategories]));
+  }, [categories, serviceCatalogs]);
+
+  const servicesForSelectedCategory = useMemo(() => {
+    if (!selectedCategory || isCreatingCategory) return [];
+    return serviceCatalogs.filter((service) => service.category === selectedCategory);
+  }, [selectedCategory, isCreatingCategory, serviceCatalogs]);
+
+  const selectedService = useMemo(() => {
+    return servicesForSelectedCategory.find((service) => service.id === selectedServiceId) || null;
+  }, [servicesForSelectedCategory, selectedServiceId]);
+
+  const packagesForSelectedService = useMemo(() => {
+    if (!selectedService) return [];
+    return (selectedService.packages || []).filter((pkg) => pkg.status === 'Ativo');
+  }, [selectedService]);
+
+  const selectedPackage = useMemo(() => {
+    return packagesForSelectedService.find((pkg) => pkg.id === selectedPackageId) || null;
+  }, [packagesForSelectedService, selectedPackageId]);
+
+  const packageIncludedCredits = selectedPackage ? selectedPackage.includedSelections : includedCredits;
+  const packageAdditionalItemPrice = selectedPackage ? selectedPackage.additionalItemPrice : 0;
+
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL'
+    }).format(value || 0);
+  };
+
+  const resetServicePackageSelection = () => {
+    setSelectedServiceId('');
+    setSelectedPackageId('');
+    setIncludedCredits(15);
   };
 
   const resetForm = () => {
@@ -66,7 +120,14 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
     setIncludedCredits(15);
     setSendInviteEmail(true);
     setOriginalDriveLink('');
+    setSelectedServiceId('');
+    setSelectedPackageId('');
     setError(null);
+  };
+
+  const handleCategorySelect = (category: string) => {
+    setSelectedCategory(category);
+    resetServicePackageSelection();
   };
 
   const handleCreateProject = async (e: React.FormEvent) => {
@@ -108,23 +169,42 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
         finalCategory = 'Geral';
       }
 
+      if (!isCreatingCategory && servicesForSelectedCategory.length > 0) {
+        if (!selectedService) {
+          throw new Error('Selecione o serviço referente a este projeto');
+        }
+
+        if (!selectedPackage) {
+          throw new Error('Selecione o pacote referente a este projeto');
+        }
+      }
+
       const clientStatus = await clientService.checkGlobalStatus(finalClientEmail);
 
-      const projectRef = await projectService.createProject({
+      const projectPayload: any = {
         title,
         clientId: finalClientId,
         clientName: finalClientName,
         clientEmail: finalClientEmail,
         category: finalCategory,
+        type: selectedService?.name || finalCategory,
         status: 'Em Seleção',
         clientStatus: clientStatus as 'pending' | 'confirmed',
         coverImage: 'https://images.unsplash.com/photo-1542038784456-1ea8e935640e?q=80&w=2070&auto=format&fit=crop',
         progress: 0,
         creditsUsed: 0,
-        creditsTotal: includedCredits,
-        includedItems: includedCredits,
-        originalDriveLink: originalDriveLink.trim()
-      });
+        creditsTotal: packageIncludedCredits,
+        includedItems: packageIncludedCredits,
+        extraPrice: packageAdditionalItemPrice,
+        originalDriveLink: originalDriveLink.trim(),
+        serviceCatalogId: selectedService?.id || '',
+        serviceCatalogName: selectedService?.name || '',
+        packageId: selectedPackage?.id || '',
+        packageName: selectedPackage?.name || '',
+        selectionUnit: selectedService?.selectionUnit || '',
+      };
+
+      const projectRef = await projectService.createProject(projectPayload);
 
       if (sendInviteEmail && finalClientEmail) {
         const status = await clientService.checkGlobalStatus(finalClientEmail);
@@ -185,7 +265,9 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
           )}
 
           <div className="space-y-2">
-            <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1">Título do Projeto</label>
+            <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1">
+              Título do Projeto
+            </label>
             <input
               type="text"
               value={title}
@@ -198,7 +280,9 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
 
           <div className="space-y-4">
             <div className="flex items-center justify-between ml-1">
-              <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Informações do Cliente</label>
+              <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">
+                Informações do Cliente
+              </label>
               <button
                 type="button"
                 onClick={() => setIsCreatingClient(!isCreatingClient)}
@@ -234,15 +318,15 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
                   className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-12 pr-4 py-4 text-white focus:border-[#ff5351] outline-none appearance-none cursor-pointer"
                   value={selectedClient?.id || ''}
                   onChange={(e) => {
-                    const client = clients.find(c => c.id === e.target.value);
+                    const client = clients.find((item) => item.id === e.target.value);
                     setSelectedClient(client || null);
                   }}
                   required
                 >
                   <option value="">Selecione um cliente...</option>
-                  {clients.map(c => (
-                    <option key={c.id} value={c.id}>
-                      {c.name} ({c.email})
+                  {clients.map((client) => (
+                    <option key={client.id} value={client.id}>
+                      {client.name} ({client.email})
                     </option>
                   ))}
                 </select>
@@ -255,10 +339,15 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
 
           <div className="space-y-4">
             <div className="flex items-center justify-between ml-1">
-              <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Categoria do Serviço</label>
+              <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">
+                Categoria do Serviço
+              </label>
               <button
                 type="button"
-                onClick={() => setIsCreatingCategory(!isCreatingCategory)}
+                onClick={() => {
+                  setIsCreatingCategory(!isCreatingCategory);
+                  resetServicePackageSelection();
+                }}
                 className="text-[10px] font-black uppercase tracking-widest text-[#ff5351] hover:underline"
               >
                 {isCreatingCategory ? 'Lista' : '+ Nova Categoria'}
@@ -278,44 +367,129 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
               </div>
             ) : (
               <div className="flex flex-wrap gap-2">
-                {['Casamento', 'Ensaio', 'Evento', 'Podcast', 'Vídeo Clipe'].map((cat) => (
+                {allCategories.map((category) => (
                   <button
-                    key={cat}
+                    key={category}
                     type="button"
-                    onClick={() => setSelectedCategory(cat)}
+                    onClick={() => handleCategorySelect(category)}
                     className={cn(
                       'px-4 py-2 rounded-full border text-xs font-bold transition-all',
-                      selectedCategory === cat
+                      selectedCategory === category
                         ? 'bg-[#ff5351] border-[#ff5351] text-white'
                         : 'border-zinc-800 text-zinc-500 hover:border-zinc-700 hover:text-zinc-300'
                     )}
                   >
-                    {cat}
+                    {category}
                   </button>
                 ))}
-                {categories
-                  .filter(c => !['Casamento', 'Ensaio', 'Evento', 'Podcast', 'Vídeo Clipe'].includes(c.name))
-                  .map((cat) => (
-                    <button
-                      key={cat.id}
-                      type="button"
-                      onClick={() => setSelectedCategory(cat.name)}
-                      className={cn(
-                        'px-4 py-2 rounded-full border text-xs font-bold transition-all',
-                        selectedCategory === cat.name
-                          ? 'bg-[#ff5351] border-[#ff5351] text-white'
-                          : 'border-zinc-800 text-zinc-500 hover:border-zinc-700 hover:text-zinc-300'
-                      )}
-                    >
-                      {cat.name}
-                    </button>
-                  ))}
               </div>
             )}
           </div>
 
+          {!isCreatingCategory && selectedCategory && (
+            <div className="space-y-6 rounded-3xl border border-zinc-800 bg-zinc-900/40 p-5 md:p-6">
+              <div>
+                <p className="text-[10px] uppercase tracking-[0.25em] text-zinc-500 font-black mb-2">
+                  Serviço e pacote
+                </p>
+                <h3 className="text-white font-black uppercase tracking-tight text-xl">
+                  Configuração automática do projeto
+                </h3>
+                <p className="text-zinc-500 text-sm mt-2">
+                  Selecione o serviço e o pacote para o sistema carregar os limites e valores automaticamente.
+                </p>
+              </div>
+
+              {loadingReferences ? (
+                <div className="flex items-center gap-3 text-zinc-500 text-sm">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Carregando serviços cadastrados...
+                </div>
+              ) : servicesForSelectedCategory.length > 0 ? (
+                <>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1">
+                        Serviço cadastrado
+                      </label>
+                      <select
+                        value={selectedServiceId}
+                        onChange={(e) => {
+                          setSelectedServiceId(e.target.value);
+                          setSelectedPackageId('');
+                        }}
+                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-5 py-4 text-white focus:border-[#ff5351] outline-none transition-all"
+                      >
+                        <option value="">Selecione o serviço...</option>
+                        {servicesForSelectedCategory.map((service) => (
+                          <option key={service.id} value={service.id}>
+                            {service.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1">
+                        Pacote do serviço
+                      </label>
+                      <select
+                        value={selectedPackageId}
+                        onChange={(e) => setSelectedPackageId(e.target.value)}
+                        disabled={!selectedService}
+                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-5 py-4 text-white focus:border-[#ff5351] outline-none transition-all disabled:opacity-50"
+                      >
+                        <option value="">Selecione o pacote...</option>
+                        {packagesForSelectedService.map((pkg) => (
+                          <option key={pkg.id} value={pkg.id}>
+                            {pkg.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {selectedPackage && (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="rounded-2xl border border-zinc-800 bg-[#141414] p-4">
+                        <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">
+                          Pacote
+                        </p>
+                        <p className="text-white font-black">{selectedPackage.name}</p>
+                      </div>
+
+                      <div className="rounded-2xl border border-zinc-800 bg-[#141414] p-4">
+                        <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">
+                          Libera gratuitamente
+                        </p>
+                        <p className="text-white font-black">
+                          {selectedPackage.includedSelections} {selectedService?.selectionUnit || ''}
+                        </p>
+                      </div>
+
+                      <div className="rounded-2xl border border-zinc-800 bg-[#141414] p-4">
+                        <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">
+                          Valor por item adicional
+                        </p>
+                        <p className="text-white font-black">
+                          {formatCurrency(selectedPackage.additionalItemPrice)}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="rounded-2xl border border-dashed border-zinc-700 p-4 text-sm text-zinc-500">
+                  Não há serviço ativo cadastrado para esta categoria ainda.
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="space-y-2">
-            <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1">Link do Drive (Arquivos limpos)</label>
+            <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1">
+              Link do Drive (Arquivos limpos)
+            </label>
             <div className="relative">
               <FolderOpen className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-600" />
               <input
@@ -328,16 +502,41 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
             </div>
           </div>
 
-          <div className="space-y-2">
-            <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1">Mídias Inclusas (Créditos)</label>
-            <input
-              type="number"
-              value={includedCredits}
-              onChange={(e) => setIncludedCredits(parseInt(e.target.value))}
-              placeholder="Ex: 15"
-              required
-              className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-5 py-4 text-white focus:border-[#ff5351] outline-none transition-all"
-            />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div className="space-y-2">
+              <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1">
+                Mídias inclusas (Créditos)
+              </label>
+              <input
+                type="number"
+                value={packageIncludedCredits}
+                onChange={(e) => setIncludedCredits(parseInt(e.target.value) || 0)}
+                placeholder="Ex: 15"
+                required
+                disabled={!!selectedPackage}
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-5 py-4 text-white focus:border-[#ff5351] outline-none transition-all disabled:opacity-60"
+              />
+              {selectedPackage && (
+                <p className="text-[11px] text-zinc-500 ml-1">
+                  Este valor foi carregado automaticamente do pacote selecionado.
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1">
+                Valor por item adicional
+              </label>
+              <input
+                type="text"
+                value={formatCurrency(packageAdditionalItemPrice)}
+                readOnly
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-5 py-4 text-white opacity-80"
+              />
+              <p className="text-[11px] text-zinc-500 ml-1">
+                Valor usado quando o cliente ultrapassar o limite do pacote.
+              </p>
+            </div>
           </div>
 
           <div
@@ -353,8 +552,12 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
               {sendInviteEmail && <Check className="w-4 h-4 text-white" />}
             </div>
             <div>
-              <div className="text-xs font-bold text-white uppercase tracking-widest">Enviar convite por e-mail</div>
-              <div className="text-[10px] text-zinc-500 font-medium">O cliente receberá o link para criar sua senha e acessar.</div>
+              <div className="text-xs font-bold text-white uppercase tracking-widest">
+                Enviar convite por e-mail
+              </div>
+              <div className="text-[10px] text-zinc-500 font-medium">
+                O cliente receberá o link para criar sua senha e acessar.
+              </div>
             </div>
           </div>
 
