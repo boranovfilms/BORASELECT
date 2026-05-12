@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Check, Search, Loader2, ChevronLeft, Link as LinkIcon, FolderOpen } from 'lucide-react';
+import { Check, Search, Loader2, ChevronLeft, FolderOpen } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { clientService, Client } from '../services/clientService';
 import { categoryService, Category } from '../services/categoryService';
@@ -32,7 +32,6 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
   const [newCategoryName, setNewCategoryName] = useState('');
   const [includedCredits, setIncludedCredits] = useState(15);
 
-  const [driveLink, setDriveLink] = useState('');
   const [originalDriveLink, setOriginalDriveLink] = useState('');
 
   useEffect(() => {
@@ -66,7 +65,6 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
     setIsCreatingCategory(false);
     setIncludedCredits(15);
     setSendInviteEmail(true);
-    setDriveLink('');
     setOriginalDriveLink('');
     setError(null);
   };
@@ -125,7 +123,6 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
         creditsUsed: 0,
         creditsTotal: includedCredits,
         includedItems: includedCredits,
-        driveLink: driveLink.trim(),
         originalDriveLink: originalDriveLink.trim()
       });
 
@@ -318,21 +315,7 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
           </div>
 
           <div className="space-y-2">
-            <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1">Link do Drive do Catálogo</label>
-            <div className="relative">
-              <LinkIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-600" />
-              <input
-                type="text"
-                value={driveLink}
-                onChange={(e) => setDriveLink(e.target.value)}
-                placeholder="https://drive.google.com/drive/folders/..."
-                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-12 pr-4 py-4 text-white focus:border-[#ff5351] outline-none transition-all"
-              />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1">Link da Pasta do Drive (Originais)</label>
+            <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1">Link do Drive (Arquivos limpos)</label>
             <div className="relative">
               <FolderOpen className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-600" />
               <input
