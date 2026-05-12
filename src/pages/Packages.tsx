@@ -1,6 +1,150 @@
-import { ChevronRight, CircleDollarSign, FolderKanban, Package2, Plus } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Plus, Pencil, Trash2, Package, ChevronRight } from 'lucide-react';
+import { cn } from '../lib/utils';
+
+type ServicePackage = {
+  id: string;
+  name: string;
+  price: string;
+  included: string;
+  additional: string;
+  items: string[];
+};
+
+type ServiceType = {
+  id: string;
+  name: string;
+  packageCount: number;
+  createdAt: string;
+  updatedAt: string;
+  description: string;
+  packages: ServicePackage[];
+};
+
+const mockServices: ServiceType[] = [
+  {
+    id: 'SRV-001',
+    name: 'Vitrine Talk',
+    packageCount: 3,
+    createdAt: '10/05/2026',
+    updatedAt: '12/05/2026',
+    description: 'Serviço de podcast com pacotes comerciais para empresas.',
+    packages: [
+      {
+        id: 'PKG-001',
+        name: 'Start',
+        price: 'R$ 1.550,00',
+        included: '5 cortes',
+        additional: 'Definir depois',
+        items: [
+          'Episódio de até 35 minutos',
+          'Bate-papo para alinhar a pauta',
+          '5 cortes para redes sociais',
+          '1 post no Instagram',
+          'Vídeo na íntegra para YouTube'
+        ]
+      },
+      {
+        id: 'PKG-002',
+        name: 'Plus',
+        price: 'R$ 1.880,00',
+        included: '7 cortes',
+        additional: 'Definir depois',
+        items: [
+          'Episódio de até 45 minutos',
+          'Briefing sobre seu negócio',
+          '7 cortes para redes sociais',
+          '1 post no Instagram',
+          '2 cortes no Instagram VT',
+          'Vídeo na íntegra para YouTube'
+        ]
+      },
+      {
+        id: 'PKG-003',
+        name: 'Premium',
+        price: 'R$ 2.450,00',
+        included: '15 cortes',
+        additional: 'Definir depois',
+        items: [
+          'Episódio de 40 a 60 minutos',
+          'Briefing detalhado com foco na empresa',
+          '15 cortes para Reels e Shorts',
+          '1 post no Instagram VT',
+          'Vídeo na íntegra para YouTube',
+          'Áudio pronto para Spotify',
+          'Fotos profissionais durante a gravação'
+        ]
+      }
+    ]
+  },
+  {
+    id: 'SRV-002',
+    name: 'Podcast Mensal 4h',
+    packageCount: 2,
+    createdAt: '08/05/2026',
+    updatedAt: '11/05/2026',
+    description: 'Serviço mensal com horas contratadas e entregas recorrentes.',
+    packages: [
+      {
+        id: 'PKG-004',
+        name: 'Base 4h',
+        price: 'R$ 3.200,00',
+        included: '12 cortes',
+        additional: 'Hora extra à parte',
+        items: [
+          '4 horas mensais de gravação',
+          'Cortes por episódio',
+          'Organização mensal de pauta',
+          'Entrega recorrente'
+        ]
+      },
+      {
+        id: 'PKG-005',
+        name: 'Expansão 4h',
+        price: 'R$ 4.100,00',
+        included: '20 cortes',
+        additional: 'Hora extra à parte',
+        items: [
+          '4 horas mensais de gravação',
+          'Mais cortes por episódio',
+          'Acompanhamento estratégico',
+          'Entrega recorrente'
+        ]
+      }
+    ]
+  },
+  {
+    id: 'SRV-003',
+    name: 'Podcast Avulso',
+    packageCount: 1,
+    createdAt: '02/05/2026',
+    updatedAt: '09/05/2026',
+    description: 'Modelo pontual para gravação avulsa.',
+    packages: [
+      {
+        id: 'PKG-006',
+        name: 'Avulso',
+        price: 'R$ 950,00',
+        included: '3 cortes',
+        additional: 'Definir depois',
+        items: [
+          '1 gravação avulsa',
+          '3 cortes para redes sociais',
+          'Arquivo principal finalizado'
+        ]
+      }
+    ]
+  }
+];
 
 export default function Packages() {
+  const [selectedServiceId, setSelectedServiceId] = useState(mockServices[0].id);
+
+  const selectedService = useMemo(
+    () => mockServices.find(service => service.id === selectedServiceId) || mockServices[0],
+    [selectedServiceId]
+  );
+
   return (
     <div className="space-y-10 pb-20">
       <header className="flex flex-col lg:flex-row lg:items-end justify-between gap-6">
@@ -9,10 +153,10 @@ export default function Packages() {
             Estrutura Comercial
           </p>
           <h1 className="text-4xl md:text-5xl font-black tracking-tight text-white uppercase italic">
-            Cadastro de Pacotes
+            Cadastro de Serviços
           </h1>
           <p className="text-zinc-500 text-base md:text-lg mt-3 max-w-3xl">
-            Selecione um serviço na lista para visualizar os pacotes, valores e itens incluídos.
+            Cadastre seus tipos de serviço e clique em uma linha para visualizar os pacotes vinculados.
           </p>
         </div>
 
@@ -23,191 +167,175 @@ export default function Packages() {
       </header>
 
       <section className="grid grid-cols-1 xl:grid-cols-12 gap-6">
-        <div className="xl:col-span-4 bg-[#1a1a1a] border border-zinc-800 rounded-3xl p-6 shadow-2xl">
-          <div className="flex items-center justify-between mb-6">
+        <div className="xl:col-span-7 bg-[#1a1a1a] border border-zinc-800 rounded-3xl shadow-2xl overflow-hidden">
+          <div className="px-6 py-5 border-b border-zinc-800 flex items-center justify-between">
             <div>
               <p className="text-[10px] uppercase tracking-[0.25em] text-zinc-500 font-black mb-2">
-                Lista de Serviços
+                Lista
               </p>
               <h2 className="text-white font-black uppercase tracking-tight text-xl">
-                Serviços cadastrados
+                Tipos de serviço
               </h2>
+            </div>
+            <div className="text-[10px] uppercase tracking-widest font-black text-zinc-500">
+              {mockServices.length} serviços
             </div>
           </div>
 
-          <div className="space-y-3">
-            <button className="w-full text-left rounded-2xl border border-[#ff5351]/30 bg-[#ff5351]/10 px-5 py-5 transition-all">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-white font-black uppercase text-sm tracking-wide">Vitrine Talk</p>
-                  <p className="text-zinc-400 text-xs mt-1">Categoria: Podcast</p>
-                  <p className="text-zinc-500 text-xs mt-2">3 pacotes cadastrados</p>
-                </div>
-                <ChevronRight className="w-4 h-4 text-[#ff5351] mt-1" />
-              </div>
-            </button>
-
-            <button className="w-full text-left rounded-2xl border border-zinc-800 bg-zinc-900/70 px-5 py-5 hover:border-zinc-700 transition-all">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-white font-black uppercase text-sm tracking-wide">Podcast Mensal 4h</p>
-                  <p className="text-zinc-500 text-xs mt-1">Categoria: Podcast</p>
-                  <p className="text-zinc-600 text-xs mt-2">2 pacotes cadastrados</p>
-                </div>
-                <ChevronRight className="w-4 h-4 text-zinc-500 mt-1" />
-              </div>
-            </button>
-
-            <button className="w-full text-left rounded-2xl border border-zinc-800 bg-zinc-900/70 px-5 py-5 hover:border-zinc-700 transition-all">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-white font-black uppercase text-sm tracking-wide">Podcast Avulso</p>
-                  <p className="text-zinc-500 text-xs mt-1">Categoria: Podcast</p>
-                  <p className="text-zinc-600 text-xs mt-2">1 pacote cadastrado</p>
-                </div>
-                <ChevronRight className="w-4 h-4 text-zinc-500 mt-1" />
-              </div>
-            </button>
-
-            <button className="w-full text-left rounded-2xl border border-zinc-800 bg-zinc-900/70 px-5 py-5 hover:border-zinc-700 transition-all">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-white font-black uppercase text-sm tracking-wide">Fotos Evento</p>
-                  <p className="text-zinc-500 text-xs mt-1">Categoria: Fotos</p>
-                  <p className="text-zinc-600 text-xs mt-2">4 pacotes cadastrados</p>
-                </div>
-                <ChevronRight className="w-4 h-4 text-zinc-500 mt-1" />
-              </div>
-            </button>
-
-            <button className="w-full text-left rounded-2xl border border-dashed border-zinc-700 px-5 py-5 hover:border-[#ff5351]/40 transition-all text-zinc-500 hover:text-white">
-              <div className="flex items-center gap-2">
-                <Plus className="w-4 h-4" />
-                <span className="text-xs font-black uppercase tracking-widest">Novo serviço</span>
-              </div>
-            </button>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[760px]">
+              <thead>
+                <tr className="border-b border-zinc-800 bg-zinc-950/40">
+                  <th className="text-left px-6 py-4 text-[10px] uppercase tracking-widest text-zinc-500 font-black">ID</th>
+                  <th className="text-left px-6 py-4 text-[10px] uppercase tracking-widest text-zinc-500 font-black">Nome</th>
+                  <th className="text-left px-6 py-4 text-[10px] uppercase tracking-widest text-zinc-500 font-black">Pacotes</th>
+                  <th className="text-left px-6 py-4 text-[10px] uppercase tracking-widest text-zinc-500 font-black">Criação</th>
+                  <th className="text-left px-6 py-4 text-[10px] uppercase tracking-widest text-zinc-500 font-black">Atualização</th>
+                  <th className="text-right px-6 py-4 text-[10px] uppercase tracking-widest text-zinc-500 font-black">Ações</th>
+                </tr>
+              </thead>
+              <tbody>
+                {mockServices.map((service) => (
+                  <tr
+                    key={service.id}
+                    onClick={() => setSelectedServiceId(service.id)}
+                    className={cn(
+                      'border-b border-zinc-800/80 cursor-pointer transition-all',
+                      selectedServiceId === service.id
+                        ? 'bg-[#ff5351]/10'
+                        : 'hover:bg-zinc-900/70'
+                    )}
+                  >
+                    <td className="px-6 py-5 text-sm font-mono text-zinc-400">{service.id}</td>
+                    <td className="px-6 py-5">
+                      <div className="flex items-center gap-3">
+                        <div>
+                          <p className="text-white font-black uppercase text-sm tracking-wide">
+                            {service.name}
+                          </p>
+                          <p className="text-zinc-500 text-xs mt-1">
+                            {service.description}
+                          </p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-5 text-white font-bold">{service.packageCount}</td>
+                    <td className="px-6 py-5 text-zinc-400 text-sm">{service.createdAt}</td>
+                    <td className="px-6 py-5 text-zinc-400 text-sm">{service.updatedAt}</td>
+                    <td className="px-6 py-5">
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={(e) => e.stopPropagation()}
+                          className="w-9 h-9 rounded-xl border border-zinc-800 bg-zinc-900 text-zinc-400 hover:text-white hover:border-zinc-700 transition-all flex items-center justify-center"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={(e) => e.stopPropagation()}
+                          className="w-9 h-9 rounded-xl border border-zinc-800 bg-zinc-900 text-zinc-400 hover:text-red-400 hover:border-red-500/40 transition-all flex items-center justify-center"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                        <div className="w-9 h-9 rounded-xl border border-zinc-800 bg-zinc-900 text-zinc-500 flex items-center justify-center">
+                          <ChevronRight className="w-4 h-4" />
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
 
-        <div className="xl:col-span-8 space-y-6">
-          <div className="bg-[#1a1a1a] border border-zinc-800 rounded-3xl p-6 md:p-8 shadow-2xl">
-            <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
-              <div>
-                <p className="text-[10px] uppercase tracking-[0.25em] text-zinc-500 font-black mb-2">
-                  Serviço selecionado
-                </p>
-                <h2 className="text-3xl md:text-4xl font-black text-white uppercase tracking-tight">
-                  Vitrine Talk
-                </h2>
-                <p className="text-[#ff5351] text-sm font-bold mt-2 uppercase tracking-widest">
-                  Categoria: Podcast
-                </p>
-              </div>
-
-              <div className="flex flex-wrap gap-3">
-                <button className="px-5 py-3 rounded-xl border border-zinc-700 text-zinc-300 font-black uppercase tracking-widest text-xs hover:bg-zinc-800 transition-all">
-                  Editar Serviço
-                </button>
-                <button className="px-5 py-3 rounded-xl bg-[#ff5351] text-white font-black uppercase tracking-widest text-xs hover:brightness-110 transition-all">
-                  Novo Pacote
-                </button>
-              </div>
-            </div>
+        <div className="xl:col-span-5 bg-[#1a1a1a] border border-zinc-800 rounded-3xl shadow-2xl overflow-hidden">
+          <div className="px-6 py-5 border-b border-zinc-800">
+            <p className="text-[10px] uppercase tracking-[0.25em] text-zinc-500 font-black mb-2">
+              Visualização
+            </p>
+            <h2 className="text-white font-black uppercase tracking-tight text-xl">
+              {selectedService.name}
+            </h2>
+            <p className="text-zinc-500 text-sm mt-2">
+              {selectedService.description}
+            </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-            <div className="bg-[#1a1a1a] border border-zinc-800 rounded-3xl p-6 shadow-2xl">
-              <div className="flex items-center gap-3 mb-5">
-                <Package2 className="w-5 h-5 text-[#ff5351]" />
-                <div>
-                  <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black">Pacote</p>
-                  <h3 className="text-white text-2xl font-black uppercase">Start</h3>
-                </div>
-              </div>
-
-              <p className="text-[#ff5351] text-3xl font-black mb-4">R$ 1.550,00</p>
-
-              <div className="space-y-2 text-sm text-zinc-300">
-                <p>• Episódio de até 35 minutos</p>
-                <p>• 5 cortes para redes sociais</p>
-                <p>• 1 post no Instagram</p>
-                <p>• Vídeo na íntegra no YouTube</p>
-              </div>
-            </div>
-
-            <div className="bg-[#1a1a1a] border border-[#ff5351]/30 rounded-3xl p-6 shadow-2xl shadow-[#ff5351]/10">
-              <div className="flex items-center gap-3 mb-5">
-                <Package2 className="w-5 h-5 text-[#ff5351]" />
-                <div>
-                  <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black">Pacote</p>
-                  <h3 className="text-white text-2xl font-black uppercase">Plus</h3>
-                </div>
-              </div>
-
-              <p className="text-[#ff5351] text-3xl font-black mb-4">R$ 1.880,00</p>
-
-              <div className="space-y-2 text-sm text-zinc-300">
-                <p>• Episódio de até 45 minutos</p>
-                <p>• 7 cortes para redes sociais</p>
-                <p>• 1 post no Instagram</p>
-                <p>• 2 cortes em VT</p>
-                <p>• Vídeo na íntegra no YouTube</p>
-              </div>
-            </div>
-
-            <div className="bg-[#1a1a1a] border border-zinc-800 rounded-3xl p-6 shadow-2xl">
-              <div className="flex items-center gap-3 mb-5">
-                <Package2 className="w-5 h-5 text-[#ff5351]" />
-                <div>
-                  <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black">Pacote</p>
-                  <h3 className="text-white text-2xl font-black uppercase">Premium</h3>
-                </div>
-              </div>
-
-              <p className="text-[#ff5351] text-3xl font-black mb-4">R$ 2.450,00</p>
-
-              <div className="space-y-2 text-sm text-zinc-300">
-                <p>• Episódio de 40 a 60 minutos</p>
-                <p>• 15 cortes para Reels e Shorts</p>
-                <p>• Áudio pronto para Spotify</p>
-                <p>• Fotos profissionais na gravação</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-[#1a1a1a] border border-zinc-800 rounded-3xl p-6 md:p-8 shadow-2xl">
-            <div className="flex items-center gap-3 mb-6">
-              <CircleDollarSign className="w-5 h-5 text-[#ff5351]" />
-              <div>
-                <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black">Resumo do controle</p>
-                <h3 className="text-white text-xl font-black uppercase tracking-tight">Informações comerciais</h3>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="p-6 space-y-5">
+            <div className="grid grid-cols-2 gap-4">
               <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
-                <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">Categoria</p>
-                <p className="text-white text-lg font-black">Podcast</p>
-              </div>
-
-              <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
-                <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">Serviço</p>
-                <p className="text-white text-lg font-black">Vitrine Talk</p>
+                <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">ID</p>
+                <p className="text-white text-lg font-black">{selectedService.id}</p>
               </div>
 
               <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
                 <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">Pacotes</p>
-                <p className="text-white text-lg font-black">3 ativos</p>
+                <p className="text-white text-lg font-black">{selectedService.packageCount}</p>
               </div>
 
               <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
-                <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">Adicionais</p>
-                <p className="text-white text-lg font-black">Definir depois</p>
+                <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">Criação</p>
+                <p className="text-white text-lg font-black">{selectedService.createdAt}</p>
+              </div>
+
+              <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
+                <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">Atualização</p>
+                <p className="text-white text-lg font-black">{selectedService.updatedAt}</p>
               </div>
             </div>
 
-            <div className="mt-6 rounded-2xl border border-dashed border-zinc-700 p-5 text-zinc-500 text-sm">
-              Aqui depois podemos colocar a lógica de créditos, quantidade de seleções, valor por item adicional e regras específicas de cada serviço.
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Package className="w-4 h-4 text-[#ff5351]" />
+                  <p className="text-white text-sm font-black uppercase tracking-widest">
+                    Pacotes desse serviço
+                  </p>
+                </div>
+                <button className="text-[#ff5351] text-[10px] font-black uppercase tracking-widest hover:underline">
+                  Novo pacote
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                {selectedService.packages.map((pkg) => (
+                  <div key={pkg.id} className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-5">
+                    <div className="flex items-start justify-between gap-4 mb-4">
+                      <div>
+                        <p className="text-white font-black uppercase text-lg">{pkg.name}</p>
+                        <p className="text-zinc-500 text-xs mt-1">{pkg.id}</p>
+                      </div>
+                      <p className="text-[#ff5351] font-black text-xl whitespace-nowrap">{pkg.price}</p>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 mb-4">
+                      <div className="rounded-xl border border-zinc-800 bg-[#141414] p-3">
+                        <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-1">Seleções</p>
+                        <p className="text-white font-black">{pkg.included}</p>
+                      </div>
+                      <div className="rounded-xl border border-zinc-800 bg-[#141414] p-3">
+                        <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-1">Adicional</p>
+                        <p className="text-white font-black">{pkg.additional}</p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black">Itens incluídos</p>
+                      <div className="space-y-2">
+                        {pkg.items.map((item, index) => (
+                          <p key={index} className="text-sm text-zinc-300">
+                            • {item}
+                          </p>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-dashed border-zinc-700 p-4 text-zinc-500 text-sm">
+              Depois você pode me passar os campos exatos do cadastro de serviço, que eu transformo essa visualização em tela de cadastro real.
             </div>
           </div>
         </div>
