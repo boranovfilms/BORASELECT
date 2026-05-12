@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, Pencil, Trash2, ChevronRight, ArrowLeft, Save, X, PackagePlus } from 'lucide-react';
+import { Plus, Pencil, Trash2, ChevronRight, ArrowLeft, Save, X, PackagePlus, Copy, Loader2 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import {
   settingsService,
@@ -30,6 +30,7 @@ const emptyPackageDraft: PackageDraft = {
 };
 
 const categoryOptions = ['Podcast', 'Fotos', 'Conteúdo', 'Palestras', 'Eventos'];
+
 const selectionUnitOptions: { value: SelectionUnit; label: string }[] = [
   { value: 'cortes', label: 'Cortes' },
   { value: 'videos', label: 'Vídeos' },
@@ -41,11 +42,13 @@ export default function Packages() {
   const [services, setServices] = useState<ServiceCatalog[]>([]);
   const [loadingServices, setLoadingServices] = useState(true);
   const [savingService, setSavingService] = useState(false);
+  const [persistingPackage, setPersistingPackage] = useState(false);
 
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null);
   const [selectedPackageId, setSelectedPackageId] = useState<string | null>(null);
   const [editingServiceId, setEditingServiceId] = useState<string | null>(null);
+  const [editingPackageId, setEditingPackageId] = useState<string | null>(null);
 
   const [serviceName, setServiceName] = useState('');
   const [serviceCategory, setServiceCategory] = useState('Podcast');
@@ -85,6 +88,19 @@ export default function Packages() {
     }
   };
 
+  const clonePackages = (packages: ServicePackageConfig[]) => {
+    return packages.map((pkg) => ({
+      ...pkg,
+      items: [...pkg.items],
+    }));
+  };
+
+  const resetPackageDraft = () => {
+    setEditingPackageId(null);
+    setPackageDraft(emptyPackageDraft);
+    setPackageItemInput('');
+  };
+
   const resetForm = () => {
     setEditingServiceId(null);
     setServiceName('');
@@ -94,8 +110,7 @@ export default function Packages() {
     setServiceDescription('');
     setInternalNotes('');
     setServicePackages([]);
-    setPackageDraft(emptyPackageDraft);
-    setPackageItemInput('');
+    resetPackageDraft();
   };
 
   const formatDate = (value: any) => {
@@ -124,8 +139,16 @@ export default function Packages() {
     }).format(value || 0);
   };
 
+  const formatEditableCurrency = (value: number) => {
+    return new Intl.NumberFormat('pt-BR', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(value || 0);
+  };
+
   const parseCurrencyToNumber = (value: string) => {
     if (!value) return 0;
+
     const normalized = value
       .replace(/\s/g, '')
       .replace(/R\$/gi, '')
@@ -155,6 +178,17 @@ export default function Packages() {
     return `PKG-${Date.now().toString().slice(-6)}`;
   };
 
+  const buildPackageDraftFromExisting = (pkg: ServicePackageConfig): PackageDraft => {
+    return {
+      name: pkg.name,
+      price: formatEditableCurrency(pkg.price),
+      includedSelections: String(pkg.includedSelections),
+      additionalItemPrice: formatEditableCurrency(pkg.additionalItemPrice),
+      description: pkg.description,
+      items: [...pkg.items],
+    };
+  };
+
   const openCreateForm = () => {
     resetForm();
     setViewMode('form');
@@ -180,8 +214,22 @@ export default function Packages() {
     setServiceStatus(service.status);
     setServiceDescription(service.description);
     setInternalNotes(service.internalNotes);
-    setServicePackages(service.packages || []);
-    setPackageDraft(emptyPackageDraft);
+    setServicePackages(clonePackages(service.packages || []));
+    resetPackageDraft();
+    setViewMode('form');
+  };
+
+  const openEditPackageInForm = (service: ServiceCatalog, pkg: ServicePackageConfig) => {
+    setEditingServiceId(service.id);
+    setServiceName(service.name);
+    setServiceCategory(service.category);
+    setSelectionUnit(service.selectionUnit);
+    setServiceStatus(service.status);
+    setServiceDescription(service.description);
+    setInternalNotes(service.internalNotes);
+    setServicePackages(clonePackages(service.packages || []));
+    setEditingPackageId(pkg.id);
+    setPackageDraft(buildPackageDraftFromExisting(pkg));
     setPackageItemInput('');
     setViewMode('form');
   };
@@ -246,8 +294,8 @@ export default function Packages() {
       return;
     }
 
-    const newPackage: ServicePackageConfig = {
-      id: generatePackageId(),
+    const packagePayload: ServicePackageConfig = {
+      id: editingPackageId || generatePackageId(),
       name: packageDraft.name.trim(),
       price: parseCurrencyToNumber(packageDraft.price),
       includedSelections: parseInteger(packageDraft.includedSelections),
@@ -259,13 +307,98 @@ export default function Packages() {
       updatedAt: new Date(),
     };
 
-    setServicePackages((prev) => [...prev, newPackage]);
-    setPackageDraft(emptyPackageDraft);
-    setPackageItemInput('');
+    if (editingPackageId) {
+      setServicePackages((prev) =>
+        prev.map((pkg) =>
+          pkg.id === editingPackageId
+            ? {
+                ...packagePayload,
+                id: editingPackageId,
+                createdAt: pkg.createdAt || new Date(),
+                updatedAt: new Date(),
+              }
+            : pkg
+        )
+      );
+      toast.success('Pacote atualizado na lista.');
+    } else {
+      setServicePackages((prev) => [...prev, packagePayload]);
+      toast.success('Pacote adicionado na lista.');
+    }
+
+    resetPackageDraft();
   };
 
   const removeServicePackage = (packageId: string) => {
     setServicePackages((prev) => prev.filter((pkg) => pkg.id !== packageId));
+    if (editingPackageId === packageId) {
+      resetPackageDraft();
+    }
+  };
+
+  const persistServicePackages = async (
+    service: ServiceCatalog,
+    nextPackages: ServicePackageConfig[],
+    successMessage: string,
+    afterSave?: () => void
+  ) => {
+    setPersistingPackage(true);
+
+    try {
+      const now = new Date();
+
+      const payload: ServiceCatalog = {
+        ...service,
+        packages: nextPackages.map((pkg) => ({
+          ...pkg,
+          updatedAt: now,
+          createdAt: pkg.createdAt || now,
+        })),
+        updatedAt: now,
+      };
+
+      await settingsService.upsertServiceCatalog(payload);
+      await loadServices();
+
+      setSelectedServiceId(service.id);
+      if (afterSave) afterSave();
+
+      toast.success(successMessage);
+    } catch (error) {
+      console.error(error);
+      toast.error('Erro ao salvar alteração do pacote.');
+    } finally {
+      setPersistingPackage(false);
+    }
+  };
+
+  const deletePackagePersist = async (service: ServiceCatalog, packageId: string) => {
+    const confirmed = window.confirm('Deseja apagar este pacote?');
+    if (!confirmed) return;
+
+    const nextPackages = service.packages.filter((pkg) => pkg.id !== packageId);
+
+    await persistServicePackages(service, nextPackages, 'Pacote apagado com sucesso.', () => {
+      setSelectedPackageId(null);
+      setViewMode('service-details');
+    });
+  };
+
+  const duplicatePackagePersist = async (service: ServiceCatalog, pkg: ServicePackageConfig) => {
+    const duplicated: ServicePackageConfig = {
+      ...pkg,
+      id: generatePackageId(),
+      name: `${pkg.name} Cópia`,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      items: [...pkg.items],
+    };
+
+    await persistServicePackages(
+      service,
+      [...service.packages, duplicated],
+      'Pacote duplicado com sucesso.'
+    );
   };
 
   const saveService = async () => {
@@ -346,6 +479,32 @@ export default function Packages() {
               Serviço: {selectedService.name}
             </p>
           </div>
+
+          <div className="flex flex-wrap gap-3">
+            <button
+              onClick={() => openEditPackageInForm(selectedService, selectedPackage)}
+              className="h-11 px-5 rounded-xl border border-zinc-700 text-zinc-200 font-black uppercase tracking-widest text-xs hover:bg-zinc-800 transition-all flex items-center gap-2"
+            >
+              <Pencil className="w-4 h-4" />
+              Editar pacote
+            </button>
+            <button
+              onClick={() => duplicatePackagePersist(selectedService, selectedPackage)}
+              disabled={persistingPackage}
+              className="h-11 px-5 rounded-xl border border-zinc-700 text-zinc-200 font-black uppercase tracking-widest text-xs hover:bg-zinc-800 transition-all flex items-center gap-2 disabled:opacity-60"
+            >
+              <Copy className="w-4 h-4" />
+              Duplicar
+            </button>
+            <button
+              onClick={() => deletePackagePersist(selectedService, selectedPackage.id)}
+              disabled={persistingPackage}
+              className="h-11 px-5 rounded-xl border border-red-500/30 text-red-400 font-black uppercase tracking-widest text-xs hover:bg-red-500/10 transition-all flex items-center gap-2 disabled:opacity-60"
+            >
+              <Trash2 className="w-4 h-4" />
+              Apagar
+            </button>
+          </div>
         </header>
 
         <section className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -356,17 +515,13 @@ export default function Packages() {
 
           <div className="rounded-2xl border border-zinc-800 bg-[#151515] p-5">
             <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">Libera</p>
-            <p className="text-white text-2xl font-black">
-              {selectedPackage.includedSelections}
-            </p>
+            <p className="text-white text-2xl font-black">{selectedPackage.includedSelections}</p>
             <p className="text-zinc-500 text-xs mt-1">{getSelectionUnitLabel(selectedService.selectionUnit).toLowerCase()}</p>
           </div>
 
           <div className="rounded-2xl border border-zinc-800 bg-[#151515] p-5">
             <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">Valor por item adicional</p>
-            <p className="text-white text-xl font-black">
-              {formatCurrency(selectedPackage.additionalItemPrice)}
-            </p>
+            <p className="text-white text-xl font-black">{formatCurrency(selectedPackage.additionalItemPrice)}</p>
           </div>
 
           <div className="rounded-2xl border border-zinc-800 bg-[#151515] p-5">
@@ -397,23 +552,6 @@ export default function Packages() {
                 <p className="text-white text-sm font-medium">{item}</p>
               </div>
             ))}
-          </div>
-        </section>
-
-        <section className="bg-[#141414] border border-zinc-800 rounded-3xl p-5 md:p-6 shadow-2xl">
-          <p className="text-[10px] uppercase tracking-[0.25em] text-zinc-500 font-black mb-3">
-            Uso no projeto
-          </p>
-          <div className="space-y-2 text-sm text-zinc-300">
-            <p>
-              • Ao escolher este pacote no projeto, o sistema poderá carregar automaticamente a quantidade liberada.
-            </p>
-            <p>
-              • Neste caso: <span className="text-white font-black">{selectedPackage.includedSelections} {getSelectionUnitLabel(selectedService.selectionUnit).toLowerCase()}</span>.
-            </p>
-            <p>
-              • O valor por item adicional ficará em <span className="text-white font-black">{formatCurrency(selectedPackage.additionalItemPrice)}</span>.
-            </p>
           </div>
         </section>
       </div>
@@ -511,7 +649,7 @@ export default function Packages() {
                   <th className="text-left px-4 md:px-6 py-4 text-[10px] uppercase tracking-[0.25em] text-zinc-500 font-black w-[190px]">
                     Valor por item adicional
                   </th>
-                  <th className="text-right px-4 md:px-6 py-4 text-[10px] uppercase tracking-[0.25em] text-zinc-500 font-black w-[120px]">
+                  <th className="text-right px-4 md:px-6 py-4 text-[10px] uppercase tracking-[0.25em] text-zinc-500 font-black w-[160px]">
                     Ações
                   </th>
                 </tr>
@@ -553,6 +691,29 @@ export default function Packages() {
 
                     <td className="px-4 md:px-6 py-4 align-top">
                       <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openEditPackageInForm(selectedService, pkg);
+                          }}
+                          className="w-9 h-9 rounded-xl border border-zinc-800 bg-zinc-900 text-zinc-400 hover:text-white hover:border-zinc-700 transition-all flex items-center justify-center"
+                          title="Editar pacote"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
+
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deletePackagePersist(selectedService, pkg.id);
+                          }}
+                          disabled={persistingPackage}
+                          className="w-9 h-9 rounded-xl border border-zinc-800 bg-zinc-900 text-zinc-400 hover:text-red-400 hover:border-red-500/40 transition-all flex items-center justify-center disabled:opacity-60"
+                          title="Apagar pacote"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -839,14 +1000,27 @@ export default function Packages() {
               </div>
             )}
 
-            <button
-              type="button"
-              onClick={addPackageToService}
-              className="h-11 px-5 rounded-xl bg-[#ff5351] text-white font-black uppercase tracking-widest text-xs hover:brightness-110 transition-all shadow-2xl shadow-[#ff5351]/20 flex items-center gap-2"
-            >
-              <PackagePlus className="w-4 h-4" />
-              Salvar pacote na lista
-            </button>
+            <div className="flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={addPackageToService}
+                className="h-11 px-5 rounded-xl bg-[#ff5351] text-white font-black uppercase tracking-widest text-xs hover:brightness-110 transition-all shadow-2xl shadow-[#ff5351]/20 flex items-center gap-2"
+              >
+                <PackagePlus className="w-4 h-4" />
+                {editingPackageId ? 'Atualizar pacote na lista' : 'Salvar pacote na lista'}
+              </button>
+
+              {editingPackageId && (
+                <button
+                  type="button"
+                  onClick={resetPackageDraft}
+                  className="h-11 px-5 rounded-xl border border-zinc-700 text-zinc-200 font-black uppercase tracking-widest text-xs hover:bg-zinc-800 transition-all flex items-center gap-2"
+                >
+                  <X className="w-4 h-4" />
+                  Cancelar edição do pacote
+                </button>
+              )}
+            </div>
           </div>
 
           {servicePackages.length > 0 && (
@@ -873,6 +1047,18 @@ export default function Packages() {
                             {pkg.includedSelections} {getSelectionUnitLabel(selectionUnit).toLowerCase()}
                           </p>
                         </div>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingPackageId(pkg.id);
+                            setPackageDraft(buildPackageDraftFromExisting(pkg));
+                            setPackageItemInput('');
+                          }}
+                          className="w-10 h-10 rounded-xl border border-zinc-800 bg-[#141414] text-zinc-400 hover:text-white hover:border-zinc-700 transition-all flex items-center justify-center"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
 
                         <button
                           type="button"
@@ -948,7 +1134,10 @@ export default function Packages() {
         </div>
 
         {loadingServices ? (
-          <div className="p-8 text-zinc-500">Carregando serviços...</div>
+          <div className="p-10 flex items-center gap-3 text-zinc-500">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            Carregando serviços...
+          </div>
         ) : services.length === 0 ? (
           <div className="p-10 flex flex-col items-center justify-center text-center">
             <p className="text-white font-black uppercase tracking-widest mb-3">Nenhum serviço cadastrado</p>
