@@ -3,21 +3,17 @@ import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { 
   LayoutDashboard, 
   Library, 
-  Image as ImageIcon, 
   Users, 
-  BarChart3, 
   HelpCircle, 
   LogOut,
   Bell,
   Settings,
-  Plus,
-  CloudUpload,
   X,
   Loader2,
   Image as ImageControl,
   Trash2,
   Save,
-  Play
+  Package
 } from 'lucide-react';
 import { auth } from '@/src/lib/firebase';
 import { cn } from '@/src/lib/utils';
@@ -86,20 +82,18 @@ export default function AppLayout({ children }: AppLayoutProps) {
   };
 
   const isAdmin = user?.email === 'boranovfilms@gmail.com';
+
   const navItems = isAdmin ? [
     { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
-    { icon: Library, label: 'Media Library', path: '/library' },
-    { icon: ImageIcon, label: 'Galleries', path: '/galleries' },
-    { icon: Users, label: 'Client Access', path: '/clients' },
-    { icon: Play, label: 'Teste de Vídeo', path: '/video-test' },
-    { icon: BarChart3, label: 'Analytics', path: '/analytics' },
+    { icon: Library, label: 'Projetos', path: '/' },
+    { icon: Users, label: 'Clientes', path: '/clients' },
+    { icon: Package, label: 'Cadastro de Pacotes', path: '/packages' },
   ] : [
     { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
   ];
 
   return (
     <div className="min-h-screen bg-[#131313] text-[#e2e2e2] font-sans selection:bg-[#ff5351]/30 selection:text-white">
-      {/* Top Bar */}
       <header className="fixed top-0 left-0 right-0 h-16 bg-black/95 backdrop-blur-xl border-b border-zinc-800 z-[200] flex items-center justify-between px-6">
         <div className="flex items-center gap-12">
           <div className="flex items-center gap-2">
@@ -108,35 +102,47 @@ export default function AppLayout({ children }: AppLayoutProps) {
           </div>
           
           <nav className="hidden md:flex items-center gap-8">
-            <NavLink to="/" className={({ isActive }) => cn(
-              "text-sm font-semibold transition-all pb-1 border-b-2",
-              isActive ? "text-white border-[#ff5351]" : "text-zinc-500 border-transparent hover:text-zinc-300"
-            )}>Dashboard</NavLink>
+            <NavLink
+              to="/"
+              className={({ isActive }) => cn(
+                'text-sm font-semibold transition-all pb-1 border-b-2',
+                isActive ? 'text-white border-[#ff5351]' : 'text-zinc-500 border-transparent hover:text-zinc-300'
+              )}
+            >
+              Dashboard
+            </NavLink>
+
             {isAdmin && (
-              <NavLink to="/clients" className={({ isActive }) => cn(
-                "text-sm font-semibold transition-all pb-1 border-b-2",
-                isActive ? "text-white border-[#ff5351]" : "text-zinc-500 border-transparent hover:text-zinc-300"
-              )}>Clientes</NavLink>
+              <NavLink
+                to="/clients"
+                className={({ isActive }) => cn(
+                  'text-sm font-semibold transition-all pb-1 border-b-2',
+                  isActive ? 'text-white border-[#ff5351]' : 'text-zinc-500 border-transparent hover:text-zinc-300'
+                )}
+              >
+                Clientes
+              </NavLink>
             )}
+
             {isAdmin && (
-              <NavLink to="/video-test" className={({ isActive }) => cn(
-                "text-sm font-semibold transition-all pb-1 border-b-2",
-                isActive ? "text-white border-[#ff5351]" : "text-zinc-500 border-transparent hover:text-zinc-300"
-              )}>Teste de Vídeo</NavLink>
+              <NavLink
+                to="/packages"
+                className={({ isActive }) => cn(
+                  'text-sm font-semibold transition-all pb-1 border-b-2',
+                  isActive ? 'text-white border-[#ff5351]' : 'text-zinc-500 border-transparent hover:text-zinc-300'
+                )}
+              >
+                Pacotes
+              </NavLink>
             )}
           </nav>
         </div>
 
         <div className="flex items-center gap-4">
-          {isAdmin && (
-            <button className="hidden md:flex items-center gap-2 bg-white text-black px-4 py-2 rounded font-bold text-xs uppercase tracking-wider hover:bg-zinc-200 transition-colors">
-              <CloudUpload className="w-4 h-4" />
-              Upload
-            </button>
-          )}
           <button className="text-zinc-400 hover:text-white transition-colors">
             <Bell className="w-5 h-5" />
           </button>
+
           {isAdmin && (
             <button 
               onClick={() => setShowGlobalSettings(true)}
@@ -148,7 +154,6 @@ export default function AppLayout({ children }: AppLayoutProps) {
         </div>
       </header>
 
-      {/* Global Settings Modal */}
       {showGlobalSettings && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowGlobalSettings(false)} />
@@ -169,7 +174,9 @@ export default function AppLayout({ children }: AppLayoutProps) {
             
             <div className="p-8 space-y-10">
               <div className="space-y-4">
-                <label className="text-[10px] uppercase font-black tracking-[0.2em] text-zinc-500 mb-4 block">MARCA D'ÁGUA GLOBAL (PNG)</label>
+                <label className="text-[10px] uppercase font-black tracking-[0.2em] text-zinc-500 mb-4 block">
+                  MARCA D'ÁGUA GLOBAL (PNG)
+                </label>
                 <div className="flex flex-col items-center gap-6 p-10 border-2 border-dashed border-zinc-700/50 rounded-3xl bg-zinc-950/30 hover:border-[#ff5351] transition-all group">
                   {globalSettings?.watermarkUrl ? (
                     <div className="relative w-full aspect-video rounded-2xl overflow-hidden bg-black/50 flex items-center justify-center border border-zinc-800">
@@ -195,7 +202,9 @@ export default function AppLayout({ children }: AppLayoutProps) {
                       </div>
                       <div className="text-center">
                         <p className="text-white font-black uppercase tracking-tight mb-2">Upload de Marca d'água</p>
-                        <p className="text-xs text-zinc-500 leading-relaxed max-w-[200px] mx-auto">Selecione um arquivo .PNG transparente para proteger seu catálogo.</p>
+                        <p className="text-xs text-zinc-500 leading-relaxed max-w-[200px] mx-auto">
+                          Selecione um arquivo .PNG transparente para proteger seu catálogo.
+                        </p>
                       </div>
                     </label>
                   )}
@@ -224,7 +233,6 @@ export default function AppLayout({ children }: AppLayoutProps) {
       )}
 
       <div className="flex pt-16">
-        {/* Sidebar */}
         <aside className="hidden lg:flex flex-col w-64 fixed left-0 top-16 bottom-0 bg-[#0e0e0e] border-r border-zinc-800 p-4">
           <div className="mb-8 px-2 flex items-center gap-4">
             <div className="w-12 h-12 rounded-full overflow-hidden border border-zinc-700 bg-zinc-800">
@@ -257,13 +265,13 @@ export default function AppLayout({ children }: AppLayoutProps) {
           <nav className="flex-1 space-y-1">
             {navItems.map((item) => (
               <NavLink
-                key={item.path}
+                key={item.label + item.path}
                 to={item.path}
                 className={({ isActive }) => cn(
-                  "flex items-center gap-3 px-4 py-3 rounded-lg transition-all text-sm font-medium",
-                  isActive 
-                    ? "bg-zinc-800/50 text-[#ff5351] border-l-2 border-[#ff5351]" 
-                    : "text-zinc-400 hover:text-white hover:bg-zinc-800"
+                  'flex items-center gap-3 px-4 py-3 rounded-lg transition-all text-sm font-medium',
+                  isActive
+                    ? 'bg-zinc-800/50 text-[#ff5351] border-l-2 border-[#ff5351]'
+                    : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
                 )}
               >
                 <item.icon className="w-4 h-4" />
@@ -287,7 +295,6 @@ export default function AppLayout({ children }: AppLayoutProps) {
           </div>
         </aside>
 
-        {/* Content */}
         <main className="flex-1 lg:ml-64 p-8">
           <div className="max-w-7xl mx-auto">
             {children}
@@ -295,19 +302,20 @@ export default function AppLayout({ children }: AppLayoutProps) {
         </main>
       </div>
 
-      {/* Mobile Nav */}
       <nav className="lg:hidden fixed bottom-0 left-0 right-0 h-16 bg-black/95 backdrop-blur-lg border-t border-zinc-800 flex items-center justify-around px-4 z-50">
         {navItems.map((item) => (
           <NavLink
-            key={item.path}
+            key={item.label + item.path}
             to={item.path}
             className={({ isActive }) => cn(
-              "flex flex-col items-center gap-1",
-              isActive ? "text-[#ff5351]" : "text-zinc-500"
+              'flex flex-col items-center gap-1',
+              isActive ? 'text-[#ff5351]' : 'text-zinc-500'
             )}
           >
             <item.icon className="w-5 h-5" />
-            <span className="text-[10px] uppercase font-bold tracking-widest">{item.label.split(' ')[0]}</span>
+            <span className="text-[10px] uppercase font-bold tracking-widest">
+              {item.label.split(' ')[0]}
+            </span>
           </NavLink>
         ))}
       </nav>
