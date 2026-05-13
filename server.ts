@@ -47,50 +47,10 @@ const PIX_KEY_TYPE = (process.env.PIX_KEY_TYPE || "email").trim();
 const CREDIT_APPROVAL_EMAIL = (process.env.CREDIT_APPROVAL_EMAIL || PIX_KEY).trim();
 const CREDIT_PRICE_PER_UNIT = parseMoney(process.env.CREDIT_PRICE_PER_UNIT || "0");
 
-function getFirestore() {
-  if (!admin.apps.length) {
-    throw new Error("Firebase Admin não está configurado.");
-  }
-  return admin.firestore();
-}
-
-function getResendClient() {
-  const apiKey = (process.env.RESEND_API_KEY || "").trim();
-  if (!apiKey) return null;
-  return new Resend(apiKey);
-}
-
-function getFromEmail() {
-  return (process.env.RESEND_FROM_EMAIL || "BoraSelect <onboarding@resend.dev>").trim();
-}
-
-async function sendEmail({
-  to,
-  subject,
-  html
-}: {
-  to: string | string[];
-  subject: string;
-  html: string;
-}) {
-  const resend = getResendClient();
-  if (!resend) {
-    return { success: false, skipped: true, reason: "RESEND_API_KEY faltando" };
-  }
-
-  const recipients = Array.isArray(to) ? to : [to];
-  const { data, error } = await resend.emails.send({
-    from: getFromEmail(),
-    to: recipients,
-    subject,
-    html
-  });
-
-  if (error) {
-    throw new Error((error as any).message || JSON.stringify(error));
-  }
-
-  return { success: true, data };
+function sendJson(res: express.Response, status: number, payload: unknown) {
+  res.status(status);
+  res.setHeader("Content-Type", "application/json; charset=utf-8");
+  res.send(JSON.stringify(payload));
 }
 
 function parseMoney(value: any) {
@@ -149,6 +109,52 @@ function buildBaseUrl(req: express.Request) {
   return `${forwardedProto}://${forwardedHost}`;
 }
 
+function getFirestore() {
+  if (!admin.apps.length) {
+    throw new Error("Firebase Admin não está configurado.");
+  }
+  return admin.firestore();
+}
+
+function getResendClient() {
+  const apiKey = (process.env.RESEND_API_KEY || "").trim();
+  if (!apiKey) return null;
+  return new Resend(apiKey);
+}
+
+function getFromEmail() {
+  return (process.env.RESEND_FROM_EMAIL || "BoraSelect <onboarding@resend.dev>").trim();
+}
+
+async function sendEmail({
+  to,
+  subject,
+  html
+}: {
+  to: string | string[];
+  subject: string;
+  html: string;
+}) {
+  const resend = getResendClient();
+  if (!resend) {
+    return { success: false, skipped: true, reason: "RESEND_API_KEY faltando" };
+  }
+
+  const recipients = Array.isArray(to) ? to : [to];
+  const { data, error } = await resend.emails.send({
+    from: getFromEmail(),
+    to: recipients,
+    subject,
+    html
+  });
+
+  if (error) {
+    throw new Error((error as any).message || JSON.stringify(error));
+  }
+
+  return { success: true, data };
+}
+
 function serializeTimestamp(value: any) {
   if (!value) return null;
   if (typeof value?.toDate === "function") return value.toDate().toISOString();
@@ -161,11 +167,11 @@ function serializeCreditRequest(doc: admin.firestore.QueryDocumentSnapshot | adm
   return {
     id: doc.id,
     ...data,
-    createdAt: serializeTimestamp(data.createdAt),
-    updatedAt: serializeTimestamp(data.updatedAt),
-    reviewedAt: serializeTimestamp(data.reviewedAt),
-    approvedAt: serializeTimestamp(data.approvedAt),
-    rejectedAt: serializeTimestamp(data.rejectedAt)
+    createdAt: serializeTimestamp((data as any).createdAt),
+    updatedAt: serializeTimestamp((data as any).updatedAt),
+    reviewedAt: serializeTimestamp((data as any).reviewedAt),
+    approvedAt: serializeTimestamp((data as any).approvedAt),
+    rejectedAt: serializeTimestamp((data as any).rejectedAt)
   };
 }
 
@@ -515,11 +521,11 @@ async function startServer() {
   });
 
   app.get("/api/health", (req, res) => {
-    res.json({ status: "ok", timestamp: new Date().toISOString() });
+    sendJson(res, 200, { status: "ok", timestamp: new Date().toISOString() });
   });
 
   app.get("/api-v2/credits/config", (req, res) => {
-    res.json({
+    sendJson(res, 200, {
       pixKey: PIX_KEY,
       pixKeyType: PIX_KEY_TYPE,
       approvalMode: "manual",
@@ -545,9 +551,9 @@ async function startServer() {
           return dateB - dateA;
         });
 
-      res.json({ requests });
+      sendJson(res, 200, { requests });
     } catch (error: any) {
-      res.status(500).json({ error: error.message || "Erro ao buscar solicitações de crédito." });
+      sendJson(res, 500, { error: error.message || "Erro ao buscar solicitações de crédito." });
     }
   });
 
@@ -565,30 +571,30 @@ async function startServer() {
       const requestTotalAmount = parseMoney(req.body.totalAmount || req.body.amount);
 
       if (!projectId) {
-        return res.status(400).json({ error: "projectId é obrigatório." });
+        return sendJson(res, 400, { error: "projectId é obrigatório." });
       }
 
       if (!creditsRequested) {
-        return res.status(400).json({ error: "Informe a quantidade de créditos." });
+        return sendJson(res, 400, { error: "Informe a quantidade de créditos." });
       }
 
       const projectRef = db.collection("projects").doc(projectId);
       const projectSnap = await projectRef.get();
 
       if (!projectSnap.exists) {
-        return res.status(404).json({ error: "Projeto não encontrado." });
+        return sendJson(res, 404, { error: "Projeto não encontrado." });
       }
 
       const projectData = projectSnap.data() || {};
-      const clientName = String(req.body.clientName || projectData.clientName || "").trim();
-      const clientEmail = String(req.body.clientEmail || projectData.clientEmail || "").trim().toLowerCase();
-      const projectTitle = String(req.body.projectTitle || projectData.title || "").trim();
+      const clientName = String(req.body.clientName || (projectData as any).clientName || "").trim();
+      const clientEmail = String(req.body.clientEmail || (projectData as any).clientEmail || "").trim().toLowerCase();
+      const projectTitle = String(req.body.projectTitle || (projectData as any).title || "").trim();
 
       const unitPrice = CREDIT_PRICE_PER_UNIT > 0 ? CREDIT_PRICE_PER_UNIT : requestUnitPrice;
       const totalAmount = unitPrice > 0 ? Number((unitPrice * creditsRequested).toFixed(2)) : requestTotalAmount;
 
       if (!totalAmount || totalAmount <= 0) {
-        return res.status(400).json({ error: "Valor total inválido para a solicitação." });
+        return sendJson(res, 400, { error: "Valor total inválido para a solicitação." });
       }
 
       const reviewToken = randomBytes(24).toString("hex");
@@ -636,7 +642,7 @@ async function startServer() {
         };
       }
 
-      res.json({
+      sendJson(res, 200, {
         success: true,
         requestId: requestRef.id,
         status: "Aguardando pagamento",
@@ -648,7 +654,7 @@ async function startServer() {
         emailResult
       });
     } catch (error: any) {
-      res.status(500).json({ error: error.message || "Erro ao criar solicitação de créditos." });
+      sendJson(res, 500, { error: error.message || "Erro ao criar solicitação de créditos." });
     }
   });
 
@@ -787,7 +793,7 @@ async function startServer() {
     const { clientEmail: to, clientName, inviteLink, isRegistered } = req.body;
 
     if (!getResendClient()) {
-      return res.status(500).json({ error: "Serviço de e-mail não configurado (RESEND_API_KEY faltando)." });
+      return sendJson(res, 500, { error: "Serviço de e-mail não configurado (RESEND_API_KEY faltando)." });
     }
 
     const buttonText = isRegistered ? "ACESSAR MEU MATERIAL" : "CRIAR ACESSO E VER MEU MATERIAL";
@@ -812,9 +818,9 @@ async function startServer() {
         `
       });
 
-      res.json({ success: true, data: result });
+      sendJson(res, 200, { success: true, data: result });
     } catch (error: any) {
-      res.status(500).json({ error: error.message || "Erro ao enviar e-mail." });
+      sendJson(res, 500, { error: error.message || "Erro ao enviar e-mail." });
     }
   });
 
@@ -822,7 +828,7 @@ async function startServer() {
     const { to, subject, body } = req.body;
 
     if (!getResendClient()) {
-      return res.status(500).json({ error: "RESEND_API_KEY Missing" });
+      return sendJson(res, 500, { error: "RESEND_API_KEY Missing" });
     }
 
     try {
@@ -832,48 +838,65 @@ async function startServer() {
         html: body
       });
 
-      res.json({ success: true, data: result });
+      sendJson(res, 200, { success: true, data: result });
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      sendJson(res, 500, { error: error.message });
     }
   });
 
   app.post("/api-v2/media/upload-url", async (req, res) => {
-    const { fileName, fileType, folderPrefix = "" } = req.body;
-    const bucket = (process.env.CLOUDFLARE_R2_BUCKET || "").trim();
-    const s3 = getR2Client();
-
-    if (!s3 || !bucket) return res.status(400).json({ error: "Configuração R2 incompleta" });
-
     try {
-      let cleanFileName = fileName
-        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+      const fileName = String(req.body.fileName || "").trim();
+      const fileType = String(req.body.fileType || "").trim();
+      const folderPrefix = String(req.body.folderPrefix || "").trim();
+
+      if (!fileName) {
+        return sendJson(res, 400, { error: "fileName é obrigatório" });
+      }
+
+      if (!fileType) {
+        return sendJson(res, 400, { error: "fileType é obrigatório" });
+      }
+
+      const bucket = (process.env.CLOUDFLARE_R2_BUCKET || "").trim();
+      const publicUrl = (process.env.CLOUDFLARE_R2_PUBLIC_URL || "").trim().replace(/\/$/, "");
+      const s3 = getR2Client();
+
+      if (!s3 || !bucket) {
+        return sendJson(res, 400, { error: "Configuração R2 incompleta" });
+      }
+
+      if (!publicUrl) {
+        return sendJson(res, 400, { error: "CLOUDFLARE_R2_PUBLIC_URL não configurado" });
+      }
+
+      const cleanFileName = fileName
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
         .replace(/[^a-zA-Z0-9.\-_]/g, "_")
         .replace(/_{2,}/g, "_");
 
       const key = folderPrefix ? `${folderPrefix}/${cleanFileName}` : cleanFileName;
+
       const command = new PutObjectCommand({
         Bucket: bucket,
         Key: key,
         ContentType: fileType,
         CacheControl: "max-age=31536000"
       });
+
       const signedUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
-      const publicUrl = (process.env.CLOUDFLARE_R2_PUBLIC_URL || "").trim().replace(/\/$/, "");
-
-      if (!publicUrl) {
-        console.warn("[R2] WARNING: CLOUDFLARE_R2_PUBLIC_URL is not set. Files will not be accessible via URL.");
-      }
-
       const encodedKey = key.split("/").map(part => encodeURIComponent(part)).join("/");
 
-      res.json({
+      sendJson(res, 200, {
+        success: true,
         uploadUrl: signedUrl,
-        fileUrl: publicUrl ? `${publicUrl}/${encodedKey}` : undefined,
+        fileUrl: `${publicUrl}/${encodedKey}`,
         key
       });
     } catch (error: any) {
-      res.status(500).json({ error: "Erro ao gerar URL de upload" });
+      console.error("Erro ao gerar URL de upload:", error);
+      sendJson(res, 500, { error: error.message || "Erro ao gerar URL de upload" });
     }
   });
 
@@ -898,7 +921,9 @@ async function startServer() {
     const s3 = getR2Client();
     const publicUrl = (process.env.CLOUDFLARE_R2_PUBLIC_URL || "").trim().replace(/\/$/, "");
 
-    if (!s3 || !bucket) return res.status(400).json({ error: "Configuração R2 incompleta" });
+    if (!s3 || !bucket) {
+      return sendJson(res, 400, { error: "Configuração R2 incompleta" });
+    }
 
     try {
       const command = new ListObjectsV2Command({ Bucket: bucket, Prefix: finalPrefix });
@@ -911,7 +936,6 @@ async function startServer() {
           const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(name);
           const isVideo = /\.(mp4|mov|webm)$/i.test(name);
           const type = isImage ? "image" : isVideo ? "video" : "other";
-
           const encodedKey = obj.Key!.split("/").map(part => encodeURIComponent(part)).join("/");
 
           return {
@@ -923,27 +947,27 @@ async function startServer() {
             size: obj.Size
           };
         })
-        .filter(f => f.type !== "other");
+        .filter(file => file.type !== "other");
 
-      res.json({ files });
+      sendJson(res, 200, { files });
     } catch (error: any) {
-      res.status(500).json({ error: "Erro ao sincronizar R2" });
+      sendJson(res, 500, { error: "Erro ao sincronizar R2" });
     }
   });
 
   app.post("/api-v2/auth/delete-user", async (req, res) => {
     const { email } = req.body;
-    if (!email) return res.status(400).json({ error: "Email is required" });
+    if (!email) return sendJson(res, 400, { error: "Email is required" });
 
     try {
       const user = await admin.auth().getUserByEmail(email);
       await admin.auth().deleteUser(user.uid);
-      res.json({ success: true, message: `User ${email} deleted successfully.` });
+      sendJson(res, 200, { success: true, message: `User ${email} deleted successfully.` });
     } catch (error: any) {
       if (error.code === "auth/user-not-found") {
-        return res.json({ success: true, message: "User not found in Auth." });
+        return sendJson(res, 200, { success: true, message: "User not found in Auth." });
       }
-      res.status(500).json({ error: error.message });
+      sendJson(res, 500, { error: error.message });
     }
   });
 
@@ -973,7 +997,7 @@ async function startServer() {
       response.data.pipe(res);
     } catch (error: any) {
       console.error("Proxy error:", error.message);
-      res.status(500).json({ error: "Erro ao acessar arquivo do Drive", details: error.message });
+      sendJson(res, 500, { error: "Erro ao acessar arquivo do Drive", details: error.message });
     }
   });
 
@@ -993,10 +1017,12 @@ async function startServer() {
 
   app.use((err: any, req: any, res: any, next: any) => {
     console.error("Global Server Error:", err);
+
     if (res.headersSent) {
       return next(err);
     }
-    res.status(err.status || 500).json({
+
+    sendJson(res, err.status || 500, {
       error: err.message || "Erro interno no servidor",
       details: process.env.NODE_ENV === "development" ? err.stack : undefined
     });
