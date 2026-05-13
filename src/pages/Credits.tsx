@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { format } from 'date-fns';
 import { toast } from 'react-hot-toast';
 import {
@@ -64,7 +64,6 @@ export default function Credits() {
   const [processingAction, setProcessingAction] = useState<ProcessingAction>(null);
   const [processingRequestId, setProcessingRequestId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
-  const historyRef = useRef<HTMLDivElement | null>(null);
 
   const loadRequests = async () => {
     setLoading(true);
@@ -93,14 +92,9 @@ export default function Credits() {
         }) as CreditRequest[];
 
       setRequests(data);
-
-      if (data.length > 0) {
-        setSelectedRequestId((current) =>
-          current && data.some((request) => request.id === current) ? current : data[0].id
-        );
-      } else {
-        setSelectedRequestId(null);
-      }
+      setSelectedRequestId((current) =>
+        current && data.some((request) => request.id === current) ? current : null
+      );
     } catch {
       toast.error('Erro ao carregar solicitações de crédito');
     } finally {
@@ -128,12 +122,8 @@ export default function Credits() {
   }, [requests, search]);
 
   const selectedRequest = useMemo(() => {
-    return (
-      filteredRequests.find((request) => request.id === selectedRequestId) ||
-      requests.find((request) => request.id === selectedRequestId) ||
-      null
-    );
-  }, [filteredRequests, requests, selectedRequestId]);
+    return requests.find((request) => request.id === selectedRequestId) || null;
+  }, [requests, selectedRequestId]);
 
   useEffect(() => {
     if (selectedRequest) {
@@ -152,24 +142,6 @@ export default function Credits() {
       rejected: requests.filter((item) => item.status === 'Recusado').length
     };
   }, [requests]);
-
-  const selectedHistory = useMemo(() => {
-    if (!selectedRequest) return [];
-
-    return requests
-      .filter((request) => {
-        const sameProject = request.projectId
-          ? request.projectId === selectedRequest.projectId
-          : request.projectTitle === selectedRequest.projectTitle;
-
-        return sameProject && request.clientEmail === selectedRequest.clientEmail;
-      })
-      .sort((a: any, b: any) => {
-        const dateA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0;
-        const dateB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0;
-        return dateB - dateA;
-      });
-  }, [requests, selectedRequest]);
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', {
@@ -215,14 +187,24 @@ export default function Credits() {
     }
   };
 
-  const getHistoryCount = (request: CreditRequest) => {
-    return requests.filter((item) => {
-      const sameProject = item.projectId
-        ? item.projectId === request.projectId
-        : item.projectTitle === request.projectTitle;
+  const getHistoryForRequest = (request: CreditRequest) => {
+    return requests
+      .filter((item) => {
+        const sameProject = item.projectId
+          ? item.projectId === request.projectId
+          : item.projectTitle === request.projectTitle;
 
-      return sameProject && item.clientEmail === request.clientEmail;
-    }).length;
+        return sameProject && item.clientEmail === request.clientEmail;
+      })
+      .sort((a: any, b: any) => {
+        const dateA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0;
+        const dateB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0;
+        return dateB - dateA;
+      });
+  };
+
+  const getHistoryCount = (request: CreditRequest) => {
+    return getHistoryForRequest(request).length;
   };
 
   const isFinalStatus = (status: CreditRequestStatus) => {
@@ -233,11 +215,16 @@ export default function Credits() {
     window.open(`/api-v2/credits/review/${request.reviewToken}`, '_blank', 'noopener,noreferrer');
   };
 
-  const showHistory = (requestId: string) => {
-    setSelectedRequestId(requestId);
-    setTimeout(() => {
-      historyRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 50);
+  const toggleRow = (request: CreditRequest) => {
+    setSelectedRequestId((current) => {
+      if (current === request.id) {
+        setReviewerNote('');
+        return null;
+      }
+
+      setReviewerNote(request.reviewerNote || '');
+      return request.id;
+    });
   };
 
   const getNoteValue = (request: CreditRequest) => {
@@ -258,7 +245,6 @@ export default function Credits() {
     }
 
     try {
-      setSelectedRequestId(targetRequest.id);
       setProcessingAction('analyze');
       setProcessingRequestId(targetRequest.id);
 
@@ -289,7 +275,6 @@ export default function Credits() {
     }
 
     try {
-      setSelectedRequestId(targetRequest.id);
       setProcessingAction('reject');
       setProcessingRequestId(targetRequest.id);
 
@@ -326,7 +311,6 @@ export default function Credits() {
     }
 
     try {
-      setSelectedRequestId(targetRequest.id);
       setProcessingAction('approve');
       setProcessingRequestId(targetRequest.id);
 
@@ -463,41 +447,41 @@ export default function Credits() {
           <p className="text-zinc-400 font-medium">Nenhuma solicitação de crédito encontrada.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 2xl:grid-cols-[minmax(0,1.7fr)_minmax(390px,0.95fr)] gap-6 items-start">
-          <section className="rounded-[32px] border border-zinc-800 bg-[#101010] overflow-hidden">
-            <div className="px-6 py-4 border-b border-zinc-800/60">
-              <div className="flex items-center gap-3">
-                <p className="text-white text-sm font-black uppercase tracking-[0.18em] shrink-0">
-                  Solicitações
-                </p>
-                <div className="h-px flex-1 bg-zinc-800/70" />
-                <div className="text-[10px] uppercase tracking-[0.18em] font-black text-zinc-500 shrink-0">
-                  {filteredRequests.length} resultado(s)
-                </div>
+        <section className="rounded-[32px] border border-zinc-800 bg-[#101010] overflow-hidden">
+          <div className="px-6 py-4 border-b border-zinc-800/60">
+            <div className="flex items-center gap-3">
+              <p className="text-white text-sm font-black uppercase tracking-[0.18em] shrink-0">
+                Solicitações
+              </p>
+              <div className="h-px flex-1 bg-zinc-800/70" />
+              <div className="text-[10px] uppercase tracking-[0.18em] font-black text-zinc-500 shrink-0">
+                {filteredRequests.length} resultado(s)
               </div>
             </div>
+          </div>
 
-            <div className="hidden xl:grid xl:grid-cols-[1.1fr_1fr_190px_170px_360px] gap-4 px-6 py-3 border-b border-zinc-800/60 text-[10px] uppercase tracking-[0.2em] font-black text-zinc-500">
-              <span>Cliente</span>
-              <span>Projeto</span>
-              <span>Status</span>
-              <span>Atualização</span>
-              <span>Ações</span>
-            </div>
+          <div className="hidden xl:grid xl:grid-cols-[1.1fr_1fr_180px_160px_420px] gap-4 px-6 py-3 border-b border-zinc-800/60 text-[10px] uppercase tracking-[0.2em] font-black text-zinc-500">
+            <span>Cliente</span>
+            <span>Projeto</span>
+            <span>Status</span>
+            <span>Atualização</span>
+            <span>Ações</span>
+          </div>
 
-            {filteredRequests.length === 0 ? (
-              <div className="p-8 text-zinc-500 text-sm">Nenhum resultado encontrado.</div>
-            ) : (
-              <div className="divide-y divide-zinc-800/60">
-                {filteredRequests.map((request) => {
-                  const isSelected = selectedRequest?.id === request.id;
-                  const historyCount = getHistoryCount(request);
-                  const isProcessingThisRow = processingRequestId === request.id;
+          {filteredRequests.length === 0 ? (
+            <div className="p-8 text-zinc-500 text-sm">Nenhum resultado encontrado.</div>
+          ) : (
+            <div className="divide-y divide-zinc-800/60">
+              {filteredRequests.map((request) => {
+                const isSelected = selectedRequestId === request.id;
+                const historyItems = getHistoryForRequest(request);
+                const historyCount = historyItems.length;
+                const isProcessingThisRow = processingRequestId === request.id;
 
-                  return (
+                return (
+                  <div key={request.id} className="relative">
                     <div
-                      key={request.id}
-                      onClick={() => setSelectedRequestId(request.id)}
+                      onClick={() => toggleRow(request)}
                       className={cn(
                         'relative px-6 py-4 transition-all cursor-pointer',
                         isSelected ? 'bg-zinc-900/55' : 'hover:bg-zinc-900/35'
@@ -507,7 +491,7 @@ export default function Credits() {
                         <div className="absolute left-0 right-0 top-0 h-px bg-[#ff5351]/25" />
                       )}
 
-                      <div className="grid grid-cols-1 xl:grid-cols-[1.1fr_1fr_190px_170px_360px] gap-4 items-center">
+                      <div className="grid grid-cols-1 xl:grid-cols-[1.1fr_1fr_180px_160px_420px] gap-4 items-center">
                         <div className="min-w-0">
                           <div className="flex items-center gap-3">
                             <div className="w-10 h-10 rounded-2xl border border-zinc-800 bg-zinc-900/80 flex items-center justify-center shrink-0">
@@ -586,7 +570,7 @@ export default function Credits() {
 
                           <button
                             type="button"
-                            onClick={() => showHistory(request.id)}
+                            onClick={() => toggleRow(request)}
                             className="h-10 px-3 rounded-xl border border-[#ff5351]/20 bg-[#ff5351]/10 text-[#ff9e9d] font-black text-[10px] uppercase tracking-[0.16em] hover:bg-[#ff5351]/15 transition-all inline-flex items-center gap-2"
                           >
                             <History className="w-3.5 h-3.5" />
@@ -598,284 +582,183 @@ export default function Credits() {
                         </div>
                       </div>
                     </div>
-                  );
-                })}
-              </div>
-            )}
-          </section>
 
-          <section className="rounded-[32px] border border-zinc-800 bg-[#101010] overflow-hidden 2xl:sticky 2xl:top-24">
-            {selectedRequest ? (
-              <>
-                <div className="px-6 py-6 border-b border-zinc-800/60">
-                  <div className="flex flex-wrap items-start justify-between gap-4">
-                    <div>
-                      <p className="text-[10px] uppercase tracking-[0.25em] text-[#ff5351] font-black mb-2">
-                        Detalhes da solicitação
-                      </p>
-                      <h2 className="text-white text-2xl font-black uppercase tracking-tight">
-                        {selectedRequest.projectTitle}
-                      </h2>
-                      <p className="text-zinc-500 text-sm mt-2">
-                        {selectedRequest.clientName} • {selectedRequest.clientEmail}
-                      </p>
-                    </div>
+                    {isSelected && (
+                      <div className="px-6 pb-5">
+                        <div className="rounded-[28px] border border-zinc-800 bg-zinc-900/35 p-5 space-y-5">
+                          <div className="grid grid-cols-1 xl:grid-cols-[1.15fr_0.85fr] gap-5">
+                            <div className="space-y-4">
+                              <div className="grid grid-cols-2 gap-3">
+                                <div className="rounded-2xl border border-zinc-800 bg-[#111111] px-4 py-3">
+                                  <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">
+                                    Cliente
+                                  </p>
+                                  <p className="text-white font-bold">{request.clientName}</p>
+                                </div>
 
-                    <div className="flex flex-wrap gap-2">
-                      <span
-                        className={cn(
-                          'inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-[10px] uppercase font-black tracking-widest',
-                          getStatusClass(selectedRequest.status)
-                        )}
-                      >
-                        {getStatusIcon(selectedRequest.status)}
-                        {selectedRequest.status}
-                      </span>
+                                <div className="rounded-2xl border border-zinc-800 bg-[#111111] px-4 py-3">
+                                  <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">
+                                    E-mail
+                                  </p>
+                                  <p className="text-white font-bold break-all">
+                                    {request.clientEmail}
+                                  </p>
+                                </div>
 
-                      <button
-                        type="button"
-                        onClick={() => openExternalApproval(selectedRequest)}
-                        className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-zinc-700 text-zinc-300 hover:text-white hover:border-zinc-600 transition-all text-[10px] uppercase font-black tracking-widest"
-                      >
-                        <ExternalLink className="w-3.5 h-3.5" />
-                        Abrir aprovação
-                      </button>
-                    </div>
-                  </div>
-                </div>
+                                <div className="rounded-2xl border border-zinc-800 bg-[#111111] px-4 py-3">
+                                  <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">
+                                    Projeto
+                                  </p>
+                                  <p className="text-white font-bold">{request.projectTitle}</p>
+                                </div>
 
-                <div className="p-6 space-y-5">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="rounded-[24px] border border-zinc-800 bg-zinc-900/70 p-4">
-                      <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">
-                        Créditos
-                      </p>
-                      <p className="text-white text-xl font-black">
-                        {selectedRequest.creditsRequested}
-                      </p>
-                    </div>
+                                <div className="rounded-2xl border border-zinc-800 bg-[#111111] px-4 py-3">
+                                  <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">
+                                    Chave Pix
+                                  </p>
+                                  <p className="text-white font-bold break-all">
+                                    {request.pixKey || 'Não informado'}
+                                  </p>
+                                </div>
 
-                    <div className="rounded-[24px] border border-zinc-800 bg-zinc-900/70 p-4">
-                      <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">
-                        Valor total
-                      </p>
-                      <p className="text-[#ff5351] text-xl font-black">
-                        {formatCurrency(selectedRequest.totalAmount)}
-                      </p>
-                    </div>
+                                <div className="rounded-2xl border border-zinc-800 bg-[#111111] px-4 py-3 col-span-2">
+                                  <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">
+                                    Observação do cliente
+                                  </p>
+                                  <p className="text-zinc-300 font-medium whitespace-pre-wrap text-sm">
+                                    {request.clientNote || 'Sem observação.'}
+                                  </p>
+                                </div>
+                              </div>
 
-                    <div className="rounded-[24px] border border-zinc-800 bg-zinc-900/70 p-4">
-                      <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">
-                        Criado em
-                      </p>
-                      <p className="text-white text-sm font-black">
-                        {formatDateTime(selectedRequest.createdAt)}
-                      </p>
-                    </div>
+                              <div className="rounded-2xl border border-zinc-800 bg-[#111111] px-4 py-3">
+                                <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">
+                                  Observação interna
+                                </p>
+                                <textarea
+                                  value={reviewerNote}
+                                  onChange={(e) => setReviewerNote(e.target.value)}
+                                  rows={4}
+                                  className="w-full bg-transparent text-white resize-none outline-none text-sm"
+                                  placeholder="Escreva aqui uma observação interna sobre a solicitação."
+                                />
+                              </div>
 
-                    <div className="rounded-[24px] border border-zinc-800 bg-zinc-900/70 p-4">
-                      <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">
-                        Atualizado em
-                      </p>
-                      <p className="text-white text-sm font-black">
-                        {formatDateTime(selectedRequest.updatedAt || selectedRequest.createdAt)}
-                      </p>
-                    </div>
-                  </div>
+                              <div className="flex flex-wrap gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => handleAnalyze(request)}
+                                  disabled={processingAction !== null}
+                                  className="h-10 px-3 rounded-xl border border-cyan-500/20 bg-cyan-500/10 text-cyan-300 font-black text-[10px] uppercase tracking-[0.16em] hover:bg-cyan-500/15 transition-all disabled:opacity-60 inline-flex items-center gap-2"
+                                >
+                                  {isProcessingThisRow && processingAction === 'analyze' ? (
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                  ) : (
+                                    <Clock3 className="w-3.5 h-3.5" />
+                                  )}
+                                  Marcar em análise
+                                </button>
 
-                  <div className="rounded-[28px] border border-zinc-800 bg-zinc-900/45 p-5 space-y-4">
-                    <h3 className="text-white text-base font-black uppercase">Dados principais</h3>
+                                <button
+                                  type="button"
+                                  onClick={() => handleReject(request)}
+                                  disabled={processingAction !== null}
+                                  className="h-10 px-3 rounded-xl border border-red-500/20 bg-red-500/10 text-red-300 font-black text-[10px] uppercase tracking-[0.16em] hover:bg-red-500/15 transition-all disabled:opacity-60 inline-flex items-center gap-2"
+                                >
+                                  {isProcessingThisRow && processingAction === 'reject' ? (
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                  ) : (
+                                    <XCircle className="w-3.5 h-3.5" />
+                                  )}
+                                  Recusar solicitação
+                                </button>
+                              </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-                      <div className="rounded-2xl border border-zinc-800 bg-[#111111] px-4 py-3">
-                        <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">
-                          Cliente
-                        </p>
-                        <p className="text-white font-bold">{selectedRequest.clientName}</p>
-                      </div>
-
-                      <div className="rounded-2xl border border-zinc-800 bg-[#111111] px-4 py-3">
-                        <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">
-                          E-mail
-                        </p>
-                        <p className="text-white font-bold break-all">
-                          {selectedRequest.clientEmail}
-                        </p>
-                      </div>
-
-                      <div className="rounded-2xl border border-zinc-800 bg-[#111111] px-4 py-3">
-                        <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">
-                          Projeto
-                        </p>
-                        <p className="text-white font-bold">{selectedRequest.projectTitle}</p>
-                      </div>
-
-                      <div className="rounded-2xl border border-zinc-800 bg-[#111111] px-4 py-3">
-                        <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">
-                          Chave Pix
-                        </p>
-                        <p className="text-white font-bold break-all">
-                          {selectedRequest.pixKey || 'Não informado'}
-                        </p>
-                      </div>
-
-                      <div className="rounded-2xl border border-zinc-800 bg-[#111111] px-4 py-3 sm:col-span-2">
-                        <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">
-                          Observação do cliente
-                        </p>
-                        <p className="text-zinc-300 font-medium whitespace-pre-wrap">
-                          {selectedRequest.clientNote || 'Sem observação.'}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="rounded-[28px] border border-zinc-800 bg-zinc-900/45 p-5 space-y-4">
-                    <h3 className="text-white text-base font-black uppercase">Ações da aprovação</h3>
-
-                    <div className="rounded-2xl border border-zinc-800 bg-[#111111] px-4 py-3">
-                      <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">
-                        Observação interna
-                      </p>
-                      <textarea
-                        value={reviewerNote}
-                        onChange={(e) => setReviewerNote(e.target.value)}
-                        rows={5}
-                        className="w-full bg-transparent text-white resize-none outline-none text-sm"
-                        placeholder="Escreva aqui uma observação interna sobre a solicitação."
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-1 gap-3">
-                      <button
-                        type="button"
-                        onClick={() => handleAnalyze()}
-                        disabled={processingAction !== null}
-                        className="h-11 rounded-2xl border border-cyan-500/20 bg-cyan-500/10 text-cyan-300 font-black uppercase tracking-[0.16em] text-[10px] hover:bg-cyan-500/15 transition-all disabled:opacity-60 flex items-center justify-center gap-2"
-                      >
-                        {processingAction === 'analyze' && processingRequestId === selectedRequest.id ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <Clock3 className="w-4 h-4" />
-                        )}
-                        Marcar em análise
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => handleApprove()}
-                        disabled={processingAction !== null}
-                        className="h-11 rounded-2xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-300 font-black uppercase tracking-[0.16em] text-[10px] hover:bg-emerald-500/15 transition-all disabled:opacity-60 flex items-center justify-center gap-2"
-                      >
-                        {processingAction === 'approve' && processingRequestId === selectedRequest.id ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <CheckCircle2 className="w-4 h-4" />
-                        )}
-                        Aprovar crédito
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => handleReject()}
-                        disabled={processingAction !== null}
-                        className="h-11 rounded-2xl border border-red-500/20 bg-red-500/10 text-red-300 font-black uppercase tracking-[0.16em] text-[10px] hover:bg-red-500/15 transition-all disabled:opacity-60 flex items-center justify-center gap-2"
-                      >
-                        {processingAction === 'reject' && processingRequestId === selectedRequest.id ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <XCircle className="w-4 h-4" />
-                        )}
-                        Recusar solicitação
-                      </button>
-                    </div>
-
-                    <div className="rounded-2xl border border-zinc-800 bg-[#111111] px-4 py-4 flex items-start gap-3">
-                      <ShieldAlert className="w-5 h-5 text-amber-300 mt-0.5 shrink-0" />
-                      <p className="text-zinc-400 text-sm leading-relaxed">
-                        Quando a validação ainda não vier pela API do Pix, use o botão de aprovação
-                        manual. A aprovação já adiciona os créditos no projeto automaticamente.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div
-                    ref={historyRef}
-                    className="rounded-[28px] border border-zinc-800 bg-zinc-900/45 p-5 space-y-4"
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <h3 className="text-white text-base font-black uppercase">
-                          Histórico do cliente
-                        </h3>
-                        <p className="text-zinc-500 text-sm mt-1">
-                          Solicitações feitas mais de uma vez para este mesmo cliente e projeto.
-                        </p>
-                      </div>
-                      <span className="px-3 py-1.5 rounded-full bg-[#ff5351]/10 border border-[#ff5351]/20 text-[#ff9e9d] text-[10px] uppercase tracking-widest font-black">
-                        {selectedHistory.length} registro(s)
-                      </span>
-                    </div>
-
-                    {selectedHistory.length > 1 ? (
-                      <div className="space-y-3">
-                        {selectedHistory.map((item) => (
-                          <button
-                            key={item.id}
-                            type="button"
-                            onClick={() => setSelectedRequestId(item.id)}
-                            className={cn(
-                              'w-full text-left rounded-2xl border px-4 py-4 transition-all',
-                              item.id === selectedRequest.id
-                                ? 'border-[#ff5351]/20 bg-[#ff5351]/5'
-                                : 'border-zinc-800 bg-[#111111] hover:border-zinc-700'
-                            )}
-                          >
-                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                              <div>
-                                <p className="text-white font-black">{item.projectTitle}</p>
-                                <p className="text-zinc-500 text-sm mt-1">
-                                  {formatDateTime(item.createdAt)} • {formatCurrency(item.totalAmount)}
+                              <div className="rounded-2xl border border-zinc-800 bg-[#111111] px-4 py-4 flex items-start gap-3">
+                                <ShieldAlert className="w-5 h-5 text-amber-300 mt-0.5 shrink-0" />
+                                <p className="text-zinc-400 text-sm leading-relaxed">
+                                  Quando a validação ainda não vier pela API do Pix, use o botão
+                                  de aprovação manual. A aprovação já adiciona os créditos no
+                                  projeto automaticamente.
                                 </p>
                               </div>
+                            </div>
 
-                              <div className="flex items-center gap-2">
-                                <span
-                                  className={cn(
-                                    'inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-[10px] uppercase font-black tracking-widest',
-                                    getStatusClass(item.status)
-                                  )}
-                                >
-                                  {getStatusIcon(item.status)}
-                                  {item.status}
+                            <div className="space-y-4">
+                              <div className="flex items-center justify-between gap-3">
+                                <div>
+                                  <h3 className="text-white text-base font-black uppercase">
+                                    Histórico do cliente
+                                  </h3>
+                                  <p className="text-zinc-500 text-sm mt-1">
+                                    Solicitações desse mesmo cliente e projeto.
+                                  </p>
+                                </div>
+
+                                <span className="px-3 py-1.5 rounded-full bg-[#ff5351]/10 border border-[#ff5351]/20 text-[#ff9e9d] text-[10px] uppercase tracking-widest font-black">
+                                  {historyCount} registro(s)
                                 </span>
                               </div>
+
+                              {historyItems.length > 1 ? (
+                                <div className="space-y-3">
+                                  {historyItems.map((item) => (
+                                    <button
+                                      key={item.id}
+                                      type="button"
+                                      onClick={() => toggleRow(item)}
+                                      className={cn(
+                                        'w-full text-left rounded-2xl border px-4 py-4 transition-all',
+                                        item.id === request.id
+                                          ? 'border-[#ff5351]/20 bg-[#ff5351]/5'
+                                          : 'border-zinc-800 bg-[#111111] hover:border-zinc-700'
+                                      )}
+                                    >
+                                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                        <div>
+                                          <p className="text-white font-black">
+                                            {item.projectTitle}
+                                          </p>
+                                          <p className="text-zinc-500 text-sm mt-1">
+                                            {formatDateTime(item.createdAt)} •{' '}
+                                            {formatCurrency(item.totalAmount)}
+                                          </p>
+                                        </div>
+
+                                        <div className="flex items-center gap-2">
+                                          <span
+                                            className={cn(
+                                              'inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-[10px] uppercase font-black tracking-widest',
+                                              getStatusClass(item.status)
+                                            )}
+                                          >
+                                            {getStatusIcon(item.status)}
+                                            {item.status}
+                                          </span>
+                                        </div>
+                                      </div>
+                                    </button>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="rounded-2xl border border-dashed border-zinc-800 bg-[#111111] p-6 text-center">
+                                  <p className="text-zinc-400 text-sm">
+                                    Ainda não há outra solicitação para esse mesmo cliente e
+                                    projeto.
+                                  </p>
+                                </div>
+                              )}
                             </div>
-                          </button>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="rounded-2xl border border-dashed border-zinc-800 bg-[#111111] p-6 text-center">
-                        <p className="text-zinc-400 text-sm">
-                          Ainda não há outra solicitação para esse mesmo cliente e projeto.
-                        </p>
+                          </div>
+                        </div>
                       </div>
                     )}
                   </div>
-                </div>
-              </>
-            ) : (
-              <div className="min-h-[60vh] flex items-center justify-center text-center px-6">
-                <div>
-                  <CreditCard className="w-14 h-14 text-zinc-700 mx-auto mb-5" />
-                  <p className="text-zinc-400 font-medium">
-                    Selecione uma solicitação para visualizar os detalhes.
-                  </p>
-                </div>
-              </div>
-            )}
-          </section>
-        </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
       )}
     </div>
   );
