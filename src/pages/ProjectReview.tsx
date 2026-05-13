@@ -18,7 +18,10 @@ import {
   Image as ImageIcon,
   Lock,
   Download,
-  AlertTriangle
+  AlertTriangle,
+  Copy,
+  X,
+  Upload
 } from 'lucide-react';
 import { projectService, Project } from '../services/projectService';
 import { mediaService, MediaItem } from '../services/mediaService';
@@ -48,8 +51,22 @@ export default function ProjectReview() {
   const globalTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const [showCreditModal, setShowCreditModal] = useState(false);
+  const [showAddCreditsModal, setShowAddCreditsModal] = useState(false);
   const [isCreditBlinking, setIsCreditBlinking] = useState(false);
   const [isTogglingId, setIsTogglingId] = useState<string | null>(null);
+
+  const [pixKey, setPixKey] = useState('boranovfilms@gmail.com');
+  const [pixKeyType, setPixKeyType] = useState('email');
+  const [creditUnitPrice, setCreditUnitPrice] = useState(0);
+  const [loadingCreditConfig, setLoadingCreditConfig] = useState(false);
+  const [creditsToBuy, setCreditsToBuy] = useState(1);
+  const [creditReceiptFile, setCreditReceiptFile] = useState<File | null>(null);
+  const [creditReceiptPreview, setCreditReceiptPreview] = useState('');
+  const [creditClientNote, setCreditClientNote] = useState('');
+  const [submittingCreditRequest, setSubmittingCreditRequest] = useState(false);
+
+  const effectiveCreditUnitPrice = Number(project?.extraPrice || creditUnitPrice || 0);
+  const creditRequestTotal = Number((creditsToBuy * effectiveCreditUnitPrice).toFixed(2));
 
   useEffect(() => {
     if (id) loadData();
@@ -58,6 +75,12 @@ export default function ProjectReview() {
       if (globalTimeoutRef.current) clearTimeout(globalTimeoutRef.current);
     };
   }, [id]);
+
+  useEffect(() => {
+    if (project) {
+      loadCreditConfig();
+    }
+  }, [project?.id, project?.extraPrice]);
 
   useEffect(() => {
     if (isVideoLoading && selectedPreview) {
@@ -74,6 +97,91 @@ export default function ProjectReview() {
       if (globalTimeoutRef.current) clearTimeout(globalTimeoutRef.current);
     }
   }, [isVideoLoading, selectedPreview]);
+
+  useEffect(() => {
+    setCurrentTime(0);
+    setDuration(0);
+  }, [selectedPreview?.id]);
+
+  useEffect(() => {
+    return () => {
+      if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (creditReceiptPreview.startsWith('blob:')) {
+        URL.revokeObjectURL(creditReceiptPreview);
+      }
+    };
+  }, [creditReceiptPreview]);
+
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL'
+    }).format(value || 0);
+  };
+
+  const resetCreditForm = () => {
+    if (creditReceiptPreview.startsWith('blob:')) {
+      URL.revokeObjectURL(creditReceiptPreview);
+    }
+    setCreditsToBuy(1);
+    setCreditReceiptFile(null);
+    setCreditReceiptPreview('');
+    setCreditClientNote('');
+    setSubmittingCreditRequest(false);
+  };
+
+  const closeAddCreditsModal = () => {
+    setShowAddCreditsModal(false);
+    resetCreditForm();
+  };
+
+  const openAddCreditsModal = async () => {
+    setShowCreditModal(false);
+    setShowAddCreditsModal(true);
+    setIsCreditBlinking(false);
+    if (!pixKey || effectiveCreditUnitPrice <= 0) {
+      await loadCreditConfig();
+    }
+  };
+
+  const loadCreditConfig = async () => {
+    if (!project) return;
+
+    setLoadingCreditConfig(true);
+    try {
+      const response = await fetch('/api-v2/credits/config');
+      if (!response.ok) {
+        throw new Error('Não foi possível carregar a configuração de créditos.');
+      }
+
+      const data = await response.json();
+
+      if (data.pixKey) {
+        setPixKey(data.pixKey);
+      }
+
+      if (data.pixKeyType) {
+        setPixKeyType(data.pixKeyType);
+      }
+
+      if (project.extraPrice && Number(project.extraPrice) > 0) {
+        setCreditUnitPrice(Number(project.extraPrice));
+      } else if (data.unitPrice && Number(data.unitPrice) > 0) {
+        setCreditUnitPrice(Number(data.unitPrice));
+      }
+    } catch (error) {
+      if (project.extraPrice && Number(project.extraPrice) > 0) {
+        setCreditUnitPrice(Number(project.extraPrice));
+      }
+    } finally {
+      setLoadingCreditConfig(false);
+    }
+  };
 
   const loadData = async () => {
     setLoading(true);
@@ -97,11 +205,6 @@ export default function ProjectReview() {
     }
   };
 
-  useEffect(() => {
-    setCurrentTime(0);
-    setDuration(0);
-  }, [selectedPreview?.id]);
-
   const handleVideoError = async (e?: any) => {
     if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
 
@@ -122,12 +225,6 @@ export default function ProjectReview() {
       }
     }, 12000);
   };
-
-  useEffect(() => {
-    return () => {
-      if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
-    };
-  }, []);
 
   const getThumbnailUrl = (item: MediaItem) => {
     if (!item.url) return item.thumbnailUrl || '';
@@ -203,6 +300,128 @@ export default function ProjectReview() {
       } else {
         videoRef.current.pause();
       }
+    }
+  };
+
+  const handleCopyPixKey = async () => {
+    try {
+      await navigator.clipboard.writeText(pixKey);
+      toast.success('Chave Pix copiada');
+    } catch (error) {
+      toast.error('Não foi possível copiar a chave Pix');
+    }
+  };
+
+  const handleReceiptChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      toast.error('Envie uma imagem do comprovante');
+      return;
+    }
+
+    if (creditReceiptPreview.startsWith('blob:')) {
+      URL.revokeObjectURL(creditReceiptPreview);
+    }
+
+    const previewUrl = URL.createObjectURL(file);
+    setCreditReceiptFile(file);
+    setCreditReceiptPreview(previewUrl);
+  };
+
+  const uploadCreditReceipt = async (file: File) => {
+    const uploadUrlResponse = await fetch('/api-v2/media/upload-url', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        fileName: file.name,
+        fileType: file.type,
+        folderPrefix: `credit-receipts/${id}`
+      })
+    });
+
+    const uploadUrlData = await uploadUrlResponse.json();
+
+    if (!uploadUrlResponse.ok) {
+      throw new Error(uploadUrlData.error || 'Erro ao preparar upload do comprovante');
+    }
+
+    if (!uploadUrlData.uploadUrl || !uploadUrlData.fileUrl) {
+      throw new Error('Não foi possível gerar o link do comprovante');
+    }
+
+    const uploadResponse = await fetch(uploadUrlData.uploadUrl, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': file.type
+      },
+      body: file
+    });
+
+    if (!uploadResponse.ok) {
+      throw new Error('Erro ao enviar comprovante');
+    }
+
+    return {
+      fileUrl: uploadUrlData.fileUrl,
+      fileName: file.name
+    };
+  };
+
+  const handleSubmitCreditRequest = async () => {
+    if (!id || !project) return;
+
+    if (!effectiveCreditUnitPrice || effectiveCreditUnitPrice <= 0) {
+      toast.error('Valor por crédito não configurado');
+      return;
+    }
+
+    if (!creditsToBuy || creditsToBuy <= 0) {
+      toast.error('Informe quantos créditos deseja comprar');
+      return;
+    }
+
+    if (!creditReceiptFile) {
+      toast.error('Anexe o comprovante do pagamento');
+      return;
+    }
+
+    try {
+      setSubmittingCreditRequest(true);
+
+      const uploadedReceipt = await uploadCreditReceipt(creditReceiptFile);
+
+      const response = await fetch('/api-v2/credits/request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId: id,
+          projectTitle: project.title,
+          clientName: project.clientName || project.title,
+          clientEmail: project.clientEmail || auth.currentUser?.email || '',
+          creditsRequested: creditsToBuy,
+          unitPrice: effectiveCreditUnitPrice,
+          totalAmount: creditRequestTotal,
+          receiptImageUrl: uploadedReceipt.fileUrl,
+          receiptFileName: uploadedReceipt.fileName,
+          clientNote: creditClientNote.trim()
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Erro ao enviar solicitação');
+      }
+
+      toast.success('Solicitação enviada para análise');
+      closeAddCreditsModal();
+    } catch (error: any) {
+      toast.error(error.message || 'Erro ao enviar solicitação');
+    } finally {
+      setSubmittingCreditRequest(false);
     }
   };
 
@@ -303,6 +522,247 @@ export default function ProjectReview() {
 
   return (
     <div className="animate-in fade-in duration-700 pb-20 relative">
+      {showAddCreditsModal && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 md:p-6">
+          <div className="absolute inset-0 bg-black/90 backdrop-blur-md" onClick={closeAddCreditsModal} />
+          <div className="relative w-full max-w-3xl bg-[#141414] border border-zinc-800 rounded-[2rem] md:rounded-[2.5rem] overflow-hidden shadow-[0_0_100px_rgba(255,83,81,0.12)]">
+            <div className="px-5 md:px-8 py-5 border-b border-zinc-800 flex items-start justify-between gap-4">
+              <div>
+                <p className="text-[10px] uppercase tracking-[0.25em] text-[#ff5351] font-black mb-2">
+                  Compra manual
+                </p>
+                <h2 className="text-white text-2xl md:text-3xl font-black uppercase italic tracking-tight">
+                  Adicionar créditos
+                </h2>
+                <p className="text-zinc-500 text-sm mt-2 max-w-xl">
+                  Escolha a quantidade de créditos, faça o pagamento no Pix e envie o comprovante para análise.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={closeAddCreditsModal}
+                className="w-11 h-11 rounded-2xl border border-zinc-800 bg-zinc-900 text-zinc-400 hover:text-white hover:border-zinc-700 transition-all flex items-center justify-center shrink-0"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-5 md:p-8 space-y-6 max-h-[80vh] overflow-y-auto">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="rounded-2xl border border-zinc-800 bg-zinc-900/70 p-4">
+                  <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">Projeto</p>
+                  <p className="text-white font-black text-lg leading-tight">{project?.title}</p>
+                </div>
+
+                <div className="rounded-2xl border border-zinc-800 bg-zinc-900/70 p-4">
+                  <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">Disponíveis hoje</p>
+                  <p className="text-white font-black text-2xl">{project ? project.creditsTotal - project.creditsUsed : 0}</p>
+                </div>
+
+                <div className="rounded-2xl border border-zinc-800 bg-zinc-900/70 p-4">
+                  <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">Valor por crédito</p>
+                  <p className="text-white font-black text-2xl">
+                    {loadingCreditConfig ? '...' : effectiveCreditUnitPrice > 0 ? formatCurrency(effectiveCreditUnitPrice) : 'Não definido'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="rounded-3xl border border-zinc-800 bg-[#111111] p-5 md:p-6 space-y-5">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-[0.25em] text-zinc-500 font-black mb-2">
+                      Quantidade
+                    </p>
+                    <h3 className="text-white font-black text-xl uppercase">Créditos desejados</h3>
+                  </div>
+
+                  <div className="text-right">
+                    <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">Total</p>
+                    <p className="text-[#ff5351] font-black text-2xl md:text-3xl">
+                      {formatCurrency(creditRequestTotal)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setCreditsToBuy(prev => Math.max(1, prev - 1))}
+                    className="w-12 h-12 rounded-2xl border border-zinc-800 bg-zinc-900 text-white font-black text-xl hover:border-zinc-700 transition-all"
+                  >
+                    -
+                  </button>
+
+                  <input
+                    type="number"
+                    min={1}
+                    value={creditsToBuy}
+                    onChange={(e) => setCreditsToBuy(Math.max(1, Number(e.target.value) || 1))}
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl px-4 py-4 text-white text-center text-2xl font-black focus:border-[#ff5351] outline-none transition-all"
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() => setCreditsToBuy(prev => prev + 1)}
+                    className="w-12 h-12 rounded-2xl border border-zinc-800 bg-zinc-900 text-white font-black text-xl hover:border-zinc-700 transition-all"
+                  >
+                    +
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  {[5, 10, 20].map((amount) => (
+                    <button
+                      key={amount}
+                      type="button"
+                      onClick={() => setCreditsToBuy(amount)}
+                      className={cn(
+                        'h-12 rounded-2xl border text-sm font-black uppercase tracking-wider transition-all',
+                        creditsToBuy === amount
+                          ? 'bg-[#ff5351] border-[#ff5351] text-white'
+                          : 'border-zinc-800 bg-zinc-900 text-zinc-400 hover:border-zinc-700 hover:text-white'
+                      )}
+                    >
+                      {amount} créditos
+                    </button>
+                  ))}
+                </div>
+
+                {effectiveCreditUnitPrice <= 0 && (
+                  <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 px-4 py-4 text-amber-300 text-sm font-medium">
+                    O valor por crédito ainda não está configurado neste projeto.
+                  </div>
+                )}
+              </div>
+
+              <div className="rounded-3xl border border-zinc-800 bg-[#111111] p-5 md:p-6 space-y-5">
+                <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-[0.25em] text-zinc-500 font-black mb-2">
+                      Pagamento
+                    </p>
+                    <h3 className="text-white font-black text-xl uppercase">Pix para pagamento</h3>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleCopyPixKey}
+                    className="h-11 px-4 rounded-2xl border border-zinc-800 bg-zinc-900 text-zinc-200 font-black uppercase tracking-widest text-xs hover:border-zinc-700 transition-all flex items-center gap-2 self-start md:self-auto"
+                  >
+                    <Copy className="w-4 h-4" />
+                    Copiar chave
+                  </button>
+                </div>
+
+                <div className="rounded-2xl border border-zinc-800 bg-zinc-900/70 p-4 md:p-5">
+                  <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">
+                    Chave Pix {pixKeyType ? `(${pixKeyType})` : ''}
+                  </p>
+                  <p className="text-white text-lg md:text-2xl font-black break-all">
+                    {pixKey}
+                  </p>
+                </div>
+
+                <div className="rounded-2xl border border-zinc-800 bg-zinc-900/70 p-4">
+                  <p className="text-zinc-300 text-sm leading-relaxed">
+                    Faça o pagamento de <span className="text-white font-black">{formatCurrency(creditRequestTotal)}</span> usando a chave Pix acima.
+                    Depois, anexe o comprovante para eu analisar e liberar os créditos no seu projeto.
+                  </p>
+                </div>
+              </div>
+
+              <div className="rounded-3xl border border-zinc-800 bg-[#111111] p-5 md:p-6 space-y-5">
+                <div>
+                  <p className="text-[10px] uppercase tracking-[0.25em] text-zinc-500 font-black mb-2">
+                    Comprovante
+                  </p>
+                  <h3 className="text-white font-black text-xl uppercase">Enviar imagem do pagamento</h3>
+                </div>
+
+                <label className="block rounded-3xl border border-dashed border-zinc-700 bg-zinc-900/70 p-6 text-center cursor-pointer hover:border-[#ff5351]/40 transition-all">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleReceiptChange}
+                    className="hidden"
+                  />
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="w-14 h-14 rounded-2xl bg-[#ff5351]/10 flex items-center justify-center">
+                      <Upload className="w-6 h-6 text-[#ff5351]" />
+                    </div>
+                    <div>
+                      <p className="text-white font-black uppercase text-sm tracking-wide">
+                        {creditReceiptFile ? 'Trocar comprovante' : 'Selecionar comprovante'}
+                      </p>
+                      <p className="text-zinc-500 text-xs mt-1">
+                        Envie uma imagem do comprovante Pix
+                      </p>
+                    </div>
+                  </div>
+                </label>
+
+                {creditReceiptFile && (
+                  <div className="rounded-2xl border border-zinc-800 bg-zinc-900/70 p-4 space-y-4">
+                    <div>
+                      <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">Arquivo selecionado</p>
+                      <p className="text-white text-sm font-bold break-all">{creditReceiptFile.name}</p>
+                    </div>
+
+                    {creditReceiptPreview && (
+                      <img
+                        src={creditReceiptPreview}
+                        alt="Comprovante"
+                        className="w-full max-h-[280px] object-contain rounded-2xl border border-zinc-800 bg-black"
+                      />
+                    )}
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1">
+                    Observação
+                  </label>
+                  <textarea
+                    value={creditClientNote}
+                    onChange={(e) => setCreditClientNote(e.target.value)}
+                    rows={3}
+                    placeholder="Se quiser, escreva uma observação sobre o pagamento."
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl px-4 py-4 text-white focus:border-[#ff5351] outline-none transition-all resize-none"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="px-5 md:px-8 py-5 border-t border-zinc-800 flex flex-col md:flex-row gap-3">
+              <button
+                type="button"
+                onClick={closeAddCreditsModal}
+                className="flex-1 h-12 rounded-2xl border border-zinc-800 text-zinc-200 font-black uppercase tracking-widest text-xs hover:bg-zinc-900 transition-all"
+              >
+                Cancelar
+              </button>
+
+              <button
+                type="button"
+                onClick={handleSubmitCreditRequest}
+                disabled={submittingCreditRequest || effectiveCreditUnitPrice <= 0}
+                className="flex-[1.4] h-12 rounded-2xl bg-[#ff5351] text-white font-black uppercase tracking-widest text-xs hover:brightness-110 transition-all shadow-2xl shadow-[#ff5351]/20 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {submittingCreditRequest ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Enviando solicitação
+                  </>
+                ) : (
+                  'Enviar para análise'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showCreditModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 sm:p-0">
           <div className="absolute inset-0 bg-black/90 backdrop-blur-md" onClick={() => setShowCreditModal(false)} />
@@ -315,16 +775,19 @@ export default function ProjectReview() {
             <p className="text-zinc-400 text-xs md:text-sm font-bold leading-relaxed mb-8 md:mb-10">
               Você atingiu o seu limite de seleções. Para continuar escolhendo novos materiais, adicione mais créditos à sua conta.
             </p>
-            <div className="space-y-4">
+            <div className="space-y-3">
               <button
-                onClick={() => {
-                  setShowCreditModal(false);
-                  setIsCreditBlinking(true);
-                  setTimeout(() => setIsCreditBlinking(false), 10000);
-                }}
+                onClick={openAddCreditsModal}
                 className="w-full bg-[#ff5351] text-white py-4 md:py-5 rounded-2xl font-black uppercase tracking-widest text-xs hover:brightness-110 active:scale-95 transition-all shadow-xl shadow-[#ff5351]/30"
               >
-                ENTENDIDO
+                Adicionar créditos
+              </button>
+
+              <button
+                onClick={() => setShowCreditModal(false)}
+                className="w-full border border-zinc-800 text-zinc-300 py-4 rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-zinc-900 transition-all"
+              >
+                Fechar
               </button>
             </div>
           </div>
@@ -357,7 +820,7 @@ export default function ProjectReview() {
                 <span className="text-[8px] font-black uppercase text-zinc-500 tracking-wider">/{project.creditsTotal}</span>
               </div>
               <button
-                onClick={() => setIsCreditBlinking(false)}
+                onClick={openAddCreditsModal}
                 className={cn(
                   'rounded-xl px-3 py-2 font-black uppercase text-[8px] tracking-wider transition-all border',
                   isCreditBlinking
@@ -417,7 +880,7 @@ export default function ProjectReview() {
 
                 <div className="pb-0">
                   <button
-                    onClick={() => setIsCreditBlinking(false)}
+                    onClick={openAddCreditsModal}
                     className={cn(
                       'h-[64px] px-6 rounded-2xl font-black uppercase tracking-[0.2em] text-[8px] transition-all shadow-xl flex items-center justify-center text-center leading-tight',
                       isCreditBlinking
