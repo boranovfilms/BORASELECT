@@ -9,7 +9,6 @@ import {
   CreditCard,
   Loader2,
   Save,
-  Search,
   UserRound,
   Wallet,
   XCircle
@@ -94,7 +93,6 @@ export default function Credits() {
   const [statusDrafts, setStatusDrafts] = useState<Record<string, CreditRequestStatus>>({});
   const [processingAction, setProcessingAction] = useState<ProcessingAction>(null);
   const [processingRequestId, setProcessingRequestId] = useState<string | null>(null);
-  const [search, setSearch] = useState('');
 
   const loadRequests = async () => {
     setLoading(true);
@@ -172,21 +170,6 @@ export default function Credits() {
       })
       .sort((a, b) => getRequestTime(b.latestRequest) - getRequestTime(a.latestRequest));
   }, [requests]);
-
-  const filteredClientGroups = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    if (!term) return clientGroups;
-
-    return clientGroups.filter((group) =>
-      [
-        group.clientName,
-        group.clientEmail,
-        group.latestRequest.projectTitle,
-        group.latestRequest.status,
-        ...group.requests.map((request) => request.projectTitle)
-      ].some((value) => String(value || '').toLowerCase().includes(term))
-    );
-  }, [clientGroups, search]);
 
   const selectedClient = useMemo(() => {
     return clientGroups.find((group) => group.key === selectedClientKey) || null;
@@ -339,30 +322,73 @@ export default function Credits() {
   }
 
   return (
-    <div className="space-y-6 pb-16">
+    <div className="space-y-5 pb-16">
+      {selectedClient && (
+        <button
+          type="button"
+          onClick={() => setSelectedClientKey(null)}
+          className="inline-flex items-center gap-2 text-zinc-400 hover:text-white transition-colors text-sm font-bold"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Voltar para clientes
+        </button>
+      )}
+
       <header className="flex flex-col xl:flex-row xl:items-end justify-between gap-5">
         <div>
-          <p className="text-[10px] uppercase tracking-[0.3em] text-[#ff5351] font-black mb-2">
-            Controle financeiro
+          <p
+            className={cn(
+              'text-[10px] uppercase tracking-[0.3em] font-black mb-2',
+              selectedClient ? 'text-white' : 'text-[#ff5351]'
+            )}
+          >
+            {selectedClient ? 'Cliente selecionado' : 'Controle financeiro'}
           </p>
-          <h1 className="text-3xl md:text-4xl font-black tracking-tight text-white uppercase italic">
-            Solicitações de Créditos
+
+          <h1
+            className={cn(
+              'text-3xl md:text-4xl font-black tracking-tight uppercase italic',
+              selectedClient ? 'text-[#ff5351]' : 'text-white'
+            )}
+          >
+            {selectedClient
+              ? selectedClient.latestRequest.projectTitle
+              : 'Solicitações de Créditos'}
           </h1>
-          <p className="text-zinc-500 text-sm md:text-base mt-2 max-w-3xl">
-            Visualize clientes com pedidos de crédito e acompanhe o histórico de forma limpa.
+
+          <p
+            className={cn(
+              'text-sm md:text-base mt-2',
+              selectedClient ? 'text-white' : 'text-zinc-500'
+            )}
+          >
+            {selectedClient
+              ? selectedClient.clientEmail
+              : 'Visualize clientes com pedidos de crédito e acompanhe o histórico de forma limpa.'}
           </p>
         </div>
 
-        <div className="relative w-full xl:w-[340px]">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar por cliente, e-mail ou projeto"
-            className="w-full h-11 bg-zinc-900/90 border border-zinc-800 rounded-2xl pl-11 pr-4 text-sm text-white focus:border-[#ff5351] outline-none transition-all"
-          />
-        </div>
+        {selectedClient && (
+          <div className="grid grid-cols-2 gap-3 w-full sm:w-auto sm:min-w-[320px]">
+            <div className="rounded-2xl border border-zinc-800 bg-zinc-950/80 px-5 py-4">
+              <p className="text-[10px] uppercase tracking-[0.22em] font-black text-zinc-500">
+                Solicitações
+              </p>
+              <p className="text-3xl font-black text-white mt-2">
+                {selectedClient.totalRequests}
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-amber-500/15 bg-amber-500/5 px-5 py-4">
+              <p className="text-[10px] uppercase tracking-[0.22em] font-black text-amber-200/70">
+                Aguardando
+              </p>
+              <p className="text-3xl font-black text-amber-300 mt-2">
+                {selectedClient.pendingCount}
+              </p>
+            </div>
+          </div>
+        )}
       </header>
 
       <section className="flex flex-wrap gap-2.5">
@@ -416,7 +442,7 @@ export default function Credits() {
               </p>
               <div className="h-px flex-1 bg-zinc-800/70" />
               <div className="text-[10px] uppercase tracking-[0.18em] font-black text-zinc-500 shrink-0">
-                {filteredClientGroups.length} cliente(s)
+                {clientGroups.length} cliente(s)
               </div>
             </div>
           </div>
@@ -429,13 +455,13 @@ export default function Credits() {
             <span>Status</span>
           </div>
 
-          {filteredClientGroups.length === 0 ? (
+          {clientGroups.length === 0 ? (
             <div className="p-10 text-center">
               <p className="text-zinc-500 text-sm">Nenhum cliente encontrado.</p>
             </div>
           ) : (
             <div className="divide-y divide-zinc-800/60">
-              {filteredClientGroups.map((group) => (
+              {clientGroups.map((group) => (
                 <button
                   key={group.key}
                   type="button"
@@ -518,174 +544,128 @@ export default function Credits() {
           )}
         </section>
       ) : (
-        <section className="space-y-5">
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-            <button
-              type="button"
-              onClick={() => setSelectedClientKey(null)}
-              className="inline-flex items-center gap-2 text-zinc-400 hover:text-white transition-colors text-sm font-bold"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              Voltar para clientes
-            </button>
-
-            {selectedClient.hasPending && (
-              <div className="inline-flex items-center gap-2 px-3 py-2 rounded-full border border-[#ff5351]/20 bg-[#ff5351]/10 text-[#ff8f8e] text-[10px] uppercase font-black tracking-widest">
-                <BellRing className="w-3.5 h-3.5" />
-                Cliente com pendência
+        <section className="rounded-[32px] border border-zinc-800 bg-[#101010] overflow-hidden">
+          <div className="px-6 py-4 border-b border-zinc-800/60">
+            <div className="flex items-center gap-3">
+              <p className="text-white text-sm font-black uppercase tracking-[0.18em] shrink-0">
+                Histórico de solicitações
+              </p>
+              <div className="h-px flex-1 bg-zinc-800/70" />
+              <div className="text-[10px] uppercase tracking-[0.18em] font-black text-zinc-500 shrink-0">
+                {selectedClient.requests.length} registro(s)
               </div>
-            )}
+            </div>
           </div>
 
-          <div className="rounded-[32px] border border-zinc-800 bg-[#101010] overflow-hidden">
-            <div className="px-6 py-6 border-b border-zinc-800/60">
-              <div className="flex flex-col xl:flex-row xl:items-start justify-between gap-5">
-                <div>
-                  <p className="text-[10px] uppercase tracking-[0.25em] text-[#ff5351] font-black mb-2">
-                    Cliente selecionado
-                  </p>
-                  <h2 className="text-2xl md:text-3xl font-black text-white uppercase tracking-tight">
-                    {selectedClient.clientName}
-                  </h2>
-                  <p className="text-zinc-500 text-sm mt-2">{selectedClient.clientEmail}</p>
-                </div>
-
-                <div className="flex flex-wrap gap-2">
-                  <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-zinc-800 bg-zinc-900 text-zinc-300 text-[10px] uppercase font-black tracking-widest">
-                    {selectedClient.totalRequests} solicitação(ões)
-                  </span>
-                  <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-amber-500/15 bg-amber-500/5 text-amber-300 text-[10px] uppercase font-black tracking-widest">
-                    {selectedClient.pendingCount} aguardando
-                  </span>
-                </div>
+          <div className="overflow-x-auto">
+            <div className="min-w-[1260px]">
+              <div className="grid grid-cols-[2.4fr_110px_130px_150px_150px_160px_170px_76px] gap-3 px-6 py-2.5 border-b border-zinc-800/60 text-[10px] uppercase tracking-[0.18em] font-black text-zinc-500 text-center items-center">
+                <span>Nome do projeto</span>
+                <span>Créditos</span>
+                <span>Valor</span>
+                <span>Criado em</span>
+                <span>Atualizado em</span>
+                <span>Status</span>
+                <span>Alterar status</span>
+                <span>Ação</span>
               </div>
-            </div>
 
-            <div className="px-6 py-4 border-b border-zinc-800/60">
-              <div className="flex items-center gap-3">
-                <p className="text-white text-sm font-black uppercase tracking-[0.18em] shrink-0">
-                  Histórico de solicitações
-                </p>
-                <div className="h-px flex-1 bg-zinc-800/70" />
-                <div className="text-[10px] uppercase tracking-[0.18em] font-black text-zinc-500 shrink-0">
-                  {selectedClient.requests.length} registro(s)
-                </div>
-              </div>
-            </div>
+              <div className="divide-y divide-zinc-800/60">
+                {selectedClient.requests.map((request) => {
+                  const isProcessingThisRow = processingRequestId === request.id;
+                  const nextStatus = statusDrafts[request.id] || request.status;
 
-            <div className="overflow-x-auto">
-              <div className="min-w-[1240px]">
-                <div className="grid grid-cols-[2.2fr_110px_130px_150px_150px_160px_170px_76px] gap-3 px-6 py-2.5 border-b border-zinc-800/60 text-[10px] uppercase tracking-[0.18em] font-black text-zinc-500 text-center items-center">
-                  <span>Nome do projeto</span>
-                  <span>Créditos</span>
-                  <span>Valor</span>
-                  <span>Criado em</span>
-                  <span>Atualizado em</span>
-                  <span>Status</span>
-                  <span>Alterar status</span>
-                  <span>Ação</span>
-                </div>
-
-                <div className="divide-y divide-zinc-800/60">
-                  {selectedClient.requests.map((request) => {
-                    const isProcessingThisRow = processingRequestId === request.id;
-                    const nextStatus = statusDrafts[request.id] || request.status;
-
-                    return (
-                      <div
-                        key={request.id}
-                        className={cn(
-                          'grid grid-cols-[2.2fr_110px_130px_150px_150px_160px_170px_76px] gap-3 px-6 py-3 items-center text-center',
-                          request.status === 'Aguardando pagamento'
-                            ? 'bg-[#ff5351]/[0.035]'
-                            : 'bg-transparent'
-                        )}
-                      >
-                        <div className="min-w-0">
-                          <p
-                            className="text-white font-black text-sm leading-tight break-words"
-                            title={request.projectTitle}
-                          >
-                            {request.projectTitle}
-                          </p>
-                          <p className="text-zinc-500 text-[11px] mt-1">
-                            {request.clientNote ? 'Com observação do cliente' : 'Sem observação'}
-                          </p>
-                        </div>
-
-                        <div>
-                          <p className="text-white text-sm font-bold">
-                            {request.creditsRequested}
-                          </p>
-                        </div>
-
-                        <div>
-                          <p className="text-[#ff5351] text-sm font-bold">
-                            {formatCurrency(request.totalAmount)}
-                          </p>
-                        </div>
-
-                        <div>
-                          <p className="text-white text-sm font-bold">
-                            {formatDateTime(request.createdAt)}
-                          </p>
-                        </div>
-
-                        <div>
-                          <p className="text-white text-sm font-bold">
-                            {formatDateTime(request.updatedAt || request.createdAt)}
-                          </p>
-                        </div>
-
-                        <div className="flex justify-center">
-                          <span
-                            className={cn(
-                              'inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-[10px] uppercase font-black tracking-widest',
-                              getStatusClass(request.status)
-                            )}
-                          >
-                            {getStatusIcon(request.status)}
-                            {request.status}
-                          </span>
-                        </div>
-
-                        <div className="flex justify-center">
-                          <select
-                            value={nextStatus}
-                            onChange={(e) =>
-                              setStatusDrafts((current) => ({
-                                ...current,
-                                [request.id]: e.target.value as CreditRequestStatus
-                              }))
-                            }
-                            className="w-full h-9 rounded-xl border border-zinc-800 bg-zinc-900 px-3 text-sm text-white outline-none focus:border-[#ff5351]"
-                          >
-                            <option value="Aguardando pagamento">Aguardando pagamento</option>
-                            <option value="Em análise">Em análise</option>
-                            <option value="Aprovado">Aprovado</option>
-                            <option value="Recusado">Recusado</option>
-                          </select>
-                        </div>
-
-                        <div className="flex justify-center">
-                          <button
-                            type="button"
-                            onClick={() => handleStatusUpdate(request)}
-                            disabled={processingAction !== null}
-                            title="Salvar status"
-                            className="h-9 w-9 rounded-xl border border-[#ff5351]/20 bg-[#ff5351]/10 text-[#ff9e9d] hover:bg-[#ff5351]/15 transition-all disabled:opacity-60 inline-flex items-center justify-center"
-                          >
-                            {isProcessingThisRow && processingAction === 'update' ? (
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : (
-                              <Save className="w-4 h-4" />
-                            )}
-                          </button>
-                        </div>
+                  return (
+                    <div
+                      key={request.id}
+                      className={cn(
+                        'grid grid-cols-[2.4fr_110px_130px_150px_150px_160px_170px_76px] gap-3 px-6 py-2.5 items-center text-center',
+                        request.status === 'Aguardando pagamento'
+                          ? 'bg-[#ff5351]/[0.035]'
+                          : 'bg-transparent'
+                      )}
+                    >
+                      <div className="min-w-0 px-2">
+                        <p
+                          className="text-white font-black text-sm leading-tight break-words whitespace-normal"
+                          title={request.projectTitle}
+                        >
+                          {request.projectTitle}
+                        </p>
                       </div>
-                    );
-                  })}
-                </div>
+
+                      <div>
+                        <p className="text-white text-sm font-bold">
+                          {request.creditsRequested}
+                        </p>
+                      </div>
+
+                      <div>
+                        <p className="text-[#ff5351] text-sm font-bold">
+                          {formatCurrency(request.totalAmount)}
+                        </p>
+                      </div>
+
+                      <div>
+                        <p className="text-white text-sm font-bold">
+                          {formatDateTime(request.createdAt)}
+                        </p>
+                      </div>
+
+                      <div>
+                        <p className="text-white text-sm font-bold">
+                          {formatDateTime(request.updatedAt || request.createdAt)}
+                        </p>
+                      </div>
+
+                      <div className="flex justify-center">
+                        <span
+                          className={cn(
+                            'inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-[10px] uppercase font-black tracking-widest',
+                            getStatusClass(request.status)
+                          )}
+                        >
+                          {getStatusIcon(request.status)}
+                          {request.status}
+                        </span>
+                      </div>
+
+                      <div className="flex justify-center">
+                        <select
+                          value={nextStatus}
+                          onChange={(e) =>
+                            setStatusDrafts((current) => ({
+                              ...current,
+                              [request.id]: e.target.value as CreditRequestStatus
+                            }))
+                          }
+                          className="w-full h-9 rounded-xl border border-zinc-800 bg-zinc-900 px-3 text-sm text-white outline-none focus:border-[#ff5351]"
+                        >
+                          <option value="Aguardando pagamento">Aguardando pagamento</option>
+                          <option value="Em análise">Em análise</option>
+                          <option value="Aprovado">Aprovado</option>
+                          <option value="Recusado">Recusado</option>
+                        </select>
+                      </div>
+
+                      <div className="flex justify-center">
+                        <button
+                          type="button"
+                          onClick={() => handleStatusUpdate(request)}
+                          disabled={processingAction !== null}
+                          title="Salvar status"
+                          className="h-9 w-9 rounded-xl border border-[#ff5351]/20 bg-[#ff5351]/10 text-[#ff9e9d] hover:bg-[#ff5351]/15 transition-all disabled:opacity-60 inline-flex items-center justify-center"
+                        >
+                          {isProcessingThisRow && processingAction === 'update' ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Save className="w-4 h-4" />
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>
