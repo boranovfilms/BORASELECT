@@ -1,7 +1,7 @@
 {
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/server.ts" },
-    { "source": "/api-v2/(.*)", "destination": "/server.ts" },
+    { "source": "/api/(.*)", "destination": "/api/index.ts?route=/$1" },
+    { "source": "/api-v2/(.*)", "destination": "/api/index.ts?route=/$1" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
