@@ -70,6 +70,13 @@ type ClientGroup = {
   hasPending: boolean;
 };
 
+const statusOptions: CreditRequestStatus[] = [
+  'Aguardando pagamento',
+  'Em análise',
+  'Aprovado',
+  'Recusado'
+];
+
 const getRequestTime = (request: CreditRequest) => {
   const updatedAt = request.updatedAt?.toDate ? request.updatedAt.toDate().getTime() : null;
   const createdAt = request.createdAt?.toDate ? request.createdAt.toDate().getTime() : null;
@@ -94,6 +101,7 @@ export default function Credits() {
   const [statusDrafts, setStatusDrafts] = useState<Record<string, CreditRequestStatus>>({});
   const [processingAction, setProcessingAction] = useState<ProcessingAction>(null);
   const [processingRequestId, setProcessingRequestId] = useState<string | null>(null);
+  const [openStatusMenuId, setOpenStatusMenuId] = useState<string | null>(null);
 
   const loadRequests = async () => {
     setLoading(true);
@@ -123,6 +131,26 @@ export default function Credits() {
   useEffect(() => {
     loadRequests();
   }, []);
+
+  useEffect(() => {
+    if (!openStatusMenuId) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+
+      const wrapper = document.querySelector(
+        `[data-status-menu-wrapper="${openStatusMenuId}"]`
+      );
+
+      if (wrapper && !wrapper.contains(target)) {
+        setOpenStatusMenuId(null);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [openStatusMenuId]);
 
   const summary = useMemo(() => {
     return {
@@ -211,6 +239,21 @@ export default function Credits() {
     }
   };
 
+  const getStatusButtonClass = (status: CreditRequestStatus) => {
+    switch (status) {
+      case 'Aguardando pagamento':
+        return 'border-amber-500/20 bg-amber-500/8 text-amber-300';
+      case 'Em análise':
+        return 'border-cyan-500/20 bg-cyan-500/8 text-cyan-300';
+      case 'Aprovado':
+        return 'border-emerald-500/20 bg-emerald-500/8 text-emerald-300';
+      case 'Recusado':
+        return 'border-red-500/20 bg-red-500/8 text-red-300';
+      default:
+        return 'border-zinc-700 bg-zinc-900 text-zinc-300';
+    }
+  };
+
   const getStatusIcon = (status: CreditRequestStatus) => {
     switch (status) {
       case 'Aguardando pagamento':
@@ -224,6 +267,14 @@ export default function Credits() {
       default:
         return <CreditCard className="w-3.5 h-3.5" />;
     }
+  };
+
+  const handleDraftStatusChange = (requestId: string, status: CreditRequestStatus) => {
+    setStatusDrafts((current) => ({
+      ...current,
+      [requestId]: status
+    }));
+    setOpenStatusMenuId(null);
   };
 
   const handleStatusUpdate = async (request: CreditRequest) => {
@@ -242,6 +293,7 @@ export default function Credits() {
     try {
       setProcessingAction('update');
       setProcessingRequestId(request.id);
+      setOpenStatusMenuId(null);
 
       if (nextStatus === 'Aprovado') {
         await runTransaction(db, async (transaction) => {
@@ -543,7 +595,7 @@ export default function Credits() {
           )}
         </section>
       ) : (
-        <section className="rounded-[32px] border border-zinc-800 bg-[#101010] overflow-hidden">
+        <section className="rounded-[32px] border border-zinc-800 bg-[#101010]">
           <div className="px-6 py-4 border-b border-zinc-800/60">
             <div className="flex items-center gap-3">
               <p className="text-white text-sm font-black uppercase tracking-[0.18em] shrink-0">
@@ -556,102 +608,150 @@ export default function Credits() {
             </div>
           </div>
 
-          <div className="overflow-x-auto">
-            <div className="min-w-[1280px]">
-              <div className="grid grid-cols-[2.9fr_110px_130px_150px_150px_220px_76px] gap-3 px-6 py-2.5 border-b border-zinc-800/60 text-[10px] uppercase tracking-[0.18em] font-black text-zinc-500 text-center items-center">
-                <span>Nome do projeto</span>
-                <span>Créditos</span>
-                <span>Valor</span>
-                <span>Criado em</span>
-                <span>Atualizado em</span>
-                <span>Status</span>
-                <span>Ação</span>
-              </div>
+          <div className="px-4 sm:px-6 pb-3">
+            <table className="w-full table-fixed border-separate border-spacing-0">
+              <colgroup>
+                <col style={{ width: '36%' }} />
+                <col style={{ width: '8%' }} />
+                <col style={{ width: '10%' }} />
+                <col style={{ width: '12%' }} />
+                <col style={{ width: '12%' }} />
+                <col style={{ width: '16%' }} />
+                <col style={{ width: '6%' }} />
+              </colgroup>
 
-              <div className="divide-y divide-zinc-800/60">
+              <thead>
+                <tr>
+                  <th className="px-2 py-3 text-left text-[10px] uppercase tracking-[0.18em] font-black text-zinc-500">
+                    Nome do projeto
+                  </th>
+                  <th className="px-2 py-3 text-center text-[10px] uppercase tracking-[0.18em] font-black text-zinc-500">
+                    Créditos
+                  </th>
+                  <th className="px-2 py-3 text-center text-[10px] uppercase tracking-[0.18em] font-black text-zinc-500">
+                    Valor
+                  </th>
+                  <th className="px-2 py-3 text-center text-[10px] uppercase tracking-[0.18em] font-black text-zinc-500">
+                    Criado em
+                  </th>
+                  <th className="px-2 py-3 text-center text-[10px] uppercase tracking-[0.18em] font-black text-zinc-500">
+                    Atualizado em
+                  </th>
+                  <th className="px-2 py-3 text-center text-[10px] uppercase tracking-[0.18em] font-black text-zinc-500">
+                    Status
+                  </th>
+                  <th className="px-2 py-3 text-center text-[10px] uppercase tracking-[0.18em] font-black text-zinc-500">
+                    Ação
+                  </th>
+                </tr>
+              </thead>
+
+              <tbody>
                 {selectedClient.requests.map((request) => {
                   const isProcessingThisRow = processingRequestId === request.id;
                   const nextStatus = statusDrafts[request.id] || request.status;
 
                   return (
-                    <div
+                    <tr
                       key={request.id}
                       className={cn(
-                        'grid grid-cols-[2.9fr_110px_130px_150px_150px_220px_76px] gap-3 px-6 py-2.5 items-center text-center',
+                        'border-t border-zinc-800/60',
                         request.status === 'Aguardando pagamento'
                           ? 'bg-[#ff5351]/[0.035]'
-                          : 'bg-transparent'
+                          : ''
                       )}
                     >
-                      <div className="min-w-0 px-2 text-left">
+                      <td className="px-2 py-3 align-top">
                         <p
-                          className="text-white font-black text-sm leading-tight break-words whitespace-normal"
+                          className="text-white font-black text-sm leading-5 whitespace-normal break-words text-left"
                           title={request.projectTitle}
                         >
                           {request.projectTitle}
                         </p>
-                      </div>
+                      </td>
 
-                      <div>
+                      <td className="px-2 py-3 text-center align-middle">
                         <p className="text-white text-sm font-bold">
                           {request.creditsRequested}
                         </p>
-                      </div>
+                      </td>
 
-                      <div>
+                      <td className="px-2 py-3 text-center align-middle">
                         <p className="text-[#ff5351] text-sm font-bold">
                           {formatCurrency(request.totalAmount)}
                         </p>
-                      </div>
+                      </td>
 
-                      <div>
+                      <td className="px-2 py-3 text-center align-middle">
                         <p className="text-white text-sm font-bold">
                           {formatDateTime(request.createdAt)}
                         </p>
-                      </div>
+                      </td>
 
-                      <div>
+                      <td className="px-2 py-3 text-center align-middle">
                         <p className="text-white text-sm font-bold">
                           {formatDateTime(request.updatedAt || request.createdAt)}
                         </p>
-                      </div>
+                      </td>
 
-                      <div className="flex justify-center">
+                      <td className="px-2 py-3 text-center align-middle">
                         <div
-                          className={cn(
-                            'relative min-w-[190px] rounded-full border',
-                            getStatusClass(nextStatus)
-                          )}
+                          className="relative flex justify-center"
+                          data-status-menu-wrapper={request.id}
                         >
-                          <select
-                            value={nextStatus}
-                            onChange={(e) =>
-                              setStatusDrafts((current) => ({
-                                ...current,
-                                [request.id]: e.target.value as CreditRequestStatus
-                              }))
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setOpenStatusMenuId((current) =>
+                                current === request.id ? null : request.id
+                              )
                             }
-                            className="w-full h-9 appearance-none rounded-full bg-transparent pl-4 pr-10 text-center text-[10px] uppercase font-black tracking-widest outline-none cursor-pointer"
+                            className={cn(
+                              'inline-flex h-10 min-w-[170px] items-center justify-center gap-2 rounded-xl border px-4 text-[10px] uppercase font-black tracking-[0.14em] transition-all',
+                              getStatusButtonClass(nextStatus)
+                            )}
                           >
-                            <option value="Aguardando pagamento">Aguardando pagamento</option>
-                            <option value="Em análise">Em análise</option>
-                            <option value="Aprovado">Aprovado</option>
-                            <option value="Recusado">Recusado</option>
-                          </select>
-
-                          <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center">
+                            {getStatusIcon(nextStatus)}
+                            <span>{nextStatus}</span>
                             <ChevronDown className="w-4 h-4" />
-                          </div>
-                        </div>
-                      </div>
+                          </button>
 
-                      <div className="flex justify-center">
+                          {openStatusMenuId === request.id && (
+                            <div className="absolute left-1/2 top-[calc(100%+8px)] z-30 w-[200px] -translate-x-1/2 rounded-2xl border border-zinc-800 bg-[#090909] p-2 shadow-[0_20px_40px_rgba(0,0,0,0.45)]">
+                              <div className="space-y-1">
+                                {statusOptions.map((status) => (
+                                  <button
+                                    key={status}
+                                    type="button"
+                                    onClick={() =>
+                                      handleDraftStatusChange(request.id, status)
+                                    }
+                                    className={cn(
+                                      'w-full rounded-xl border px-3 py-2 text-left text-[10px] uppercase font-black tracking-[0.14em] transition-all',
+                                      nextStatus === status
+                                        ? getStatusClass(status)
+                                        : 'border-transparent text-zinc-300 hover:bg-zinc-900'
+                                    )}
+                                  >
+                                    <span className="inline-flex items-center gap-2">
+                                      {getStatusIcon(status)}
+                                      {status}
+                                    </span>
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </td>
+
+                      <td className="px-2 py-3 text-center align-middle">
                         <button
                           type="button"
                           onClick={() => handleStatusUpdate(request)}
                           disabled={processingAction !== null}
                           title="Salvar status"
-                          className="h-9 w-9 rounded-xl border border-[#ff5351]/20 bg-[#ff5351]/10 text-[#ff9e9d] hover:bg-[#ff5351]/15 transition-all disabled:opacity-60 inline-flex items-center justify-center"
+                          className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-[#ff5351]/20 bg-[#ff5351]/10 text-[#ff9e9d] hover:bg-[#ff5351]/15 transition-all disabled:opacity-60"
                         >
                           {isProcessingThisRow && processingAction === 'update' ? (
                             <Loader2 className="w-4 h-4 animate-spin" />
@@ -659,12 +759,12 @@ export default function Credits() {
                             <Save className="w-4 h-4" />
                           )}
                         </button>
-                      </div>
-                    </div>
+                      </td>
+                    </tr>
                   );
                 })}
-              </div>
-            </div>
+              </tbody>
+            </table>
           </div>
         </section>
       )}
