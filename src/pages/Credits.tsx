@@ -2,11 +2,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { format } from 'date-fns';
 import { toast } from 'react-hot-toast';
 import {
+  ArrowLeft,
+  BellRing,
   CheckCircle2,
   Clock3,
   CreditCard,
   ExternalLink,
-  History,
   Loader2,
   Search,
   ShieldAlert,
@@ -56,11 +57,39 @@ type CreditRequest = {
 
 type ProcessingAction = 'analyze' | 'approve' | 'reject' | null;
 
+type ClientGroup = {
+  key: string;
+  clientName: string;
+  clientEmail: string;
+  requests: CreditRequest[];
+  latestRequest: CreditRequest;
+  pendingCount: number;
+  analyzingCount: number;
+  approvedCount: number;
+  rejectedCount: number;
+  totalRequests: number;
+  hasPending: boolean;
+};
+
+const getRequestTime = (request: CreditRequest) => {
+  const updatedAt = request.updatedAt?.toDate ? request.updatedAt.toDate().getTime() : null;
+  const createdAt = request.createdAt?.toDate ? request.createdAt.toDate().getTime() : null;
+  return updatedAt || createdAt || 0;
+};
+
+const getClientKey = (request: CreditRequest) => {
+  const email = String(request.clientEmail || '').trim().toLowerCase();
+  if (email) return email;
+  return `${String(request.clientName || '').trim().toLowerCase()}::${String(
+    request.projectId || request.projectTitle || ''
+  ).trim().toLowerCase()}`;
+};
+
 export default function Credits() {
   const [requests, setRequests] = useState<CreditRequest[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
-  const [reviewerNote, setReviewerNote] = useState('');
+  const [selectedClientKey, setSelectedClientKey] = useState<string | null>(null);
+  const [reviewerNotes, setReviewerNotes] = useState<Record<string, string>>({});
   const [processingAction, setProcessingAction] = useState<ProcessingAction>(null);
   const [processingRequestId, setProcessingRequestId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -75,25 +104,11 @@ export default function Credits() {
           id: item.id,
           ...(item.data() as Omit<CreditRequest, 'id'>)
         }))
-        .sort((a: any, b: any) => {
-          const dateA = a.updatedAt?.toDate
-            ? a.updatedAt.toDate().getTime()
-            : a.createdAt?.toDate
-              ? a.createdAt.toDate().getTime()
-              : 0;
-
-          const dateB = b.updatedAt?.toDate
-            ? b.updatedAt.toDate().getTime()
-            : b.createdAt?.toDate
-              ? b.createdAt.toDate().getTime()
-              : 0;
-
-          return dateB - dateA;
-        }) as CreditRequest[];
+        .sort((a: CreditRequest, b: CreditRequest) => getRequestTime(b) - getRequestTime(a));
 
       setRequests(data);
-      setSelectedRequestId((current) =>
-        current && data.some((request) => request.id === current) ? current : null
+      setReviewerNotes(
+        Object.fromEntries(data.map((request) => [request.id, request.reviewerNote || '']))
       );
     } catch {
       toast.error('Erro ao carregar solicitações de crédito');
@@ -106,33 +121,6 @@ export default function Credits() {
     loadRequests();
   }, []);
 
-  const filteredRequests = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    if (!term) return requests;
-
-    return requests.filter((request) =>
-      [
-        request.projectTitle,
-        request.clientName,
-        request.clientEmail,
-        request.status,
-        request.id
-      ].some((value) => String(value || '').toLowerCase().includes(term))
-    );
-  }, [requests, search]);
-
-  const selectedRequest = useMemo(() => {
-    return requests.find((request) => request.id === selectedRequestId) || null;
-  }, [requests, selectedRequestId]);
-
-  useEffect(() => {
-    if (selectedRequest) {
-      setReviewerNote(selectedRequest.reviewerNote || '');
-    } else {
-      setReviewerNote('');
-    }
-  }, [selectedRequest?.id, selectedRequest?.reviewerNote]);
-
   const summary = useMemo(() => {
     return {
       total: requests.length,
@@ -142,6 +130,70 @@ export default function Credits() {
       rejected: requests.filter((item) => item.status === 'Recusado').length
     };
   }, [requests]);
+
+  const clientGroups = useMemo(() => {
+    const groups = new Map<string, CreditRequest[]>();
+
+    requests.forEach((request) => {
+      const key = getClientKey(request);
+      const current = groups.get(key) || [];
+      current.push(request);
+      groups.set(key, current);
+    });
+
+    return Array.from(groups.entries())
+      .map(([key, clientRequests]) => {
+        const orderedRequests = [...clientRequests].sort(
+          (a, b) => getRequestTime(b) - getRequestTime(a)
+        );
+        const latestRequest = orderedRequests[0];
+
+        return {
+          key,
+          clientName: latestRequest.clientName,
+          clientEmail: latestRequest.clientEmail,
+          requests: orderedRequests,
+          latestRequest,
+          pendingCount: orderedRequests.filter(
+            (item) => item.status === 'Aguardando pagamento'
+          ).length,
+          analyzingCount: orderedRequests.filter((item) => item.status === 'Em análise').length,
+          approvedCount: orderedRequests.filter((item) => item.status === 'Aprovado').length,
+          rejectedCount: orderedRequests.filter((item) => item.status === 'Recusado').length,
+          totalRequests: orderedRequests.length,
+          hasPending: orderedRequests.some(
+            (item) => item.status === 'Aguardando pagamento'
+          )
+        } satisfies ClientGroup;
+      })
+      .sort((a, b) => getRequestTime(b.latestRequest) - getRequestTime(a.latestRequest));
+  }, [requests]);
+
+  const filteredClientGroups = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    if (!term) return clientGroups;
+
+    return clientGroups.filter((group) =>
+      [
+        group.clientName,
+        group.clientEmail,
+        group.latestRequest.projectTitle,
+        group.latestRequest.status,
+        ...group.requests.map((request) => request.projectTitle),
+        ...group.requests.map((request) => request.status)
+      ].some((value) => String(value || '').toLowerCase().includes(term))
+    );
+  }, [clientGroups, search]);
+
+  const selectedClient = useMemo(() => {
+    return clientGroups.find((group) => group.key === selectedClientKey) || null;
+  }, [clientGroups, selectedClientKey]);
+
+  useEffect(() => {
+    if (selectedClientKey && !clientGroups.some((group) => group.key === selectedClientKey)) {
+      setSelectedClientKey(null);
+    }
+  }, [clientGroups, selectedClientKey]);
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', {
@@ -187,26 +239,6 @@ export default function Credits() {
     }
   };
 
-  const getHistoryForRequest = (request: CreditRequest) => {
-    return requests
-      .filter((item) => {
-        const sameProject = item.projectId
-          ? item.projectId === request.projectId
-          : item.projectTitle === request.projectTitle;
-
-        return sameProject && item.clientEmail === request.clientEmail;
-      })
-      .sort((a: any, b: any) => {
-        const dateA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0;
-        const dateB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0;
-        return dateB - dateA;
-      });
-  };
-
-  const getHistoryCount = (request: CreditRequest) => {
-    return getHistoryForRequest(request).length;
-  };
-
   const isFinalStatus = (status: CreditRequestStatus) => {
     return status === 'Aprovado' || status === 'Recusado';
   };
@@ -215,42 +247,23 @@ export default function Credits() {
     window.open(`/api-v2/credits/review/${request.reviewToken}`, '_blank', 'noopener,noreferrer');
   };
 
-  const toggleRow = (request: CreditRequest) => {
-    setSelectedRequestId((current) => {
-      if (current === request.id) {
-        setReviewerNote('');
-        return null;
-      }
-
-      setReviewerNote(request.reviewerNote || '');
-      return request.id;
-    });
+  const getNoteValue = (requestId: string) => {
+    return reviewerNotes[requestId]?.trim() || null;
   };
 
-  const getNoteValue = (request: CreditRequest) => {
-    if (request.id === selectedRequest?.id) {
-      return reviewerNote.trim() || null;
-    }
-
-    return request.reviewerNote || null;
-  };
-
-  const handleAnalyze = async (requestOverride?: CreditRequest) => {
-    const targetRequest = requestOverride || selectedRequest;
-    if (!targetRequest) return;
-
-    if (targetRequest.status === 'Aprovado' || targetRequest.status === 'Recusado') {
+  const handleAnalyze = async (request: CreditRequest) => {
+    if (request.status === 'Aprovado' || request.status === 'Recusado') {
       toast.error('Essa solicitação já foi finalizada');
       return;
     }
 
     try {
       setProcessingAction('analyze');
-      setProcessingRequestId(targetRequest.id);
+      setProcessingRequestId(request.id);
 
-      await updateDoc(doc(db, 'creditRequests', targetRequest.id), {
+      await updateDoc(doc(db, 'creditRequests', request.id), {
         status: 'Em análise',
-        reviewerNote: getNoteValue(targetRequest),
+        reviewerNote: getNoteValue(request.id),
         reviewedAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       });
@@ -265,22 +278,19 @@ export default function Credits() {
     }
   };
 
-  const handleReject = async (requestOverride?: CreditRequest) => {
-    const targetRequest = requestOverride || selectedRequest;
-    if (!targetRequest) return;
-
-    if (targetRequest.status === 'Aprovado') {
+  const handleReject = async (request: CreditRequest) => {
+    if (request.status === 'Aprovado') {
       toast.error('Essa solicitação já foi aprovada');
       return;
     }
 
     try {
       setProcessingAction('reject');
-      setProcessingRequestId(targetRequest.id);
+      setProcessingRequestId(request.id);
 
-      await updateDoc(doc(db, 'creditRequests', targetRequest.id), {
+      await updateDoc(doc(db, 'creditRequests', request.id), {
         status: 'Recusado',
-        reviewerNote: getNoteValue(targetRequest),
+        reviewerNote: getNoteValue(request.id),
         reviewedAt: serverTimestamp(),
         rejectedAt: serverTimestamp(),
         updatedAt: serverTimestamp()
@@ -296,27 +306,24 @@ export default function Credits() {
     }
   };
 
-  const handleApprove = async (requestOverride?: CreditRequest) => {
-    const targetRequest = requestOverride || selectedRequest;
-    if (!targetRequest) return;
-
-    if (targetRequest.status === 'Aprovado') {
+  const handleApprove = async (request: CreditRequest) => {
+    if (request.status === 'Aprovado') {
       toast.error('Essa solicitação já foi aprovada');
       return;
     }
 
-    if (targetRequest.status === 'Recusado') {
+    if (request.status === 'Recusado') {
       toast.error('Essa solicitação já foi recusada');
       return;
     }
 
     try {
       setProcessingAction('approve');
-      setProcessingRequestId(targetRequest.id);
+      setProcessingRequestId(request.id);
 
       await runTransaction(db, async (transaction) => {
-        const requestRef = doc(db, 'creditRequests', targetRequest.id);
-        const projectRef = doc(db, 'projects', targetRequest.projectId);
+        const requestRef = doc(db, 'creditRequests', request.id);
+        const projectRef = doc(db, 'projects', request.projectId);
 
         const requestSnap = await transaction.get(requestRef);
         const projectSnap = await transaction.get(projectRef);
@@ -346,7 +353,7 @@ export default function Credits() {
 
         transaction.update(requestRef, {
           status: 'Aprovado',
-          reviewerNote: getNoteValue(targetRequest),
+          reviewerNote: getNoteValue(request.id),
           reviewedAt: serverTimestamp(),
           approvedAt: serverTimestamp(),
           updatedAt: serverTimestamp()
@@ -382,8 +389,7 @@ export default function Credits() {
             Solicitações de Créditos
           </h1>
           <p className="text-zinc-500 text-sm md:text-base mt-2 max-w-3xl">
-            Visualize tudo em linha, aprove manualmente quando necessário e acompanhe o
-            histórico de cada cliente por projeto.
+            Visualize clientes com pedidos de crédito e acompanhe o histórico completo de cada um.
           </p>
         </div>
 
@@ -393,7 +399,7 @@ export default function Credits() {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar por cliente, projeto ou status"
+            placeholder="Buscar por cliente, e-mail ou projeto"
             className="w-full h-11 bg-zinc-900/90 border border-zinc-800 rounded-2xl pl-11 pr-4 text-sm text-white focus:border-[#ff5351] outline-none transition-all"
           />
         </div>
@@ -441,108 +447,332 @@ export default function Credits() {
         </div>
       </section>
 
-      {requests.length === 0 ? (
-        <div className="rounded-[32px] border border-dashed border-zinc-800 bg-zinc-900/20 py-24 px-6 text-center">
-          <CreditCard className="w-14 h-14 text-zinc-700 mx-auto mb-5" />
-          <p className="text-zinc-400 font-medium">Nenhuma solicitação de crédito encontrada.</p>
-        </div>
-      ) : (
+      {!selectedClient ? (
         <section className="rounded-[32px] border border-zinc-800 bg-[#101010] overflow-hidden">
           <div className="px-6 py-4 border-b border-zinc-800/60">
             <div className="flex items-center gap-3">
               <p className="text-white text-sm font-black uppercase tracking-[0.18em] shrink-0">
-                Solicitações
+                Clientes
               </p>
               <div className="h-px flex-1 bg-zinc-800/70" />
               <div className="text-[10px] uppercase tracking-[0.18em] font-black text-zinc-500 shrink-0">
-                {filteredRequests.length} resultado(s)
+                {filteredClientGroups.length} cliente(s)
               </div>
             </div>
           </div>
 
-          <div className="hidden xl:grid xl:grid-cols-[1.1fr_1fr_180px_160px_420px] gap-4 px-6 py-3 border-b border-zinc-800/60 text-[10px] uppercase tracking-[0.2em] font-black text-zinc-500">
+          <div className="hidden xl:grid xl:grid-cols-[1.3fr_1fr_160px_170px_200px] gap-4 px-6 py-3 border-b border-zinc-800/60 text-[10px] uppercase tracking-[0.2em] font-black text-zinc-500">
             <span>Cliente</span>
-            <span>Projeto</span>
-            <span>Status</span>
+            <span>Último projeto</span>
+            <span>Solicitações</span>
             <span>Atualização</span>
-            <span>Ações</span>
+            <span>Status</span>
           </div>
 
-          {filteredRequests.length === 0 ? (
-            <div className="p-8 text-zinc-500 text-sm">Nenhum resultado encontrado.</div>
+          {filteredClientGroups.length === 0 ? (
+            <div className="p-10 text-center">
+              <p className="text-zinc-500 text-sm">Nenhum cliente encontrado.</p>
+            </div>
           ) : (
             <div className="divide-y divide-zinc-800/60">
-              {filteredRequests.map((request) => {
-                const isSelected = selectedRequestId === request.id;
-                const historyItems = getHistoryForRequest(request);
-                const historyCount = historyItems.length;
-                const isProcessingThisRow = processingRequestId === request.id;
-
-                return (
-                  <div key={request.id} className="relative">
-                    <div
-                      onClick={() => toggleRow(request)}
-                      className={cn(
-                        'relative px-6 py-4 transition-all cursor-pointer',
-                        isSelected ? 'bg-zinc-900/55' : 'hover:bg-zinc-900/35'
-                      )}
-                    >
-                      {isSelected && (
-                        <div className="absolute left-0 right-0 top-0 h-px bg-[#ff5351]/25" />
-                      )}
-
-                      <div className="grid grid-cols-1 xl:grid-cols-[1.1fr_1fr_180px_160px_420px] gap-4 items-center">
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-2xl border border-zinc-800 bg-zinc-900/80 flex items-center justify-center shrink-0">
-                              <UserRound className="w-4 h-4 text-zinc-400" />
-                            </div>
-                            <div className="min-w-0">
-                              <p className="text-white font-black text-sm truncate">
-                                {request.clientName}
-                              </p>
-                              <p className="text-zinc-500 text-xs truncate">
-                                {request.clientEmail}
-                              </p>
-                            </div>
-                          </div>
+              {filteredClientGroups.map((group) => (
+                <button
+                  key={group.key}
+                  type="button"
+                  onClick={() => setSelectedClientKey(group.key)}
+                  className={cn(
+                    'w-full text-left px-6 py-4 transition-all',
+                    group.hasPending
+                      ? 'bg-[#ff5351]/[0.05] hover:bg-[#ff5351]/[0.08]'
+                      : 'hover:bg-zinc-900/35'
+                  )}
+                >
+                  <div className="grid grid-cols-1 xl:grid-cols-[1.3fr_1fr_160px_170px_200px] gap-4 items-center">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-3">
+                        <div
+                          className={cn(
+                            'w-10 h-10 rounded-2xl border flex items-center justify-center shrink-0',
+                            group.hasPending
+                              ? 'border-[#ff5351]/20 bg-[#ff5351]/10'
+                              : 'border-zinc-800 bg-zinc-900/80'
+                          )}
+                        >
+                          {group.hasPending ? (
+                            <BellRing className="w-4 h-4 text-[#ff5351]" />
+                          ) : (
+                            <UserRound className="w-4 h-4 text-zinc-400" />
+                          )}
                         </div>
 
                         <div className="min-w-0">
                           <p className="text-white font-black text-sm truncate">
+                            {group.clientName}
+                          </p>
+                          <p className="text-zinc-500 text-xs truncate">
+                            {group.clientEmail}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="min-w-0">
+                      <p className="text-white font-black text-sm truncate">
+                        {group.latestRequest.projectTitle}
+                      </p>
+                      <p className="text-zinc-500 text-xs mt-1">
+                        Última solicitação registrada
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-white text-sm font-black">
+                        {group.totalRequests} solicitação(ões)
+                      </p>
+                      <p className="text-zinc-500 text-[11px] mt-1">
+                        {group.pendingCount} pendente(s)
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-white text-sm font-bold">
+                        {formatDateTime(group.latestRequest.updatedAt || group.latestRequest.createdAt)}
+                      </p>
+                      <p className="text-zinc-500 text-[11px] mt-1">Última movimentação</p>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      {group.hasPending ? (
+                        <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-[#ff5351]/20 bg-[#ff5351]/10 text-[#ff8f8e] text-[10px] uppercase font-black tracking-widest">
+                          <BellRing className="w-3.5 h-3.5" />
+                          Pendência
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-zinc-700 bg-zinc-900 text-zinc-300 text-[10px] uppercase font-black tracking-widest">
+                          Sem pendência
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </section>
+      ) : (
+        <section className="space-y-5">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            <button
+              type="button"
+              onClick={() => setSelectedClientKey(null)}
+              className="inline-flex items-center gap-2 text-zinc-400 hover:text-white transition-colors text-sm font-bold"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Voltar para clientes
+            </button>
+
+            {selectedClient.hasPending && (
+              <div className="inline-flex items-center gap-2 px-3 py-2 rounded-full border border-[#ff5351]/20 bg-[#ff5351]/10 text-[#ff8f8e] text-[10px] uppercase font-black tracking-widest">
+                <BellRing className="w-3.5 h-3.5" />
+                Cliente com pendência
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-[32px] border border-zinc-800 bg-[#101010] overflow-hidden">
+            <div className="px-6 py-6 border-b border-zinc-800/60">
+              <div className="flex flex-col xl:flex-row xl:items-start justify-between gap-5">
+                <div>
+                  <p className="text-[10px] uppercase tracking-[0.25em] text-[#ff5351] font-black mb-2">
+                    Dados do cliente
+                  </p>
+                  <h2 className="text-2xl md:text-3xl font-black text-white uppercase tracking-tight">
+                    {selectedClient.clientName}
+                  </h2>
+                  <p className="text-zinc-500 text-sm mt-2">{selectedClient.clientEmail}</p>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-zinc-800 bg-zinc-900 text-zinc-300 text-[10px] uppercase font-black tracking-widest">
+                    {selectedClient.totalRequests} solicitação(ões)
+                  </span>
+                  <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-amber-500/15 bg-amber-500/5 text-amber-300 text-[10px] uppercase font-black tracking-widest">
+                    {selectedClient.pendingCount} aguardando
+                  </span>
+                  <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-cyan-500/15 bg-cyan-500/5 text-cyan-300 text-[10px] uppercase font-black tracking-widest">
+                    {selectedClient.analyzingCount} em análise
+                  </span>
+                  <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-emerald-500/15 bg-emerald-500/5 text-emerald-300 text-[10px] uppercase font-black tracking-widest">
+                    {selectedClient.approvedCount} aprovadas
+                  </span>
+                  <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-red-500/15 bg-red-500/5 text-red-300 text-[10px] uppercase font-black tracking-widest">
+                    {selectedClient.rejectedCount} recusadas
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="px-6 py-4 border-b border-zinc-800/60">
+              <div className="flex items-center gap-3">
+                <p className="text-white text-sm font-black uppercase tracking-[0.18em] shrink-0">
+                  Histórico de solicitações
+                </p>
+                <div className="h-px flex-1 bg-zinc-800/70" />
+                <div className="text-[10px] uppercase tracking-[0.18em] font-black text-zinc-500 shrink-0">
+                  {selectedClient.requests.length} registro(s)
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-4">
+              {selectedClient.requests.map((request) => {
+                const isProcessingThisRow = processingRequestId === request.id;
+
+                return (
+                  <div
+                    key={request.id}
+                    className={cn(
+                      'rounded-[28px] border p-5 space-y-5',
+                      request.status === 'Aguardando pagamento'
+                        ? 'border-[#ff5351]/20 bg-[#ff5351]/[0.04]'
+                        : 'border-zinc-800 bg-zinc-900/35'
+                    )}
+                  >
+                    <div className="flex flex-col xl:flex-row xl:items-start justify-between gap-4">
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2 mb-2">
+                          <h3 className="text-white text-lg font-black uppercase tracking-tight">
                             {request.projectTitle}
-                          </p>
-                          <div className="flex items-center gap-2 mt-1">
-                            <span className="text-zinc-500 text-xs">
-                              {request.creditsRequested} crédito(s)
+                          </h3>
+
+                          {request.status === 'Aguardando pagamento' && (
+                            <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-[#ff5351]/20 bg-[#ff5351]/10 text-[#ff8f8e] text-[10px] uppercase font-black tracking-widest">
+                              <BellRing className="w-3.5 h-3.5" />
+                              Pendente
                             </span>
-                            <span className="text-zinc-700">•</span>
-                            <span className="text-[#ff5351] text-xs font-bold">
-                              {formatCurrency(request.totalAmount)}
-                            </span>
-                          </div>
+                          )}
                         </div>
 
-                        <div>
-                          <span
-                            className={cn(
-                              'inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-[10px] uppercase font-black tracking-widest',
-                              getStatusClass(request.status)
-                            )}
-                          >
-                            {getStatusIcon(request.status)}
-                            {request.status}
-                          </span>
-                        </div>
+                        <p className="text-zinc-500 text-sm">
+                          {request.creditsRequested} crédito(s) • {formatCurrency(request.totalAmount)}
+                        </p>
+                      </div>
 
-                        <div>
-                          <p className="text-white text-sm font-bold">
-                            {formatDateTime(request.updatedAt || request.createdAt)}
+                      <div className="flex flex-wrap gap-2">
+                        <span
+                          className={cn(
+                            'inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-[10px] uppercase font-black tracking-widest',
+                            getStatusClass(request.status)
+                          )}
+                        >
+                          {getStatusIcon(request.status)}
+                          {request.status}
+                        </span>
+
+                        <button
+                          type="button"
+                          onClick={() => openExternalApproval(request)}
+                          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-zinc-700 text-zinc-300 hover:text-white hover:border-zinc-600 transition-all text-[10px] uppercase font-black tracking-widest"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                          Abrir aprovação
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
+                      <div className="rounded-2xl border border-zinc-800 bg-[#111111] px-4 py-3">
+                        <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">
+                          Créditos
+                        </p>
+                        <p className="text-white font-black">{request.creditsRequested}</p>
+                      </div>
+
+                      <div className="rounded-2xl border border-zinc-800 bg-[#111111] px-4 py-3">
+                        <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">
+                          Valor
+                        </p>
+                        <p className="text-[#ff5351] font-black">
+                          {formatCurrency(request.totalAmount)}
+                        </p>
+                      </div>
+
+                      <div className="rounded-2xl border border-zinc-800 bg-[#111111] px-4 py-3">
+                        <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">
+                          Criado em
+                        </p>
+                        <p className="text-white text-sm font-bold">
+                          {formatDateTime(request.createdAt)}
+                        </p>
+                      </div>
+
+                      <div className="rounded-2xl border border-zinc-800 bg-[#111111] px-4 py-3">
+                        <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">
+                          Atualizado em
+                        </p>
+                        <p className="text-white text-sm font-bold">
+                          {formatDateTime(request.updatedAt || request.createdAt)}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                      <div className="space-y-4">
+                        <div className="rounded-2xl border border-zinc-800 bg-[#111111] px-4 py-3">
+                          <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">
+                            Chave Pix
                           </p>
-                          <p className="text-zinc-500 text-[11px] mt-1">Última movimentação</p>
+                          <p className="text-white font-bold break-all">
+                            {request.pixKey || 'Não informado'}
+                          </p>
                         </div>
 
-                        <div className="flex flex-wrap gap-2" onClick={(e) => e.stopPropagation()}>
+                        <div className="rounded-2xl border border-zinc-800 bg-[#111111] px-4 py-3">
+                          <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">
+                            Observação do cliente
+                          </p>
+                          <p className="text-zinc-300 whitespace-pre-wrap text-sm">
+                            {request.clientNote || 'Sem observação.'}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="space-y-4">
+                        <div className="rounded-2xl border border-zinc-800 bg-[#111111] px-4 py-3">
+                          <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">
+                            Observação interna
+                          </p>
+                          <textarea
+                            value={reviewerNotes[request.id] || ''}
+                            onChange={(e) =>
+                              setReviewerNotes((current) => ({
+                                ...current,
+                                [request.id]: e.target.value
+                              }))
+                            }
+                            rows={4}
+                            className="w-full bg-transparent text-white resize-none outline-none text-sm"
+                            placeholder="Escreva aqui uma observação interna sobre a solicitação."
+                          />
+                        </div>
+
+                        <div className="flex flex-wrap gap-2">
+                          {request.status !== 'Aprovado' && request.status !== 'Recusado' && (
+                            <button
+                              type="button"
+                              onClick={() => handleAnalyze(request)}
+                              disabled={processingAction !== null}
+                              className="h-10 px-3 rounded-xl border border-cyan-500/20 bg-cyan-500/10 text-cyan-300 font-black text-[10px] uppercase tracking-[0.16em] hover:bg-cyan-500/15 transition-all disabled:opacity-60 inline-flex items-center gap-2"
+                            >
+                              {isProcessingThisRow && processingAction === 'analyze' ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <Clock3 className="w-3.5 h-3.5" />
+                              )}
+                              Marcar em análise
+                            </button>
+                          )}
+
                           {!isFinalStatus(request.status) && (
                             <button
                               type="button"
@@ -559,205 +789,37 @@ export default function Credits() {
                             </button>
                           )}
 
-                          <button
-                            type="button"
-                            onClick={() => openExternalApproval(request)}
-                            className="h-10 px-3 rounded-xl border border-zinc-700 bg-zinc-900 text-zinc-300 font-black text-[10px] uppercase tracking-[0.16em] hover:text-white hover:border-zinc-600 transition-all inline-flex items-center gap-2"
-                          >
-                            <ExternalLink className="w-3.5 h-3.5" />
-                            Aprovação
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => toggleRow(request)}
-                            className="h-10 px-3 rounded-xl border border-[#ff5351]/20 bg-[#ff5351]/10 text-[#ff9e9d] font-black text-[10px] uppercase tracking-[0.16em] hover:bg-[#ff5351]/15 transition-all inline-flex items-center gap-2"
-                          >
-                            <History className="w-3.5 h-3.5" />
-                            Histórico
-                            <span className="px-1.5 py-0.5 rounded-full bg-black/30 text-white text-[10px]">
-                              {historyCount}
-                            </span>
-                          </button>
+                          {request.status !== 'Aprovado' && (
+                            <button
+                              type="button"
+                              onClick={() => handleReject(request)}
+                              disabled={processingAction !== null}
+                              className="h-10 px-3 rounded-xl border border-red-500/20 bg-red-500/10 text-red-300 font-black text-[10px] uppercase tracking-[0.16em] hover:bg-red-500/15 transition-all disabled:opacity-60 inline-flex items-center gap-2"
+                            >
+                              {isProcessingThisRow && processingAction === 'reject' ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <XCircle className="w-3.5 h-3.5" />
+                              )}
+                              Recusar
+                            </button>
+                          )}
                         </div>
                       </div>
                     </div>
 
-                    {isSelected && (
-                      <div className="px-6 pb-5">
-                        <div className="rounded-[28px] border border-zinc-800 bg-zinc-900/35 p-5 space-y-5">
-                          <div className="grid grid-cols-1 xl:grid-cols-[1.15fr_0.85fr] gap-5">
-                            <div className="space-y-4">
-                              <div className="grid grid-cols-2 gap-3">
-                                <div className="rounded-2xl border border-zinc-800 bg-[#111111] px-4 py-3">
-                                  <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">
-                                    Cliente
-                                  </p>
-                                  <p className="text-white font-bold">{request.clientName}</p>
-                                </div>
-
-                                <div className="rounded-2xl border border-zinc-800 bg-[#111111] px-4 py-3">
-                                  <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">
-                                    E-mail
-                                  </p>
-                                  <p className="text-white font-bold break-all">
-                                    {request.clientEmail}
-                                  </p>
-                                </div>
-
-                                <div className="rounded-2xl border border-zinc-800 bg-[#111111] px-4 py-3">
-                                  <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">
-                                    Projeto
-                                  </p>
-                                  <p className="text-white font-bold">{request.projectTitle}</p>
-                                </div>
-
-                                <div className="rounded-2xl border border-zinc-800 bg-[#111111] px-4 py-3">
-                                  <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">
-                                    Chave Pix
-                                  </p>
-                                  <p className="text-white font-bold break-all">
-                                    {request.pixKey || 'Não informado'}
-                                  </p>
-                                </div>
-
-                                <div className="rounded-2xl border border-zinc-800 bg-[#111111] px-4 py-3 col-span-2">
-                                  <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">
-                                    Observação do cliente
-                                  </p>
-                                  <p className="text-zinc-300 font-medium whitespace-pre-wrap text-sm">
-                                    {request.clientNote || 'Sem observação.'}
-                                  </p>
-                                </div>
-                              </div>
-
-                              <div className="rounded-2xl border border-zinc-800 bg-[#111111] px-4 py-3">
-                                <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">
-                                  Observação interna
-                                </p>
-                                <textarea
-                                  value={reviewerNote}
-                                  onChange={(e) => setReviewerNote(e.target.value)}
-                                  rows={4}
-                                  className="w-full bg-transparent text-white resize-none outline-none text-sm"
-                                  placeholder="Escreva aqui uma observação interna sobre a solicitação."
-                                />
-                              </div>
-
-                              <div className="flex flex-wrap gap-2">
-                                <button
-                                  type="button"
-                                  onClick={() => handleAnalyze(request)}
-                                  disabled={processingAction !== null}
-                                  className="h-10 px-3 rounded-xl border border-cyan-500/20 bg-cyan-500/10 text-cyan-300 font-black text-[10px] uppercase tracking-[0.16em] hover:bg-cyan-500/15 transition-all disabled:opacity-60 inline-flex items-center gap-2"
-                                >
-                                  {isProcessingThisRow && processingAction === 'analyze' ? (
-                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                  ) : (
-                                    <Clock3 className="w-3.5 h-3.5" />
-                                  )}
-                                  Marcar em análise
-                                </button>
-
-                                <button
-                                  type="button"
-                                  onClick={() => handleReject(request)}
-                                  disabled={processingAction !== null}
-                                  className="h-10 px-3 rounded-xl border border-red-500/20 bg-red-500/10 text-red-300 font-black text-[10px] uppercase tracking-[0.16em] hover:bg-red-500/15 transition-all disabled:opacity-60 inline-flex items-center gap-2"
-                                >
-                                  {isProcessingThisRow && processingAction === 'reject' ? (
-                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                  ) : (
-                                    <XCircle className="w-3.5 h-3.5" />
-                                  )}
-                                  Recusar solicitação
-                                </button>
-                              </div>
-
-                              <div className="rounded-2xl border border-zinc-800 bg-[#111111] px-4 py-4 flex items-start gap-3">
-                                <ShieldAlert className="w-5 h-5 text-amber-300 mt-0.5 shrink-0" />
-                                <p className="text-zinc-400 text-sm leading-relaxed">
-                                  Quando a validação ainda não vier pela API do Pix, use o botão
-                                  de aprovação manual. A aprovação já adiciona os créditos no
-                                  projeto automaticamente.
-                                </p>
-                              </div>
-                            </div>
-
-                            <div className="space-y-4">
-                              <div className="flex items-center justify-between gap-3">
-                                <div>
-                                  <h3 className="text-white text-base font-black uppercase">
-                                    Histórico do cliente
-                                  </h3>
-                                  <p className="text-zinc-500 text-sm mt-1">
-                                    Solicitações desse mesmo cliente e projeto.
-                                  </p>
-                                </div>
-
-                                <span className="px-3 py-1.5 rounded-full bg-[#ff5351]/10 border border-[#ff5351]/20 text-[#ff9e9d] text-[10px] uppercase tracking-widest font-black">
-                                  {historyCount} registro(s)
-                                </span>
-                              </div>
-
-                              {historyItems.length > 1 ? (
-                                <div className="space-y-3">
-                                  {historyItems.map((item) => (
-                                    <button
-                                      key={item.id}
-                                      type="button"
-                                      onClick={() => toggleRow(item)}
-                                      className={cn(
-                                        'w-full text-left rounded-2xl border px-4 py-4 transition-all',
-                                        item.id === request.id
-                                          ? 'border-[#ff5351]/20 bg-[#ff5351]/5'
-                                          : 'border-zinc-800 bg-[#111111] hover:border-zinc-700'
-                                      )}
-                                    >
-                                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                                        <div>
-                                          <p className="text-white font-black">
-                                            {item.projectTitle}
-                                          </p>
-                                          <p className="text-zinc-500 text-sm mt-1">
-                                            {formatDateTime(item.createdAt)} •{' '}
-                                            {formatCurrency(item.totalAmount)}
-                                          </p>
-                                        </div>
-
-                                        <div className="flex items-center gap-2">
-                                          <span
-                                            className={cn(
-                                              'inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-[10px] uppercase font-black tracking-widest',
-                                              getStatusClass(item.status)
-                                            )}
-                                          >
-                                            {getStatusIcon(item.status)}
-                                            {item.status}
-                                          </span>
-                                        </div>
-                                      </div>
-                                    </button>
-                                  ))}
-                                </div>
-                              ) : (
-                                <div className="rounded-2xl border border-dashed border-zinc-800 bg-[#111111] p-6 text-center">
-                                  <p className="text-zinc-400 text-sm">
-                                    Ainda não há outra solicitação para esse mesmo cliente e
-                                    projeto.
-                                  </p>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
+                    <div className="rounded-2xl border border-zinc-800 bg-[#111111] px-4 py-4 flex items-start gap-3">
+                      <ShieldAlert className="w-5 h-5 text-amber-300 mt-0.5 shrink-0" />
+                      <p className="text-zinc-400 text-sm leading-relaxed">
+                        Quando a validação ainda não vier pela API do Pix, use a aprovação
+                        manual. A aprovação já adiciona os créditos no projeto automaticamente.
+                      </p>
+                    </div>
                   </div>
                 );
               })}
             </div>
-          )}
+          </div>
         </section>
       )}
     </div>
