@@ -9,7 +9,12 @@ import {
   Loader2,
   Search,
   ShieldAlert,
-  XCircle
+  XCircle,
+  BadgeDollarSign,
+  CalendarClock,
+  FolderKanban,
+  Mail,
+  User2
 } from 'lucide-react';
 import {
   collection,
@@ -136,6 +141,12 @@ export default function Credits() {
     };
   }, [requests]);
 
+  const totalApprovedValue = useMemo(() => {
+    return requests
+      .filter((item) => item.status === 'Aprovado')
+      .reduce((acc, item) => acc + Number(item.totalAmount || 0), 0);
+  }, [requests]);
+
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', {
       style: 'currency',
@@ -162,6 +173,21 @@ export default function Credits() {
         return 'bg-red-500/10 text-red-300 border-red-500/20';
       default:
         return 'bg-zinc-800 text-zinc-300 border-zinc-700';
+    }
+  };
+
+  const getStatusDot = (status: CreditRequestStatus) => {
+    switch (status) {
+      case 'Aguardando pagamento':
+        return 'bg-amber-400';
+      case 'Em análise':
+        return 'bg-cyan-400';
+      case 'Aprovado':
+        return 'bg-emerald-400';
+      case 'Recusado':
+        return 'bg-red-400';
+      default:
+        return 'bg-zinc-500';
     }
   };
 
@@ -299,11 +325,11 @@ export default function Credits() {
             Solicitações de Créditos
           </h1>
           <p className="text-zinc-500 text-base md:text-lg mt-3 max-w-3xl">
-            Acompanhe pedidos, marque em análise e aprove ou recuse a compra de créditos.
+            Central de análise para acompanhar, validar e concluir pedidos de créditos com mais clareza.
           </p>
         </div>
 
-        <div className="relative w-full xl:w-[320px]">
+        <div className="relative w-full xl:w-[340px]">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
           <input
             type="text"
@@ -315,42 +341,58 @@ export default function Credits() {
         </div>
       </header>
 
-      <section className="grid grid-cols-2 xl:grid-cols-5 gap-4">
-        <div className="rounded-2xl border border-zinc-800 bg-[#151515] p-4">
+      <section className="grid grid-cols-2 xl:grid-cols-6 gap-4">
+        <div className="rounded-3xl border border-zinc-800 bg-[#151515] p-4 md:p-5">
           <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">Total</p>
-          <p className="text-white text-2xl font-black">{summary.total}</p>
+          <p className="text-white text-2xl md:text-3xl font-black">{summary.total}</p>
         </div>
-        <div className="rounded-2xl border border-zinc-800 bg-[#151515] p-4">
+
+        <div className="rounded-3xl border border-zinc-800 bg-[#151515] p-4 md:p-5">
           <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">Aguardando</p>
-          <p className="text-amber-300 text-2xl font-black">{summary.pending}</p>
+          <p className="text-amber-300 text-2xl md:text-3xl font-black">{summary.pending}</p>
         </div>
-        <div className="rounded-2xl border border-zinc-800 bg-[#151515] p-4">
+
+        <div className="rounded-3xl border border-zinc-800 bg-[#151515] p-4 md:p-5">
           <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">Em análise</p>
-          <p className="text-cyan-300 text-2xl font-black">{summary.analyzing}</p>
+          <p className="text-cyan-300 text-2xl md:text-3xl font-black">{summary.analyzing}</p>
         </div>
-        <div className="rounded-2xl border border-zinc-800 bg-[#151515] p-4">
+
+        <div className="rounded-3xl border border-zinc-800 bg-[#151515] p-4 md:p-5">
           <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">Aprovadas</p>
-          <p className="text-emerald-300 text-2xl font-black">{summary.approved}</p>
+          <p className="text-emerald-300 text-2xl md:text-3xl font-black">{summary.approved}</p>
         </div>
-        <div className="rounded-2xl border border-zinc-800 bg-[#151515] p-4">
+
+        <div className="rounded-3xl border border-zinc-800 bg-[#151515] p-4 md:p-5">
           <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">Recusadas</p>
-          <p className="text-red-300 text-2xl font-black">{summary.rejected}</p>
+          <p className="text-red-300 text-2xl md:text-3xl font-black">{summary.rejected}</p>
+        </div>
+
+        <div className="rounded-3xl border border-zinc-800 bg-[#151515] p-4 md:p-5">
+          <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">Valor aprovado</p>
+          <p className="text-[#ff5351] text-xl md:text-2xl font-black">{formatCurrency(totalApprovedValue)}</p>
         </div>
       </section>
 
       {requests.length === 0 ? (
-        <div className="rounded-3xl border border-dashed border-zinc-800 bg-zinc-900/20 py-20 px-6 text-center">
-          <CreditCard className="w-14 h-14 text-zinc-700 mx-auto mb-5" />
-          <p className="text-zinc-400 font-medium">Nenhuma solicitação de crédito encontrada.</p>
+        <div className="rounded-[2rem] border border-dashed border-zinc-800 bg-zinc-900/20 py-24 px-6 text-center">
+          <CreditCard className="w-16 h-16 text-zinc-700 mx-auto mb-6" />
+          <p className="text-zinc-300 font-black uppercase tracking-wider text-sm">Nenhuma solicitação encontrada</p>
+          <p className="text-zinc-500 text-sm mt-2">Assim que os clientes pedirem créditos, eles aparecerão aqui.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 xl:grid-cols-[420px_1fr] gap-6">
-          <section className="rounded-3xl border border-zinc-800 bg-[#141414] overflow-hidden">
-            <div className="px-5 py-5 border-b border-zinc-800">
-              <h2 className="text-white text-xl font-black uppercase">Lista de solicitações</h2>
+          <section className="rounded-[2rem] border border-zinc-800 bg-[#141414] overflow-hidden">
+            <div className="px-5 py-5 border-b border-zinc-800 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[10px] uppercase tracking-[0.25em] text-zinc-500 font-black mb-2">Fila de análise</p>
+                <h2 className="text-white text-xl font-black uppercase">Solicitações</h2>
+              </div>
+              <div className="text-zinc-500 text-[10px] uppercase tracking-widest font-black">
+                {filteredRequests.length} itens
+              </div>
             </div>
 
-            <div className="max-h-[70vh] overflow-y-auto">
+            <div className="max-h-[72vh] overflow-y-auto">
               {filteredRequests.length === 0 ? (
                 <div className="p-6 text-zinc-500 text-sm">Nenhum resultado encontrado.</div>
               ) : (
@@ -361,21 +403,36 @@ export default function Credits() {
                     onClick={() => setSelectedRequestId(request.id)}
                     className={cn(
                       'w-full text-left px-5 py-4 border-b border-zinc-800/70 transition-all',
-                      selectedRequest?.id === request.id ? 'bg-zinc-900/80' : 'hover:bg-zinc-900/40'
+                      selectedRequest?.id === request.id
+                        ? 'bg-zinc-900/90'
+                        : 'hover:bg-zinc-900/40'
                     )}
                   >
                     <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="text-white font-black uppercase text-sm truncate">{request.projectTitle}</p>
-                        <p className="text-zinc-400 text-sm truncate mt-1">{request.clientName}</p>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className={cn('w-2 h-2 rounded-full', getStatusDot(request.status))} />
+                          <p className="text-white font-black uppercase text-sm truncate">
+                            {request.projectTitle}
+                          </p>
+                        </div>
+
+                        <p className="text-zinc-400 text-sm truncate">{request.clientName}</p>
                         <p className="text-zinc-600 text-xs mt-2">{formatDateTime(request.createdAt)}</p>
                       </div>
 
                       <div className="text-right shrink-0">
-                        <span className={cn('inline-flex px-3 py-1 rounded-full border text-[10px] uppercase font-black tracking-widest', getStatusClass(request.status))}>
+                        <span
+                          className={cn(
+                            'inline-flex px-3 py-1 rounded-full border text-[10px] uppercase font-black tracking-widest',
+                            getStatusClass(request.status)
+                          )}
+                        >
                           {request.status}
                         </span>
-                        <p className="text-[#ff5351] font-black text-sm mt-3">{formatCurrency(request.totalAmount)}</p>
+                        <p className="text-[#ff5351] font-black text-sm mt-3">
+                          {formatCurrency(request.totalAmount)}
+                        </p>
                       </div>
                     </div>
                   </button>
@@ -384,22 +441,29 @@ export default function Credits() {
             </div>
           </section>
 
-          <section className="rounded-3xl border border-zinc-800 bg-[#141414] overflow-hidden">
+          <section className="rounded-[2rem] border border-zinc-800 bg-[#141414] overflow-hidden">
             {selectedRequest ? (
               <>
-                <div className="px-6 py-6 border-b border-zinc-800 flex flex-col lg:flex-row lg:items-start justify-between gap-4">
+                <div className="px-6 py-6 border-b border-zinc-800 flex flex-col lg:flex-row lg:items-start justify-between gap-5">
                   <div>
                     <p className="text-[10px] uppercase tracking-[0.25em] text-[#ff5351] font-black mb-2">
                       Solicitação selecionada
                     </p>
-                    <h2 className="text-white text-3xl font-black uppercase tracking-tight">
+                    <h2 className="text-white text-3xl md:text-4xl font-black uppercase tracking-tight">
                       {selectedRequest.projectTitle}
                     </h2>
-                    <p className="text-zinc-500 text-sm mt-2">{selectedRequest.clientName} • {selectedRequest.clientEmail}</p>
+                    <p className="text-zinc-500 text-sm mt-3">
+                      Pedido criado em {formatDateTime(selectedRequest.createdAt)}
+                    </p>
                   </div>
 
                   <div className="flex flex-wrap gap-2">
-                    <span className={cn('inline-flex px-4 py-2 rounded-full border text-[10px] uppercase font-black tracking-widest', getStatusClass(selectedRequest.status))}>
+                    <span
+                      className={cn(
+                        'inline-flex px-4 py-2 rounded-full border text-[10px] uppercase font-black tracking-widest',
+                        getStatusClass(selectedRequest.status)
+                      )}
+                    >
                       {selectedRequest.status}
                     </span>
 
@@ -410,74 +474,124 @@ export default function Credits() {
                       className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-zinc-700 text-zinc-300 hover:text-white hover:border-zinc-600 transition-all text-[10px] uppercase font-black tracking-widest"
                     >
                       <ExternalLink className="w-3.5 h-3.5" />
-                      Abrir tela externa
+                      Abrir externa
                     </a>
                   </div>
                 </div>
 
                 <div className="p-6 space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                    <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-4">
+                  <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+                    <div className="rounded-3xl border border-zinc-800 bg-zinc-900/60 p-4 md:p-5">
                       <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">Créditos</p>
                       <p className="text-white text-2xl font-black">{selectedRequest.creditsRequested}</p>
                     </div>
 
-                    <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-4">
+                    <div className="rounded-3xl border border-zinc-800 bg-zinc-900/60 p-4 md:p-5">
                       <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">Valor total</p>
                       <p className="text-[#ff5351] text-2xl font-black">{formatCurrency(selectedRequest.totalAmount)}</p>
                     </div>
 
-                    <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-4">
-                      <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">Criado em</p>
-                      <p className="text-white text-sm font-black">{formatDateTime(selectedRequest.createdAt)}</p>
+                    <div className="rounded-3xl border border-zinc-800 bg-zinc-900/60 p-4 md:p-5">
+                      <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">Valor unitário</p>
+                      <p className="text-white text-xl font-black">
+                        {selectedRequest.unitPrice ? formatCurrency(selectedRequest.unitPrice) : 'Não definido'}
+                      </p>
+                    </div>
+
+                    <div className="rounded-3xl border border-zinc-800 bg-zinc-900/60 p-4 md:p-5">
+                      <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">Atualizado</p>
+                      <p className="text-white text-sm font-black">{formatDateTime(selectedRequest.updatedAt)}</p>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
-                    <div className="rounded-3xl border border-zinc-800 bg-zinc-900/50 p-5 space-y-4">
-                      <h3 className="text-white text-lg font-black uppercase">Dados do pedido</h3>
+                  <div className="grid grid-cols-1 xl:grid-cols-[0.95fr_1.05fr] gap-5">
+                    <div className="rounded-[2rem] border border-zinc-800 bg-zinc-900/50 p-5 space-y-4">
+                      <div>
+                        <p className="text-[10px] uppercase tracking-[0.25em] text-zinc-500 font-black mb-2">
+                          Resumo do pedido
+                        </p>
+                        <h3 className="text-white text-lg font-black uppercase">Informações</h3>
+                      </div>
 
-                      <div className="space-y-3 text-sm">
-                        <div className="rounded-2xl border border-zinc-800 bg-[#141414] px-4 py-3">
-                          <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">Projeto</p>
-                          <p className="text-white font-bold">{selectedRequest.projectTitle}</p>
+                      <div className="space-y-3">
+                        <div className="rounded-2xl border border-zinc-800 bg-[#141414] px-4 py-3 flex items-start gap-3">
+                          <FolderKanban className="w-4 h-4 text-[#ff5351] mt-1 shrink-0" />
+                          <div>
+                            <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">Projeto</p>
+                            <p className="text-white font-bold">{selectedRequest.projectTitle}</p>
+                          </div>
                         </div>
 
-                        <div className="rounded-2xl border border-zinc-800 bg-[#141414] px-4 py-3">
-                          <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">Cliente</p>
-                          <p className="text-white font-bold">{selectedRequest.clientName}</p>
+                        <div className="rounded-2xl border border-zinc-800 bg-[#141414] px-4 py-3 flex items-start gap-3">
+                          <User2 className="w-4 h-4 text-[#ff5351] mt-1 shrink-0" />
+                          <div>
+                            <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">Cliente</p>
+                            <p className="text-white font-bold">{selectedRequest.clientName}</p>
+                          </div>
                         </div>
 
-                        <div className="rounded-2xl border border-zinc-800 bg-[#141414] px-4 py-3">
-                          <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">E-mail</p>
-                          <p className="text-white font-bold break-all">{selectedRequest.clientEmail}</p>
+                        <div className="rounded-2xl border border-zinc-800 bg-[#141414] px-4 py-3 flex items-start gap-3">
+                          <Mail className="w-4 h-4 text-[#ff5351] mt-1 shrink-0" />
+                          <div>
+                            <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">E-mail</p>
+                            <p className="text-white font-bold break-all">{selectedRequest.clientEmail}</p>
+                          </div>
                         </div>
 
-                        <div className="rounded-2xl border border-zinc-800 bg-[#141414] px-4 py-3">
-                          <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">Chave Pix</p>
-                          <p className="text-white font-bold break-all">{selectedRequest.pixKey || 'Não informado'}</p>
+                        <div className="rounded-2xl border border-zinc-800 bg-[#141414] px-4 py-3 flex items-start gap-3">
+                          <CreditCard className="w-4 h-4 text-[#ff5351] mt-1 shrink-0" />
+                          <div>
+                            <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">Chave Pix</p>
+                            <p className="text-white font-bold break-all">{selectedRequest.pixKey || 'Não informado'}</p>
+                          </div>
+                        </div>
+
+                        <div className="rounded-2xl border border-zinc-800 bg-[#141414] px-4 py-3 flex items-start gap-3">
+                          <BadgeDollarSign className="w-4 h-4 text-[#ff5351] mt-1 shrink-0" />
+                          <div>
+                            <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">Valor informado</p>
+                            <p className="text-white font-bold">{formatCurrency(selectedRequest.totalAmount)}</p>
+                          </div>
+                        </div>
+
+                        <div className="rounded-2xl border border-zinc-800 bg-[#141414] px-4 py-3 flex items-start gap-3">
+                          <CalendarClock className="w-4 h-4 text-[#ff5351] mt-1 shrink-0" />
+                          <div>
+                            <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">Datas importantes</p>
+                            <div className="space-y-1 text-sm text-zinc-300">
+                              <p>Criado: {formatDateTime(selectedRequest.createdAt)}</p>
+                              <p>Revisado: {formatDateTime(selectedRequest.reviewedAt)}</p>
+                              <p>Aprovado: {formatDateTime(selectedRequest.approvedAt)}</p>
+                              <p>Recusado: {formatDateTime(selectedRequest.rejectedAt)}</p>
+                            </div>
+                          </div>
                         </div>
 
                         <div className="rounded-2xl border border-zinc-800 bg-[#141414] px-4 py-3">
                           <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">Observação do cliente</p>
-                          <p className="text-zinc-300 font-medium whitespace-pre-wrap">
+                          <p className="text-zinc-300 font-medium whitespace-pre-wrap leading-relaxed">
                             {selectedRequest.clientNote || 'Sem observação.'}
                           </p>
                         </div>
                       </div>
                     </div>
 
-                    <div className="rounded-3xl border border-zinc-800 bg-zinc-900/50 p-5 space-y-4">
-                      <h3 className="text-white text-lg font-black uppercase">Ações</h3>
+                    <div className="rounded-[2rem] border border-zinc-800 bg-zinc-900/50 p-5 space-y-4">
+                      <div>
+                        <p className="text-[10px] uppercase tracking-[0.25em] text-zinc-500 font-black mb-2">
+                          Operação
+                        </p>
+                        <h3 className="text-white text-lg font-black uppercase">Ações da análise</h3>
+                      </div>
 
                       <div className="rounded-2xl border border-zinc-800 bg-[#141414] px-4 py-3">
                         <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">Observação interna</p>
                         <textarea
                           value={reviewerNote}
                           onChange={(e) => setReviewerNote(e.target.value)}
-                          rows={6}
-                          className="w-full bg-transparent text-white resize-none outline-none"
-                          placeholder="Escreva aqui uma observação interna sobre a solicitação."
+                          rows={8}
+                          className="w-full bg-transparent text-white resize-none outline-none leading-relaxed"
+                          placeholder="Escreva aqui a justificativa da análise, confirmação do banco ou qualquer observação interna."
                         />
                       </div>
 
@@ -513,10 +627,26 @@ export default function Credits() {
                         </button>
                       </div>
 
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div className="rounded-2xl border border-zinc-800 bg-[#141414] px-4 py-4">
+                          <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">Regra da aprovação</p>
+                          <p className="text-zinc-300 text-sm leading-relaxed">
+                            Ao aprovar, os créditos são adicionados automaticamente no projeto vinculado.
+                          </p>
+                        </div>
+
+                        <div className="rounded-2xl border border-zinc-800 bg-[#141414] px-4 py-4">
+                          <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">Uso sugerido</p>
+                          <p className="text-zinc-300 text-sm leading-relaxed">
+                            Marque em análise quando estiver conferindo o banco, depois aprove ou recuse conforme a confirmação.
+                          </p>
+                        </div>
+                      </div>
+
                       <div className="rounded-2xl border border-zinc-800 bg-[#141414] px-4 py-4 flex items-start gap-3">
                         <ShieldAlert className="w-5 h-5 text-amber-300 mt-0.5 shrink-0" />
                         <p className="text-zinc-400 text-sm leading-relaxed">
-                          Use essa tela para sua operação do dia a dia. A aprovação já adiciona os créditos no projeto automaticamente.
+                          Esta tela foi pensada para sua operação diária. Se quiser, no próximo passo eu também posso adaptar a visão do cliente para mostrar o status dessas solicitações.
                         </p>
                       </div>
                     </div>
