@@ -1,10 +1,10 @@
 import React from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
-import { 
-  LayoutDashboard, 
-  Library, 
-  Users, 
-  HelpCircle, 
+import {
+  LayoutDashboard,
+  Library,
+  Users,
+  HelpCircle,
   LogOut,
   Bell,
   Settings,
@@ -13,7 +13,8 @@ import {
   Image as ImageControl,
   Trash2,
   Save,
-  Package
+  Package,
+  CreditCard
 } from 'lucide-react';
 import { auth } from '@/src/lib/firebase';
 import { cn } from '@/src/lib/utils';
@@ -83,14 +84,15 @@ export default function AppLayout({ children }: AppLayoutProps) {
 
   const isAdmin = user?.email === 'boranovfilms@gmail.com';
 
-  const navItems = isAdmin ? [
-    { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
-    { icon: Library, label: 'Projetos', path: '/' },
-    { icon: Users, label: 'Clientes', path: '/clients' },
-    { icon: Package, label: 'Cadastro de Pacotes', path: '/packages' },
-  ] : [
-    { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
-  ];
+  const navItems = isAdmin
+    ? [
+        { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
+        { icon: CreditCard, label: 'Créditos', path: '/credits' },
+        { icon: Library, label: 'Projetos', path: '/' },
+        { icon: Users, label: 'Clientes', path: '/clients' },
+        { icon: Package, label: 'Cadastro de Pacotes', path: '/packages' }
+      ]
+    : [{ icon: LayoutDashboard, label: 'Dashboard', path: '/' }];
 
   return (
     <div className="min-h-screen bg-[#131313] text-[#e2e2e2] font-sans selection:bg-[#ff5351]/30 selection:text-white">
@@ -100,25 +102,43 @@ export default function AppLayout({ children }: AppLayoutProps) {
             <div className="w-2 h-2 rounded-full bg-[#ff5351] animate-pulse" />
             <span className="text-xl font-black tracking-tighter uppercase text-white">BORA SELECT</span>
           </div>
-          
+
           <nav className="hidden md:flex items-center gap-8">
             <NavLink
               to="/"
-              className={({ isActive }) => cn(
-                'text-sm font-semibold transition-all pb-1 border-b-2',
-                isActive ? 'text-white border-[#ff5351]' : 'text-zinc-500 border-transparent hover:text-zinc-300'
-              )}
+              className={({ isActive }) =>
+                cn(
+                  'text-sm font-semibold transition-all pb-1 border-b-2',
+                  isActive ? 'text-white border-[#ff5351]' : 'text-zinc-500 border-transparent hover:text-zinc-300'
+                )
+              }
             >
               Dashboard
             </NavLink>
 
             {isAdmin && (
               <NavLink
+                to="/credits"
+                className={({ isActive }) =>
+                  cn(
+                    'text-sm font-semibold transition-all pb-1 border-b-2',
+                    isActive ? 'text-white border-[#ff5351]' : 'text-zinc-500 border-transparent hover:text-zinc-300'
+                  )
+                }
+              >
+                Créditos
+              </NavLink>
+            )}
+
+            {isAdmin && (
+              <NavLink
                 to="/clients"
-                className={({ isActive }) => cn(
-                  'text-sm font-semibold transition-all pb-1 border-b-2',
-                  isActive ? 'text-white border-[#ff5351]' : 'text-zinc-500 border-transparent hover:text-zinc-300'
-                )}
+                className={({ isActive }) =>
+                  cn(
+                    'text-sm font-semibold transition-all pb-1 border-b-2',
+                    isActive ? 'text-white border-[#ff5351]' : 'text-zinc-500 border-transparent hover:text-zinc-300'
+                  )
+                }
               >
                 Clientes
               </NavLink>
@@ -127,10 +147,12 @@ export default function AppLayout({ children }: AppLayoutProps) {
             {isAdmin && (
               <NavLink
                 to="/packages"
-                className={({ isActive }) => cn(
-                  'text-sm font-semibold transition-all pb-1 border-b-2',
-                  isActive ? 'text-white border-[#ff5351]' : 'text-zinc-500 border-transparent hover:text-zinc-300'
-                )}
+                className={({ isActive }) =>
+                  cn(
+                    'text-sm font-semibold transition-all pb-1 border-b-2',
+                    isActive ? 'text-white border-[#ff5351]' : 'text-zinc-500 border-transparent hover:text-zinc-300'
+                  )
+                }
               >
                 Pacotes
               </NavLink>
@@ -144,7 +166,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
           </button>
 
           {isAdmin && (
-            <button 
+            <button
               onClick={() => setShowGlobalSettings(true)}
               className="text-zinc-400 hover:text-white transition-colors"
             >
@@ -163,25 +185,23 @@ export default function AppLayout({ children }: AppLayoutProps) {
                 <div className="p-2 bg-[#ff5351]/10 rounded-lg">
                   <Settings className="w-5 h-5 text-[#ff5351]" />
                 </div>
-                <h3 className="text-xl font-black text-white uppercase tracking-tighter">
-                  Configurações
-                </h3>
+                <h3 className="text-xl font-black text-white uppercase tracking-tighter">Configurações</h3>
               </div>
               <button onClick={() => setShowGlobalSettings(false)} className="p-2 hover:bg-zinc-800 rounded-full text-zinc-500 transition-all">
                 <X className="w-6 h-6" />
               </button>
             </header>
-            
+
             <div className="p-8 space-y-10">
               <div className="space-y-4">
                 <label className="text-[10px] uppercase font-black tracking-[0.2em] text-zinc-500 mb-4 block">
-                  MARCA D'ÁGUA GLOBAL (PNG)
+                  MARCA D&apos;ÁGUA GLOBAL (PNG)
                 </label>
                 <div className="flex flex-col items-center gap-6 p-10 border-2 border-dashed border-zinc-700/50 rounded-3xl bg-zinc-950/30 hover:border-[#ff5351] transition-all group">
                   {globalSettings?.watermarkUrl ? (
                     <div className="relative w-full aspect-video rounded-2xl overflow-hidden bg-black/50 flex items-center justify-center border border-zinc-800">
                       <img src={globalSettings.watermarkUrl} alt="Watermark Preview" className="max-w-[80%] max-h-[80%] object-contain" />
-                      <button 
+                      <button
                         onClick={() => setGlobalSettings(prev => ({ ...prev, watermarkUrl: '' }))}
                         className="absolute inset-0 bg-black/80 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all text-[#ff5351] font-black uppercase text-xs tracking-widest backdrop-blur-sm"
                       >
@@ -191,17 +211,16 @@ export default function AppLayout({ children }: AppLayoutProps) {
                     </div>
                   ) : (
                     <label className="flex flex-col items-center gap-6 cursor-pointer w-full">
-                      <input 
-                        type="file" 
-                        accept="image/png" 
-                        onChange={handleWatermarkUpload}
-                        className="hidden" 
-                      />
+                      <input type="file" accept="image/png" onChange={handleWatermarkUpload} className="hidden" />
                       <div className="w-20 h-20 rounded-full bg-zinc-900 flex items-center justify-center group-hover:bg-[#ff5351]/10 group-hover:text-[#ff5351] transition-all border border-zinc-800 shadow-xl">
-                        {uploadingWatermark ? <Loader2 className="w-10 h-10 animate-spin" /> : <ImageControl className="w-10 h-10 text-zinc-600 group-hover:text-[#ff5351]" />}
+                        {uploadingWatermark ? (
+                          <Loader2 className="w-10 h-10 animate-spin" />
+                        ) : (
+                          <ImageControl className="w-10 h-10 text-zinc-600 group-hover:text-[#ff5351]" />
+                        )}
                       </div>
                       <div className="text-center">
-                        <p className="text-white font-black uppercase tracking-tight mb-2">Upload de Marca d'água</p>
+                        <p className="text-white font-black uppercase tracking-tight mb-2">Upload de Marca d&apos;água</p>
                         <p className="text-xs text-zinc-500 leading-relaxed max-w-[200px] mx-auto">
                           Selecione um arquivo .PNG transparente para proteger seu catálogo.
                         </p>
@@ -213,13 +232,13 @@ export default function AppLayout({ children }: AppLayoutProps) {
             </div>
 
             <footer className="p-8 bg-zinc-900 border-t border-zinc-800 flex gap-4">
-              <button 
+              <button
                 onClick={() => setShowGlobalSettings(false)}
                 className="flex-1 px-4 py-4 text-xs font-black uppercase tracking-widest text-zinc-500 hover:text-white transition-all"
               >
                 Cancelar
               </button>
-              <button 
+              <button
                 onClick={handleSaveSettings}
                 disabled={savingSettings}
                 className="flex-1 px-4 py-4 bg-white text-black text-xs font-black uppercase tracking-widest rounded-2xl hover:bg-[#ff5351] hover:text-white transition-all flex items-center justify-center gap-2 shadow-2xl"
@@ -246,18 +265,10 @@ export default function AppLayout({ children }: AppLayoutProps) {
             </div>
             <div>
               <div className="text-sm font-bold text-white truncate max-w-[140px]">
-                {location.pathname.includes('/review/') ? (
-                  currentProjectName || 'Sessão de Cliente'
-                ) : (
-                  user?.displayName || 'Bora Select'
-                )}
+                {location.pathname.includes('/review/') ? currentProjectName || 'Sessão de Cliente' : user?.displayName || 'Bora Select'}
               </div>
               <div className="text-[10px] uppercase tracking-widest text-zinc-500">
-                {location.pathname.includes('/review/') ? (
-                  currentProjectEmail || 'Modo Visualização'
-                ) : (
-                  'Dashboard Admin'
-                )}
+                {location.pathname.includes('/review/') ? currentProjectEmail || 'Modo Visualização' : 'Dashboard Admin'}
               </div>
             </div>
           </div>
@@ -267,12 +278,12 @@ export default function AppLayout({ children }: AppLayoutProps) {
               <NavLink
                 key={item.label + item.path}
                 to={item.path}
-                className={({ isActive }) => cn(
-                  'flex items-center gap-3 px-4 py-3 rounded-lg transition-all text-sm font-medium',
-                  isActive
-                    ? 'bg-zinc-800/50 text-[#ff5351] border-l-2 border-[#ff5351]'
-                    : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
-                )}
+                className={({ isActive }) =>
+                  cn(
+                    'flex items-center gap-3 px-4 py-3 rounded-lg transition-all text-sm font-medium',
+                    isActive ? 'bg-zinc-800/50 text-[#ff5351] border-l-2 border-[#ff5351]' : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
+                  )
+                }
               >
                 <item.icon className="w-4 h-4" />
                 {item.label}
@@ -285,7 +296,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
               <HelpCircle className="w-4 h-4" />
               Help
             </button>
-            <button 
+            <button
               onClick={handleLogout}
               className="w-full flex items-center gap-3 px-4 py-3 text-zinc-400 hover:text-[#ff5351] transition-all text-sm font-medium"
             >
@@ -296,9 +307,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
         </aside>
 
         <main className="flex-1 lg:ml-64 p-8">
-          <div className="max-w-7xl mx-auto">
-            {children}
-          </div>
+          <div className="max-w-7xl mx-auto">{children}</div>
         </main>
       </div>
 
@@ -307,15 +316,10 @@ export default function AppLayout({ children }: AppLayoutProps) {
           <NavLink
             key={item.label + item.path}
             to={item.path}
-            className={({ isActive }) => cn(
-              'flex flex-col items-center gap-1',
-              isActive ? 'text-[#ff5351]' : 'text-zinc-500'
-            )}
+            className={({ isActive }) => cn('flex flex-col items-center gap-1', isActive ? 'text-[#ff5351]' : 'text-zinc-500')}
           >
             <item.icon className="w-5 h-5" />
-            <span className="text-[10px] uppercase font-bold tracking-widest">
-              {item.label.split(' ')[0]}
-            </span>
+            <span className="text-[10px] uppercase font-bold tracking-widest">{item.label.split(' ')[0]}</span>
           </NavLink>
         ))}
       </nav>
