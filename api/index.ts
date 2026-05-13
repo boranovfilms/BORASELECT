@@ -10,15 +10,37 @@ import axios from "axios";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-const firebaseConfigPath = path.join(__dirname, "..", "firebase-applet-config.json");
-if (fs.existsSync(firebaseConfigPath)) {
-  const firebaseConfig = JSON.parse(fs.readFileSync(firebaseConfigPath, "utf8"));
-  if (!admin.apps.length) {
+function initializeFirebaseAdmin() {
+  if (admin.apps.length) return;
+
+  const serviceAccountJson = (process.env.FIREBASE_SERVICE_ACCOUNT_JSON || "").trim();
+
+  if (serviceAccountJson) {
+    const parsed = JSON.parse(serviceAccountJson);
+
+    admin.initializeApp({
+      credential: admin.credential.cert(parsed),
+      projectId: parsed.project_id
+    });
+
+    return;
+  }
+
+  const firebaseConfigPath = path.join(__dirname, "..", "firebase-applet-config.json");
+  if (fs.existsSync(firebaseConfigPath)) {
+    const firebaseConfig = JSON.parse(fs.readFileSync(firebaseConfigPath, "utf8"));
+
     admin.initializeApp({
       projectId: firebaseConfig.projectId
     });
+
+    return;
   }
+
+  throw new Error("Firebase Admin não configurado. Defina FIREBASE_SERVICE_ACCOUNT_JSON no Vercel.");
 }
+
+initializeFirebaseAdmin();
 
 const PIX_KEY = (process.env.PIX_KEY || "boranovfilms@gmail.com").trim();
 const PIX_KEY_TYPE = (process.env.PIX_KEY_TYPE || "email").trim();
