@@ -8,6 +8,7 @@ import {
   Clock3,
   CreditCard,
   Loader2,
+  Save,
   Search,
   UserRound,
   Wallet,
@@ -420,7 +421,7 @@ export default function Credits() {
             </div>
           </div>
 
-          <div className="hidden xl:grid xl:grid-cols-[1.3fr_1fr_160px_170px_200px] gap-4 px-6 py-3 border-b border-zinc-800/60 text-[10px] uppercase tracking-[0.2em] font-black text-zinc-500">
+          <div className="hidden xl:grid xl:grid-cols-[1.3fr_1fr_160px_170px_200px] gap-4 px-6 py-3 border-b border-zinc-800/60 text-[10px] uppercase tracking-[0.2em] font-black text-zinc-500 text-center items-center">
             <span>Cliente</span>
             <span>Último projeto</span>
             <span>Solicitações</span>
@@ -440,38 +441,36 @@ export default function Credits() {
                   type="button"
                   onClick={() => setSelectedClientKey(group.key)}
                   className={cn(
-                    'w-full text-left px-6 py-4 transition-all',
+                    'w-full text-left px-6 py-3 transition-all',
                     group.hasPending
                       ? 'bg-[#ff5351]/[0.05] hover:bg-[#ff5351]/[0.08]'
                       : 'hover:bg-zinc-900/35'
                   )}
                 >
-                  <div className="grid grid-cols-1 xl:grid-cols-[1.3fr_1fr_160px_170px_200px] gap-4 items-center">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-3">
-                        <div
-                          className={cn(
-                            'w-10 h-10 rounded-2xl border flex items-center justify-center shrink-0',
-                            group.hasPending
-                              ? 'border-[#ff5351]/20 bg-[#ff5351]/10'
-                              : 'border-zinc-800 bg-zinc-900/80'
-                          )}
-                        >
-                          {group.hasPending ? (
-                            <BellRing className="w-4 h-4 text-[#ff5351]" />
-                          ) : (
-                            <UserRound className="w-4 h-4 text-zinc-400" />
-                          )}
-                        </div>
+                  <div className="grid grid-cols-1 xl:grid-cols-[1.3fr_1fr_160px_170px_200px] gap-4 items-center text-center">
+                    <div className="min-w-0 flex items-center justify-center gap-3">
+                      <div
+                        className={cn(
+                          'w-10 h-10 rounded-2xl border flex items-center justify-center shrink-0',
+                          group.hasPending
+                            ? 'border-[#ff5351]/20 bg-[#ff5351]/10'
+                            : 'border-zinc-800 bg-zinc-900/80'
+                        )}
+                      >
+                        {group.hasPending ? (
+                          <BellRing className="w-4 h-4 text-[#ff5351]" />
+                        ) : (
+                          <UserRound className="w-4 h-4 text-zinc-400" />
+                        )}
+                      </div>
 
-                        <div className="min-w-0">
-                          <p className="text-white font-black text-sm truncate">
-                            {group.clientName}
-                          </p>
-                          <p className="text-zinc-500 text-xs truncate">
-                            {group.clientEmail}
-                          </p>
-                        </div>
+                      <div className="min-w-0">
+                        <p className="text-white font-black text-sm truncate">
+                          {group.clientName}
+                        </p>
+                        <p className="text-zinc-500 text-xs truncate">
+                          {group.clientEmail}
+                        </p>
                       </div>
                     </div>
 
@@ -500,7 +499,7 @@ export default function Credits() {
                       <p className="text-zinc-500 text-[11px] mt-1">Última movimentação</p>
                     </div>
 
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex justify-center">
                       {group.hasPending ? (
                         <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-[#ff5351]/20 bg-[#ff5351]/10 text-[#ff8f8e] text-[10px] uppercase font-black tracking-widest">
                           <BellRing className="w-3.5 h-3.5" />
@@ -575,8 +574,8 @@ export default function Credits() {
             </div>
 
             <div className="overflow-x-auto">
-              <div className="min-w-[1220px]">
-                <div className="grid grid-cols-[1.8fr_120px_140px_170px_170px_170px_180px_160px] gap-4 px-6 py-3 border-b border-zinc-800/60 text-[10px] uppercase tracking-[0.2em] font-black text-zinc-500">
+              <div className="min-w-[1240px]">
+                <div className="grid grid-cols-[2.2fr_110px_130px_150px_150px_160px_170px_76px] gap-3 px-6 py-2.5 border-b border-zinc-800/60 text-[10px] uppercase tracking-[0.18em] font-black text-zinc-500 text-center items-center">
                   <span>Nome do projeto</span>
                   <span>Créditos</span>
                   <span>Valor</span>
@@ -584,7 +583,7 @@ export default function Credits() {
                   <span>Atualizado em</span>
                   <span>Status</span>
                   <span>Alterar status</span>
-                  <span>Atualizar</span>
+                  <span>Ação</span>
                 </div>
 
                 <div className="divide-y divide-zinc-800/60">
@@ -596,18 +595,21 @@ export default function Credits() {
                       <div
                         key={request.id}
                         className={cn(
-                          'grid grid-cols-[1.8fr_120px_140px_170px_170px_170px_180px_160px] gap-4 px-6 py-4 items-center',
+                          'grid grid-cols-[2.2fr_110px_130px_150px_150px_160px_170px_76px] gap-3 px-6 py-3 items-center text-center',
                           request.status === 'Aguardando pagamento'
-                            ? 'bg-[#ff5351]/[0.04]'
+                            ? 'bg-[#ff5351]/[0.035]'
                             : 'bg-transparent'
                         )}
                       >
                         <div className="min-w-0">
-                          <p className="text-white font-black text-sm truncate">
+                          <p
+                            className="text-white font-black text-sm leading-tight break-words"
+                            title={request.projectTitle}
+                          >
                             {request.projectTitle}
                           </p>
-                          <p className="text-zinc-500 text-xs mt-1 truncate">
-                            ID: {request.id}
+                          <p className="text-zinc-500 text-[11px] mt-1">
+                            {request.clientNote ? 'Com observação do cliente' : 'Sem observação'}
                           </p>
                         </div>
 
@@ -635,7 +637,7 @@ export default function Credits() {
                           </p>
                         </div>
 
-                        <div>
+                        <div className="flex justify-center">
                           <span
                             className={cn(
                               'inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-[10px] uppercase font-black tracking-widest',
@@ -647,7 +649,7 @@ export default function Credits() {
                           </span>
                         </div>
 
-                        <div>
+                        <div className="flex justify-center">
                           <select
                             value={nextStatus}
                             onChange={(e) =>
@@ -656,7 +658,7 @@ export default function Credits() {
                                 [request.id]: e.target.value as CreditRequestStatus
                               }))
                             }
-                            className="w-full h-10 rounded-xl border border-zinc-800 bg-zinc-900 px-3 text-sm text-white outline-none focus:border-[#ff5351]"
+                            className="w-full h-9 rounded-xl border border-zinc-800 bg-zinc-900 px-3 text-sm text-white outline-none focus:border-[#ff5351]"
                           >
                             <option value="Aguardando pagamento">Aguardando pagamento</option>
                             <option value="Em análise">Em análise</option>
@@ -665,17 +667,18 @@ export default function Credits() {
                           </select>
                         </div>
 
-                        <div>
+                        <div className="flex justify-center">
                           <button
                             type="button"
                             onClick={() => handleStatusUpdate(request)}
                             disabled={processingAction !== null}
-                            className="h-10 w-full rounded-xl border border-[#ff5351]/20 bg-[#ff5351]/10 text-[#ff9e9d] font-black text-[10px] uppercase tracking-[0.16em] hover:bg-[#ff5351]/15 transition-all disabled:opacity-60 inline-flex items-center justify-center gap-2"
+                            title="Salvar status"
+                            className="h-9 w-9 rounded-xl border border-[#ff5351]/20 bg-[#ff5351]/10 text-[#ff9e9d] hover:bg-[#ff5351]/15 transition-all disabled:opacity-60 inline-flex items-center justify-center"
                           >
                             {isProcessingThisRow && processingAction === 'update' ? (
-                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              <Loader2 className="w-4 h-4 animate-spin" />
                             ) : (
-                              'Atualizar status'
+                              <Save className="w-4 h-4" />
                             )}
                           </button>
                         </div>
