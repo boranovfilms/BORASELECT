@@ -36,11 +36,7 @@ export default function ProjectReview() {
   const [selectedPreview, setSelectedPreview] = useState<MediaItem | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isVideoLoading, setIsVideoLoading] = useState(false);
-  const [loadTimeout, setLoadTimeout] = useState(false);
   const [isVideoError, setIsVideoError] = useState(false);
-  const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const globalTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
   const [showCreditModal, setShowCreditModal] = useState(false);
   const [isTogglingId, setIsTogglingId] = useState<string | null>(null);
 
@@ -54,14 +50,17 @@ export default function ProjectReview() {
   const [creditClientNote, setCreditClientNote] = useState('');
   const [submittingCreditRequest, setSubmittingCreditRequest] = useState(false);
 
+  const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
   const effectiveCreditUnitPrice = Number(project?.extraPrice || creditUnitPrice || 0);
   const creditRequestTotal = Number((creditsToBuy * effectiveCreditUnitPrice).toFixed(2));
 
   useEffect(() => {
     if (id) loadData();
+
     return () => {
       setProjectInfo(null, null);
-      if (globalTimeoutRef.current) clearTimeout(globalTimeoutRef.current);
+      if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
     };
   }, [id]);
 
@@ -70,28 +69,6 @@ export default function ProjectReview() {
       loadCreditConfig();
     }
   }, [project?.id, project?.extraPrice]);
-
-  useEffect(() => {
-    if (isVideoLoading && selectedPreview) {
-      setLoadTimeout(false);
-      if (globalTimeoutRef.current) clearTimeout(globalTimeoutRef.current);
-
-      globalTimeoutRef.current = setTimeout(() => {
-        if (isVideoLoading) {
-          setLoadTimeout(true);
-        }
-      }, 8000);
-    } else {
-      setLoadTimeout(false);
-      if (globalTimeoutRef.current) clearTimeout(globalTimeoutRef.current);
-    }
-  }, [isVideoLoading, selectedPreview]);
-
-  useEffect(() => {
-    return () => {
-      if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
-    };
-  }, []);
 
   useEffect(() => {
     return () => {
@@ -114,17 +91,19 @@ export default function ProjectReview() {
     setPageMode('review');
 
     try {
-      const p = await projectService.getProject(id!);
-      if (!p) {
+      const projectData = await projectService.getProject(id!);
+
+      if (!projectData) {
         setErrorStatus('NOT_FOUND');
         setLoading(false);
         return;
       }
 
-      const m = await mediaService.getMedia(id!);
-      setProject(p);
-      setMedia(m);
-      setProjectInfo(p.clientName || p.title, p.clientEmail || 'Projeto de Seleção');
+      const mediaData = await mediaService.getMedia(id!);
+
+      setProject(projectData);
+      setMedia(mediaData);
+      setProjectInfo(projectData.clientName || projectData.title, projectData.clientEmail || 'Projeto de Seleção');
     } catch (error) {
       setErrorStatus('DENIED');
       toast.error('Erro ao acessar o projeto');
@@ -191,10 +170,11 @@ export default function ProjectReview() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleVideoError = async (e?: any) => {
+  const handleVideoError = async (error?: any) => {
     if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
 
-    console.error('Erro ao carregar vídeo:', e || 'Timeout');
+    console.error('Erro ao carregar vídeo:', error || 'Timeout');
+
     if (selectedPreview) {
       console.error('URL que falhou:', getVideoUrl(selectedPreview));
     }
@@ -205,9 +185,9 @@ export default function ProjectReview() {
 
   const startLoadingTimeout = () => {
     if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
+
     loadingTimeoutRef.current = setTimeout(() => {
       if (isVideoLoading) {
-        console.warn('Video loading timeout reached');
         handleVideoError();
       }
     }, 12000);
@@ -249,7 +229,7 @@ export default function ProjectReview() {
       }).join('/');
 
       finalUrl = `${urlObj.origin}${encodedPath}${urlObj.search}${hash}`;
-    } catch (e) {
+    } catch (error) {
       finalUrl = item.url.replace(/#/g, '%23') + '#t=0.1';
     }
 
@@ -492,17 +472,12 @@ export default function ProjectReview() {
               Adicionar Créditos
             </h1>
 
-            <p className="text-zinc-500 text-sm md:text-base mt-3 max-w-3xl">
-              Faça o Pix, envie o comprovante e aguarde a análise para liberação dos créditos no projeto.
+            <p className="text-[#ff5351] text-xl md:text-2xl font-black uppercase tracking-tight leading-tight max-w-3xl mt-3">
+              {project?.title}
             </p>
           </div>
 
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 w-full lg:w-auto">
-            <div className="rounded-2xl border border-zinc-800 bg-[#151515] px-4 py-4 min-w-[130px]">
-              <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">Projeto</p>
-              <p className="text-white text-sm font-black line-clamp-2">{project?.title}</p>
-            </div>
-
+          <div className="grid grid-cols-3 gap-3 w-full lg:w-auto">
             <div className="rounded-2xl border border-zinc-800 bg-[#151515] px-4 py-4 min-w-[130px]">
               <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">Disponíveis</p>
               <p className="text-white text-2xl font-black">{project ? project.creditsTotal - project.creditsUsed : 0}</p>
