@@ -10,7 +10,6 @@ import {
   Loader2,
   Search,
   ShieldAlert,
-  Sparkles,
   UserRound,
   Wallet,
   XCircle
@@ -204,15 +203,15 @@ export default function Credits() {
   const getStatusIcon = (status: CreditRequestStatus) => {
     switch (status) {
       case 'Aguardando pagamento':
-        return <Wallet className="w-4 h-4" />;
+        return <Wallet className="w-3.5 h-3.5" />;
       case 'Em análise':
-        return <Clock3 className="w-4 h-4" />;
+        return <Clock3 className="w-3.5 h-3.5" />;
       case 'Aprovado':
-        return <CheckCircle2 className="w-4 h-4" />;
+        return <CheckCircle2 className="w-3.5 h-3.5" />;
       case 'Recusado':
-        return <XCircle className="w-4 h-4" />;
+        return <XCircle className="w-3.5 h-3.5" />;
       default:
-        return <CreditCard className="w-4 h-4" />;
+        return <CreditCard className="w-3.5 h-3.5" />;
     }
   };
 
@@ -389,89 +388,72 @@ export default function Credits() {
   }
 
   return (
-    <div className="space-y-8 pb-16">
-      <header className="flex flex-col 2xl:flex-row 2xl:items-end justify-between gap-6">
+    <div className="space-y-6 pb-16">
+      <header className="flex flex-col xl:flex-row xl:items-end justify-between gap-5">
         <div>
-          <p className="text-[11px] uppercase tracking-[0.35em] text-[#ff5351] font-black mb-3">
+          <p className="text-[10px] uppercase tracking-[0.3em] text-[#ff5351] font-black mb-2">
             Controle financeiro
           </p>
-          <h1 className="text-4xl md:text-5xl font-black tracking-tight text-white uppercase italic">
+          <h1 className="text-3xl md:text-4xl font-black tracking-tight text-white uppercase italic">
             Solicitações de Créditos
           </h1>
-          <p className="text-zinc-500 text-base md:text-lg mt-3 max-w-3xl">
+          <p className="text-zinc-500 text-sm md:text-base mt-2 max-w-3xl">
             Visualize tudo em linha, aprove manualmente quando necessário e acompanhe o
             histórico de cada cliente por projeto.
           </p>
         </div>
 
-        <div className="flex flex-col sm:flex-row gap-3 w-full 2xl:w-auto">
-          <div className="relative w-full 2xl:w-[360px]">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar por cliente, projeto ou status"
-              className="w-full h-12 bg-zinc-900/90 border border-zinc-800 rounded-2xl pl-11 pr-4 text-white focus:border-[#ff5351] outline-none transition-all"
-            />
-          </div>
-
-          <div className="h-12 px-4 rounded-2xl border border-zinc-800 bg-zinc-900/70 flex items-center gap-3 text-zinc-300">
-            <Sparkles className="w-4 h-4 text-[#ff5351]" />
-            <span className="text-xs font-black uppercase tracking-[0.2em]">
-              Visual em linha
-            </span>
-          </div>
+        <div className="relative w-full xl:w-[340px]">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar por cliente, projeto ou status"
+            className="w-full h-11 bg-zinc-900/90 border border-zinc-800 rounded-2xl pl-11 pr-4 text-sm text-white focus:border-[#ff5351] outline-none transition-all"
+          />
         </div>
       </header>
 
-      <section className="grid grid-cols-2 xl:grid-cols-5 gap-4">
-        <div className="rounded-[28px] border border-zinc-800 bg-zinc-950/70 p-5">
-          <div className="flex items-center justify-between mb-5">
-            <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black">Total</p>
-            <CreditCard className="w-5 h-5 text-zinc-500" />
-          </div>
-          <p className="text-white text-3xl font-black">{summary.total}</p>
+      <section className="flex flex-wrap gap-2.5">
+        <div className="inline-flex items-center gap-2 rounded-full border border-zinc-800 bg-zinc-950/70 px-3 py-2">
+          <CreditCard className="w-3.5 h-3.5 text-zinc-500" />
+          <span className="text-[10px] uppercase tracking-[0.18em] font-black text-zinc-500">
+            Total
+          </span>
+          <span className="text-sm font-black text-white">{summary.total}</span>
         </div>
 
-        <div className="rounded-[28px] border border-amber-500/15 bg-amber-500/5 p-5">
-          <div className="flex items-center justify-between mb-5">
-            <p className="text-amber-200/70 text-[10px] uppercase tracking-widest font-black">
-              Aguardando
-            </p>
-            <Wallet className="w-5 h-5 text-amber-300" />
-          </div>
-          <p className="text-amber-300 text-3xl font-black">{summary.pending}</p>
+        <div className="inline-flex items-center gap-2 rounded-full border border-amber-500/15 bg-amber-500/5 px-3 py-2">
+          <Wallet className="w-3.5 h-3.5 text-amber-300" />
+          <span className="text-[10px] uppercase tracking-[0.18em] font-black text-amber-200/70">
+            Aguardando
+          </span>
+          <span className="text-sm font-black text-amber-300">{summary.pending}</span>
         </div>
 
-        <div className="rounded-[28px] border border-cyan-500/15 bg-cyan-500/5 p-5">
-          <div className="flex items-center justify-between mb-5">
-            <p className="text-cyan-200/70 text-[10px] uppercase tracking-widest font-black">
-              Em análise
-            </p>
-            <Clock3 className="w-5 h-5 text-cyan-300" />
-          </div>
-          <p className="text-cyan-300 text-3xl font-black">{summary.analyzing}</p>
+        <div className="inline-flex items-center gap-2 rounded-full border border-cyan-500/15 bg-cyan-500/5 px-3 py-2">
+          <Clock3 className="w-3.5 h-3.5 text-cyan-300" />
+          <span className="text-[10px] uppercase tracking-[0.18em] font-black text-cyan-200/70">
+            Em análise
+          </span>
+          <span className="text-sm font-black text-cyan-300">{summary.analyzing}</span>
         </div>
 
-        <div className="rounded-[28px] border border-emerald-500/15 bg-emerald-500/5 p-5">
-          <div className="flex items-center justify-between mb-5">
-            <p className="text-emerald-200/70 text-[10px] uppercase tracking-widest font-black">
-              Aprovadas
-            </p>
-            <CheckCircle2 className="w-5 h-5 text-emerald-300" />
-          </div>
-          <p className="text-emerald-300 text-3xl font-black">{summary.approved}</p>
+        <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/15 bg-emerald-500/5 px-3 py-2">
+          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-300" />
+          <span className="text-[10px] uppercase tracking-[0.18em] font-black text-emerald-200/70">
+            Aprovadas
+          </span>
+          <span className="text-sm font-black text-emerald-300">{summary.approved}</span>
         </div>
 
-        <div className="rounded-[28px] border border-red-500/15 bg-red-500/5 p-5">
-          <div className="flex items-center justify-between mb-5">
-            <p className="text-red-200/70 text-[10px] uppercase tracking-widest font-black">
-              Recusadas
-            </p>
-            <XCircle className="w-5 h-5 text-red-300" />
-          </div>
-          <p className="text-red-300 text-3xl font-black">{summary.rejected}</p>
+        <div className="inline-flex items-center gap-2 rounded-full border border-red-500/15 bg-red-500/5 px-3 py-2">
+          <XCircle className="w-3.5 h-3.5 text-red-300" />
+          <span className="text-[10px] uppercase tracking-[0.18em] font-black text-red-200/70">
+            Recusadas
+          </span>
+          <span className="text-sm font-black text-red-300">{summary.rejected}</span>
         </div>
       </section>
 
@@ -483,20 +465,19 @@ export default function Credits() {
       ) : (
         <div className="grid grid-cols-1 2xl:grid-cols-[minmax(0,1.7fr)_minmax(390px,0.95fr)] gap-6 items-start">
           <section className="rounded-[32px] border border-zinc-800 bg-[#101010] overflow-hidden">
-            <div className="px-6 py-5 border-b border-zinc-800 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-              <div>
-                <p className="text-white text-xl font-black uppercase">Visualização em linha</p>
-                <p className="text-zinc-500 text-sm mt-1">
-                  Cliente, projeto, status, atualização, aprovação manual e histórico em uma
-                  única lista.
+            <div className="px-6 py-4 border-b border-zinc-800/60">
+              <div className="flex items-center gap-3">
+                <p className="text-white text-sm font-black uppercase tracking-[0.18em] shrink-0">
+                  Solicitações
                 </p>
-              </div>
-              <div className="text-xs uppercase tracking-[0.25em] font-black text-zinc-500">
-                {filteredRequests.length} resultado(s)
+                <div className="h-px flex-1 bg-zinc-800/70" />
+                <div className="text-[10px] uppercase tracking-[0.18em] font-black text-zinc-500 shrink-0">
+                  {filteredRequests.length} resultado(s)
+                </div>
               </div>
             </div>
 
-            <div className="hidden xl:grid xl:grid-cols-[1.1fr_1fr_190px_170px_380px] gap-4 px-6 py-4 border-b border-zinc-800/80 text-[10px] uppercase tracking-[0.25em] font-black text-zinc-500">
+            <div className="hidden xl:grid xl:grid-cols-[1.1fr_1fr_190px_170px_360px] gap-4 px-6 py-3 border-b border-zinc-800/60 text-[10px] uppercase tracking-[0.2em] font-black text-zinc-500">
               <span>Cliente</span>
               <span>Projeto</span>
               <span>Status</span>
@@ -507,7 +488,7 @@ export default function Credits() {
             {filteredRequests.length === 0 ? (
               <div className="p-8 text-zinc-500 text-sm">Nenhum resultado encontrado.</div>
             ) : (
-              <div className="divide-y divide-zinc-800/70">
+              <div className="divide-y divide-zinc-800/60">
                 {filteredRequests.map((request) => {
                   const isSelected = selectedRequest?.id === request.id;
                   const historyCount = getHistoryCount(request);
@@ -518,40 +499,41 @@ export default function Credits() {
                       key={request.id}
                       onClick={() => setSelectedRequestId(request.id)}
                       className={cn(
-                        'relative px-6 py-5 transition-all cursor-pointer',
-                        isSelected
-                          ? 'bg-[#ff5351]/[0.06]'
-                          : 'hover:bg-zinc-900/45'
+                        'relative px-6 py-4 transition-all cursor-pointer',
+                        isSelected ? 'bg-zinc-900/55' : 'hover:bg-zinc-900/35'
                       )}
                     >
-                      <div
-                        className={cn(
-                          'absolute left-0 top-3 bottom-3 w-1 rounded-r-full transition-all',
-                          isSelected ? 'bg-[#ff5351]' : 'bg-transparent'
-                        )}
-                      />
+                      {isSelected && (
+                        <div className="absolute left-0 right-0 top-0 h-px bg-[#ff5351]/25" />
+                      )}
 
-                      <div className="grid grid-cols-1 xl:grid-cols-[1.1fr_1fr_190px_170px_380px] gap-4 items-center">
+                      <div className="grid grid-cols-1 xl:grid-cols-[1.1fr_1fr_190px_170px_360px] gap-4 items-center">
                         <div className="min-w-0">
                           <div className="flex items-center gap-3">
-                            <div className="w-11 h-11 rounded-2xl border border-zinc-800 bg-zinc-900/80 flex items-center justify-center shrink-0">
-                              <UserRound className="w-5 h-5 text-zinc-400" />
+                            <div className="w-10 h-10 rounded-2xl border border-zinc-800 bg-zinc-900/80 flex items-center justify-center shrink-0">
+                              <UserRound className="w-4 h-4 text-zinc-400" />
                             </div>
                             <div className="min-w-0">
-                              <p className="text-white font-black truncate">{request.clientName}</p>
-                              <p className="text-zinc-500 text-sm truncate">{request.clientEmail}</p>
+                              <p className="text-white font-black text-sm truncate">
+                                {request.clientName}
+                              </p>
+                              <p className="text-zinc-500 text-xs truncate">
+                                {request.clientEmail}
+                              </p>
                             </div>
                           </div>
                         </div>
 
                         <div className="min-w-0">
-                          <p className="text-white font-black truncate">{request.projectTitle}</p>
+                          <p className="text-white font-black text-sm truncate">
+                            {request.projectTitle}
+                          </p>
                           <div className="flex items-center gap-2 mt-1">
-                            <span className="text-zinc-500 text-sm">
+                            <span className="text-zinc-500 text-xs">
                               {request.creditsRequested} crédito(s)
                             </span>
                             <span className="text-zinc-700">•</span>
-                            <span className="text-[#ff5351] text-sm font-bold">
+                            <span className="text-[#ff5351] text-xs font-bold">
                               {formatCurrency(request.totalAmount)}
                             </span>
                           </div>
@@ -560,7 +542,7 @@ export default function Credits() {
                         <div>
                           <span
                             className={cn(
-                              'inline-flex items-center gap-2 px-3 py-2 rounded-full border text-[10px] uppercase font-black tracking-widest',
+                              'inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-[10px] uppercase font-black tracking-widest',
                               getStatusClass(request.status)
                             )}
                           >
@@ -573,7 +555,7 @@ export default function Credits() {
                           <p className="text-white text-sm font-bold">
                             {formatDateTime(request.updatedAt || request.createdAt)}
                           </p>
-                          <p className="text-zinc-500 text-xs mt-1">Última movimentação</p>
+                          <p className="text-zinc-500 text-[11px] mt-1">Última movimentação</p>
                         </div>
 
                         <div className="flex flex-wrap gap-2" onClick={(e) => e.stopPropagation()}>
@@ -582,12 +564,12 @@ export default function Credits() {
                               type="button"
                               onClick={() => handleApprove(request)}
                               disabled={processingAction !== null}
-                              className="h-11 px-4 rounded-2xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-300 font-black text-[11px] uppercase tracking-widest hover:bg-emerald-500/15 transition-all disabled:opacity-60 inline-flex items-center gap-2"
+                              className="h-10 px-3 rounded-xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-300 font-black text-[10px] uppercase tracking-[0.16em] hover:bg-emerald-500/15 transition-all disabled:opacity-60 inline-flex items-center gap-2"
                             >
                               {isProcessingThisRow && processingAction === 'approve' ? (
-                                <Loader2 className="w-4 h-4 animate-spin" />
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
                               ) : (
-                                <CheckCircle2 className="w-4 h-4" />
+                                <CheckCircle2 className="w-3.5 h-3.5" />
                               )}
                               Aprovar crédito
                             </button>
@@ -596,20 +578,20 @@ export default function Credits() {
                           <button
                             type="button"
                             onClick={() => openExternalApproval(request)}
-                            className="h-11 px-4 rounded-2xl border border-zinc-700 bg-zinc-900 text-zinc-300 font-black text-[11px] uppercase tracking-widest hover:text-white hover:border-zinc-600 transition-all inline-flex items-center gap-2"
+                            className="h-10 px-3 rounded-xl border border-zinc-700 bg-zinc-900 text-zinc-300 font-black text-[10px] uppercase tracking-[0.16em] hover:text-white hover:border-zinc-600 transition-all inline-flex items-center gap-2"
                           >
-                            <ExternalLink className="w-4 h-4" />
+                            <ExternalLink className="w-3.5 h-3.5" />
                             Aprovação
                           </button>
 
                           <button
                             type="button"
                             onClick={() => showHistory(request.id)}
-                            className="h-11 px-4 rounded-2xl border border-[#ff5351]/20 bg-[#ff5351]/10 text-[#ff9e9d] font-black text-[11px] uppercase tracking-widest hover:bg-[#ff5351]/15 transition-all inline-flex items-center gap-2"
+                            className="h-10 px-3 rounded-xl border border-[#ff5351]/20 bg-[#ff5351]/10 text-[#ff9e9d] font-black text-[10px] uppercase tracking-[0.16em] hover:bg-[#ff5351]/15 transition-all inline-flex items-center gap-2"
                           >
-                            <History className="w-4 h-4" />
+                            <History className="w-3.5 h-3.5" />
                             Histórico
-                            <span className="px-2 py-0.5 rounded-full bg-black/30 text-white text-[10px]">
+                            <span className="px-1.5 py-0.5 rounded-full bg-black/30 text-white text-[10px]">
                               {historyCount}
                             </span>
                           </button>
@@ -625,13 +607,13 @@ export default function Credits() {
           <section className="rounded-[32px] border border-zinc-800 bg-[#101010] overflow-hidden 2xl:sticky 2xl:top-24">
             {selectedRequest ? (
               <>
-                <div className="px-6 py-6 border-b border-zinc-800">
+                <div className="px-6 py-6 border-b border-zinc-800/60">
                   <div className="flex flex-wrap items-start justify-between gap-4">
                     <div>
                       <p className="text-[10px] uppercase tracking-[0.25em] text-[#ff5351] font-black mb-2">
                         Detalhes da solicitação
                       </p>
-                      <h2 className="text-white text-3xl font-black uppercase tracking-tight">
+                      <h2 className="text-white text-2xl font-black uppercase tracking-tight">
                         {selectedRequest.projectTitle}
                       </h2>
                       <p className="text-zinc-500 text-sm mt-2">
@@ -642,7 +624,7 @@ export default function Credits() {
                     <div className="flex flex-wrap gap-2">
                       <span
                         className={cn(
-                          'inline-flex items-center gap-2 px-4 py-2 rounded-full border text-[10px] uppercase font-black tracking-widest',
+                          'inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-[10px] uppercase font-black tracking-widest',
                           getStatusClass(selectedRequest.status)
                         )}
                       >
@@ -653,7 +635,7 @@ export default function Credits() {
                       <button
                         type="button"
                         onClick={() => openExternalApproval(selectedRequest)}
-                        className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-zinc-700 text-zinc-300 hover:text-white hover:border-zinc-600 transition-all text-[10px] uppercase font-black tracking-widest"
+                        className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-zinc-700 text-zinc-300 hover:text-white hover:border-zinc-600 transition-all text-[10px] uppercase font-black tracking-widest"
                       >
                         <ExternalLink className="w-3.5 h-3.5" />
                         Abrir aprovação
@@ -662,13 +644,13 @@ export default function Credits() {
                   </div>
                 </div>
 
-                <div className="p-6 space-y-6">
+                <div className="p-6 space-y-5">
                   <div className="grid grid-cols-2 gap-4">
                     <div className="rounded-[24px] border border-zinc-800 bg-zinc-900/70 p-4">
                       <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">
                         Créditos
                       </p>
-                      <p className="text-white text-2xl font-black">
+                      <p className="text-white text-xl font-black">
                         {selectedRequest.creditsRequested}
                       </p>
                     </div>
@@ -677,7 +659,7 @@ export default function Credits() {
                       <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">
                         Valor total
                       </p>
-                      <p className="text-[#ff5351] text-2xl font-black">
+                      <p className="text-[#ff5351] text-xl font-black">
                         {formatCurrency(selectedRequest.totalAmount)}
                       </p>
                     </div>
@@ -702,7 +684,7 @@ export default function Credits() {
                   </div>
 
                   <div className="rounded-[28px] border border-zinc-800 bg-zinc-900/45 p-5 space-y-4">
-                    <h3 className="text-white text-lg font-black uppercase">Dados principais</h3>
+                    <h3 className="text-white text-base font-black uppercase">Dados principais</h3>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                       <div className="rounded-2xl border border-zinc-800 bg-[#111111] px-4 py-3">
@@ -749,7 +731,7 @@ export default function Credits() {
                   </div>
 
                   <div className="rounded-[28px] border border-zinc-800 bg-zinc-900/45 p-5 space-y-4">
-                    <h3 className="text-white text-lg font-black uppercase">Ações da aprovação</h3>
+                    <h3 className="text-white text-base font-black uppercase">Ações da aprovação</h3>
 
                     <div className="rounded-2xl border border-zinc-800 bg-[#111111] px-4 py-3">
                       <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-black mb-2">
@@ -759,7 +741,7 @@ export default function Credits() {
                         value={reviewerNote}
                         onChange={(e) => setReviewerNote(e.target.value)}
                         rows={5}
-                        className="w-full bg-transparent text-white resize-none outline-none"
+                        className="w-full bg-transparent text-white resize-none outline-none text-sm"
                         placeholder="Escreva aqui uma observação interna sobre a solicitação."
                       />
                     </div>
@@ -769,7 +751,7 @@ export default function Credits() {
                         type="button"
                         onClick={() => handleAnalyze()}
                         disabled={processingAction !== null}
-                        className="h-12 rounded-2xl border border-cyan-500/20 bg-cyan-500/10 text-cyan-300 font-black uppercase tracking-widest text-[11px] hover:bg-cyan-500/15 transition-all disabled:opacity-60 flex items-center justify-center gap-2"
+                        className="h-11 rounded-2xl border border-cyan-500/20 bg-cyan-500/10 text-cyan-300 font-black uppercase tracking-[0.16em] text-[10px] hover:bg-cyan-500/15 transition-all disabled:opacity-60 flex items-center justify-center gap-2"
                       >
                         {processingAction === 'analyze' && processingRequestId === selectedRequest.id ? (
                           <Loader2 className="w-4 h-4 animate-spin" />
@@ -783,7 +765,7 @@ export default function Credits() {
                         type="button"
                         onClick={() => handleApprove()}
                         disabled={processingAction !== null}
-                        className="h-12 rounded-2xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-300 font-black uppercase tracking-widest text-[11px] hover:bg-emerald-500/15 transition-all disabled:opacity-60 flex items-center justify-center gap-2"
+                        className="h-11 rounded-2xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-300 font-black uppercase tracking-[0.16em] text-[10px] hover:bg-emerald-500/15 transition-all disabled:opacity-60 flex items-center justify-center gap-2"
                       >
                         {processingAction === 'approve' && processingRequestId === selectedRequest.id ? (
                           <Loader2 className="w-4 h-4 animate-spin" />
@@ -797,7 +779,7 @@ export default function Credits() {
                         type="button"
                         onClick={() => handleReject()}
                         disabled={processingAction !== null}
-                        className="h-12 rounded-2xl border border-red-500/20 bg-red-500/10 text-red-300 font-black uppercase tracking-widest text-[11px] hover:bg-red-500/15 transition-all disabled:opacity-60 flex items-center justify-center gap-2"
+                        className="h-11 rounded-2xl border border-red-500/20 bg-red-500/10 text-red-300 font-black uppercase tracking-[0.16em] text-[10px] hover:bg-red-500/15 transition-all disabled:opacity-60 flex items-center justify-center gap-2"
                       >
                         {processingAction === 'reject' && processingRequestId === selectedRequest.id ? (
                           <Loader2 className="w-4 h-4 animate-spin" />
@@ -823,14 +805,14 @@ export default function Credits() {
                   >
                     <div className="flex items-center justify-between gap-3">
                       <div>
-                        <h3 className="text-white text-lg font-black uppercase">
+                        <h3 className="text-white text-base font-black uppercase">
                           Histórico do cliente
                         </h3>
                         <p className="text-zinc-500 text-sm mt-1">
                           Solicitações feitas mais de uma vez para este mesmo cliente e projeto.
                         </p>
                       </div>
-                      <span className="px-3 py-2 rounded-full bg-[#ff5351]/10 border border-[#ff5351]/20 text-[#ff9e9d] text-[10px] uppercase tracking-widest font-black">
+                      <span className="px-3 py-1.5 rounded-full bg-[#ff5351]/10 border border-[#ff5351]/20 text-[#ff9e9d] text-[10px] uppercase tracking-widest font-black">
                         {selectedHistory.length} registro(s)
                       </span>
                     </div>
@@ -845,7 +827,7 @@ export default function Credits() {
                             className={cn(
                               'w-full text-left rounded-2xl border px-4 py-4 transition-all',
                               item.id === selectedRequest.id
-                                ? 'border-[#ff5351]/30 bg-[#ff5351]/10'
+                                ? 'border-[#ff5351]/20 bg-[#ff5351]/5'
                                 : 'border-zinc-800 bg-[#111111] hover:border-zinc-700'
                             )}
                           >
@@ -860,7 +842,7 @@ export default function Credits() {
                               <div className="flex items-center gap-2">
                                 <span
                                   className={cn(
-                                    'inline-flex items-center gap-2 px-3 py-2 rounded-full border text-[10px] uppercase font-black tracking-widest',
+                                    'inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-[10px] uppercase font-black tracking-widest',
                                     getStatusClass(item.status)
                                   )}
                                 >
