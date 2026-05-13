@@ -5,6 +5,7 @@ import {
   ArrowLeft,
   BellRing,
   CheckCircle2,
+  ChevronDown,
   Clock3,
   CreditCard,
   Loader2,
@@ -351,9 +352,7 @@ export default function Credits() {
               selectedClient ? 'text-[#ff5351]' : 'text-white'
             )}
           >
-            {selectedClient
-              ? selectedClient.latestRequest.projectTitle
-              : 'Solicitações de Créditos'}
+            {selectedClient ? selectedClient.clientName : 'Solicitações de Créditos'}
           </h1>
 
           <p
@@ -369,7 +368,7 @@ export default function Credits() {
         </div>
 
         {selectedClient && (
-          <div className="grid grid-cols-2 gap-3 w-full sm:w-auto sm:min-w-[320px]">
+          <div className="grid grid-cols-2 gap-3 w-full sm:w-auto sm:min-w-[340px]">
             <div className="rounded-2xl border border-zinc-800 bg-zinc-950/80 px-5 py-4">
               <p className="text-[10px] uppercase tracking-[0.22em] font-black text-zinc-500">
                 Solicitações
@@ -558,15 +557,14 @@ export default function Credits() {
           </div>
 
           <div className="overflow-x-auto">
-            <div className="min-w-[1260px]">
-              <div className="grid grid-cols-[2.4fr_110px_130px_150px_150px_160px_170px_76px] gap-3 px-6 py-2.5 border-b border-zinc-800/60 text-[10px] uppercase tracking-[0.18em] font-black text-zinc-500 text-center items-center">
+            <div className="min-w-[1280px]">
+              <div className="grid grid-cols-[2.9fr_110px_130px_150px_150px_220px_76px] gap-3 px-6 py-2.5 border-b border-zinc-800/60 text-[10px] uppercase tracking-[0.18em] font-black text-zinc-500 text-center items-center">
                 <span>Nome do projeto</span>
                 <span>Créditos</span>
                 <span>Valor</span>
                 <span>Criado em</span>
                 <span>Atualizado em</span>
                 <span>Status</span>
-                <span>Alterar status</span>
                 <span>Ação</span>
               </div>
 
@@ -579,13 +577,13 @@ export default function Credits() {
                     <div
                       key={request.id}
                       className={cn(
-                        'grid grid-cols-[2.4fr_110px_130px_150px_150px_160px_170px_76px] gap-3 px-6 py-2.5 items-center text-center',
+                        'grid grid-cols-[2.9fr_110px_130px_150px_150px_220px_76px] gap-3 px-6 py-2.5 items-center text-center',
                         request.status === 'Aguardando pagamento'
                           ? 'bg-[#ff5351]/[0.035]'
                           : 'bg-transparent'
                       )}
                     >
-                      <div className="min-w-0 px-2">
+                      <div className="min-w-0 px-2 text-left">
                         <p
                           className="text-white font-black text-sm leading-tight break-words whitespace-normal"
                           title={request.projectTitle}
@@ -619,33 +617,32 @@ export default function Credits() {
                       </div>
 
                       <div className="flex justify-center">
-                        <span
+                        <div
                           className={cn(
-                            'inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-[10px] uppercase font-black tracking-widest',
-                            getStatusClass(request.status)
+                            'relative min-w-[190px] rounded-full border',
+                            getStatusClass(nextStatus)
                           )}
                         >
-                          {getStatusIcon(request.status)}
-                          {request.status}
-                        </span>
-                      </div>
+                          <select
+                            value={nextStatus}
+                            onChange={(e) =>
+                              setStatusDrafts((current) => ({
+                                ...current,
+                                [request.id]: e.target.value as CreditRequestStatus
+                              }))
+                            }
+                            className="w-full h-9 appearance-none rounded-full bg-transparent pl-4 pr-10 text-center text-[10px] uppercase font-black tracking-widest outline-none cursor-pointer"
+                          >
+                            <option value="Aguardando pagamento">Aguardando pagamento</option>
+                            <option value="Em análise">Em análise</option>
+                            <option value="Aprovado">Aprovado</option>
+                            <option value="Recusado">Recusado</option>
+                          </select>
 
-                      <div className="flex justify-center">
-                        <select
-                          value={nextStatus}
-                          onChange={(e) =>
-                            setStatusDrafts((current) => ({
-                              ...current,
-                              [request.id]: e.target.value as CreditRequestStatus
-                            }))
-                          }
-                          className="w-full h-9 rounded-xl border border-zinc-800 bg-zinc-900 px-3 text-sm text-white outline-none focus:border-[#ff5351]"
-                        >
-                          <option value="Aguardando pagamento">Aguardando pagamento</option>
-                          <option value="Em análise">Em análise</option>
-                          <option value="Aprovado">Aprovado</option>
-                          <option value="Recusado">Recusado</option>
-                        </select>
+                          <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center">
+                            <ChevronDown className="w-4 h-4" />
+                          </div>
+                        </div>
                       </div>
 
                       <div className="flex justify-center">
