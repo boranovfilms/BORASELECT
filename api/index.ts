@@ -64,6 +64,36 @@ function getFromEmail() {
   return (process.env.RESEND_FROM_EMAIL || "BoraSelect <onboarding@resend.dev>").trim();
 }
 
+async function sendEmail({
+  to,
+  subject,
+  html
+}: {
+  to: string | string[];
+  subject: string;
+  html: string;
+}) {
+  const resend = getResendClient();
+  if (!resend) {
+    return { success: false, skipped: true, reason: "RESEND_API_KEY faltando" };
+  }
+
+  const recipients = Array.isArray(to) ? to : [to];
+
+  const { data, error } = await resend.emails.send({
+    from: getFromEmail(),
+    to: recipients,
+    subject,
+    html
+  });
+
+  if (error) {
+    throw new Error((error as any).message || JSON.stringify(error));
+  }
+
+  return { success: true, data };
+}
+
 function getR2Client() {
   let endpoint = (process.env.CLOUDFLARE_R2_ENDPOINT || "").trim();
   const accessKeyId = (process.env.CLOUDFLARE_R2_ACCESS_KEY_ID || "").trim();
