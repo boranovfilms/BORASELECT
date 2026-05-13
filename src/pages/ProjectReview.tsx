@@ -1,5 +1,5 @@
 export const dynamic = 'force-dynamic';
-import { useState, useEffect, useRef, type ChangeEvent } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import ReactPlayer from 'react-player';
 const Player = ReactPlayer as any;
@@ -11,8 +11,7 @@ import {
   Loader2,
   Lock,
   AlertTriangle,
-  Copy,
-  Upload
+  Copy
 } from 'lucide-react';
 import { projectService, Project } from '../services/projectService';
 import { mediaService, MediaItem } from '../services/mediaService';
@@ -45,8 +44,6 @@ export default function ProjectReview() {
   const [creditUnitPrice, setCreditUnitPrice] = useState(0);
   const [loadingCreditConfig, setLoadingCreditConfig] = useState(false);
   const [creditsToBuy, setCreditsToBuy] = useState(5);
-  const [creditReceiptFile, setCreditReceiptFile] = useState<File | null>(null);
-  const [creditReceiptPreview, setCreditReceiptPreview] = useState('');
   const [creditClientNote, setCreditClientNote] = useState('');
   const [submittingCreditRequest, setSubmittingCreditRequest] = useState(false);
 
@@ -69,14 +66,6 @@ export default function ProjectReview() {
       loadCreditConfig();
     }
   }, [project?.id, project?.extraPrice]);
-
-  useEffect(() => {
-    return () => {
-      if (creditReceiptPreview.startsWith('blob:')) {
-        URL.revokeObjectURL(creditReceiptPreview);
-      }
-    };
-  }, [creditReceiptPreview]);
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', {
@@ -143,13 +132,7 @@ export default function ProjectReview() {
   };
 
   const resetCreditForm = () => {
-    if (creditReceiptPreview.startsWith('blob:')) {
-      URL.revokeObjectURL(creditReceiptPreview);
-    }
-
     setCreditsToBuy(5);
-    setCreditReceiptFile(null);
-    setCreditReceiptPreview('');
     setCreditClientNote('');
     setSubmittingCreditRequest(false);
   };
@@ -262,63 +245,6 @@ export default function ProjectReview() {
     }
   };
 
-  const handleReceiptChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    if (!file.type.startsWith('image/')) {
-      toast.error('Envie uma imagem do comprovante');
-      return;
-    }
-
-    if (creditReceiptPreview.startsWith('blob:')) {
-      URL.revokeObjectURL(creditReceiptPreview);
-    }
-
-    const previewUrl = URL.createObjectURL(file);
-    setCreditReceiptFile(file);
-    setCreditReceiptPreview(previewUrl);
-  };
-
-  const uploadCreditReceipt = async (file: File) => {
-    const uploadUrlResponse = await fetch('/api-v2/media/upload-url', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        fileName: file.name,
-        fileType: file.type,
-        folderPrefix: `credit-receipts/${id}`
-      })
-    });
-
-    const uploadUrlData = await uploadUrlResponse.json();
-
-    if (!uploadUrlResponse.ok) {
-      throw new Error(uploadUrlData.error || 'Erro ao preparar upload do comprovante');
-    }
-
-    if (!uploadUrlData.uploadUrl || !uploadUrlData.fileUrl) {
-      throw new Error('Não foi possível gerar o link do comprovante');
-    }
-
-    const uploadResponse = await fetch(uploadUrlData.uploadUrl, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': file.type
-      },
-      body: file
-    });
-
-    if (!uploadResponse.ok) {
-      throw new Error('Erro ao enviar comprovante');
-    }
-
-    return {
-      fileUrl: uploadUrlData.fileUrl,
-      fileName: file.name
-    };
-  };
-
   const handleSubmitCreditRequest = async () => {
     if (!id || !project) return;
 
@@ -332,15 +258,8 @@ export default function ProjectReview() {
       return;
     }
 
-    if (!creditReceiptFile) {
-      toast.error('Anexe o comprovante do pagamento');
-      return;
-    }
-
     try {
       setSubmittingCreditRequest(true);
-
-      const uploadedReceipt = await uploadCreditReceipt(creditReceiptFile);
 
       const response = await fetch('/api-v2/credits/request', {
         method: 'POST',
@@ -353,8 +272,6 @@ export default function ProjectReview() {
           creditsRequested: creditsToBuy,
           unitPrice: effectiveCreditUnitPrice,
           totalAmount: creditRequestTotal,
-          receiptImageUrl: uploadedReceipt.fileUrl,
-          receiptFileName: uploadedReceipt.fileName,
           clientNote: creditClientNote.trim()
         })
       });
@@ -596,7 +513,7 @@ export default function ProjectReview() {
 
               <div className="rounded-2xl border border-zinc-800 bg-zinc-900/70 p-4 text-sm text-zinc-300 leading-relaxed">
                 Faça o pagamento de <span className="text-white font-black">{formatCurrency(creditRequestTotal)}</span> usando a chave Pix acima.
-                Em seguida, envie o comprovante para análise.
+                Depois, clique em enviar para análise para que eu confira o pagamento no banco e libere os créditos.
               </div>
             </div>
           </section>
@@ -605,50 +522,20 @@ export default function ProjectReview() {
             <div className="rounded-3xl border border-zinc-800 bg-[#141414] p-5 md:p-6 space-y-4">
               <div>
                 <p className="text-[10px] uppercase tracking-[0.25em] text-zinc-500 font-black mb-2">
-                  Comprovante
+                  Confirmação
                 </p>
                 <h2 className="text-white text-xl md:text-2xl font-black uppercase">
-                  Anexar pagamento
+                  Enviar solicitação
                 </h2>
               </div>
 
-              <label className="block rounded-3xl border border-dashed border-zinc-700 bg-zinc-900/70 p-5 text-center cursor-pointer hover:border-[#ff5351]/40 transition-all">
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleReceiptChange}
-                  className="hidden"
-                />
-
-                <div className="flex flex-col items-center gap-3">
-                  <div className="w-12 h-12 rounded-2xl bg-[#ff5351]/10 flex items-center justify-center">
-                    <Upload className="w-5 h-5 text-[#ff5351]" />
-                  </div>
-
-                  <div>
-                    <p className="text-white font-black uppercase text-sm tracking-wide">
-                      {creditReceiptFile ? 'Trocar comprovante' : 'Selecionar comprovante'}
-                    </p>
-                    <p className="text-zinc-500 text-xs mt-1">
-                      Envie uma imagem do comprovante Pix
-                    </p>
-                  </div>
-                </div>
-              </label>
-
-              {creditReceiptFile && (
-                <div className="rounded-2xl border border-zinc-800 bg-zinc-900/70 p-4 space-y-3">
-                  <p className="text-white text-sm font-bold break-all">{creditReceiptFile.name}</p>
-
-                  {creditReceiptPreview && (
-                    <img
-                      src={creditReceiptPreview}
-                      alt="Comprovante"
-                      className="w-full max-h-[220px] object-contain rounded-2xl border border-zinc-800 bg-black"
-                    />
-                  )}
-                </div>
-              )}
+              <div className="rounded-2xl border border-zinc-800 bg-zinc-900/70 p-4 text-sm text-zinc-300 leading-relaxed">
+                Ao enviar, vou receber um aviso com:
+                <span className="text-white font-black"> projeto</span>,
+                <span className="text-white font-black"> quantidade de créditos</span> e
+                <span className="text-white font-black"> valor total</span>.
+                Depois disso, farei a conferência manual no banco e aprovarei ou recusarei a compra.
+              </div>
 
               <div className="space-y-2">
                 <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1">
@@ -657,7 +544,7 @@ export default function ProjectReview() {
                 <textarea
                   value={creditClientNote}
                   onChange={(e) => setCreditClientNote(e.target.value)}
-                  rows={4}
+                  rows={7}
                   placeholder="Se quiser, escreva uma observação sobre o pagamento."
                   className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl px-4 py-4 text-white focus:border-[#ff5351] outline-none transition-all resize-none"
                 />
