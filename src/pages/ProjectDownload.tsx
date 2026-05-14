@@ -71,7 +71,7 @@ export default function ProjectDownload() {
     }
   };
 
-  // Função centralizada para atualizar o status do fluxo
+  // Função centralizada para atualizar o status do fluxo E AVANÇAR ETAPA
   const updateDownloadStageStatus = async (status: 'pending' | 'in_progress' | 'waiting_approval' | 'completed') => {
     if (!id) return;
     try {
@@ -83,17 +83,42 @@ export default function ProjectDownload() {
       if (downloadIndex >= 0) {
         const newStages = [...currentWf.stages];
         const currentStatus = newStages[downloadIndex].status;
+        let changed = false;
+        let newCurrentIndex = currentWf.currentStageIndex;
         
-        // Só atualiza se o status for diferente (para economizar escritas) ou se for pra concluir
+        // Só atualiza se o status for diferente
         if (currentStatus !== status) {
           newStages[downloadIndex].status = status;
           
           const now = new Date().toISOString();
           if (status === 'in_progress') newStages[downloadIndex].startedAt = now;
           if (status === 'waiting_approval') newStages[downloadIndex].waitingApprovalAt = now;
-          if (status === 'completed') newStages[downloadIndex].completedAt = now;
-
-          await projetoFluxoService.updateWorkflow(id, { stages: newStages });
+          
+          if (status === 'completed') {
+            newStages[downloadIndex].completedAt = now;
+            
+            // LÓGICA DE AVANÇAR PARA A PRÓXIMA ETAPA
+            const nextIndex = downloadIndex + 1;
+            if (nextIndex < newStages.length) {
+              // Se existe próxima etapa, ativa ela como "pendente" para a equipe assumir
+              if (newStages[nextIndex].status === 'pending') {
+                newStages[nextIndex].pendingAt = now;
+              }
+              newCurrentIndex = nextIndex;
+            } else {
+              // Se o download era a ÚLTIMA etapa de todo o projeto, finaliza o workflow
+              await projetoFluxoService.updateWorkflow(id, { status: 'completed' });
+            }
+          }
+          
+          changed = true;
+        }
+        
+        if (changed) {
+          await projetoFluxoService.updateWorkflow(id, { 
+            stages: newStages,
+            currentStageIndex: newCurrentIndex
+          });
         }
       }
     } catch (e) {
@@ -175,7 +200,7 @@ export default function ProjectDownload() {
       const allDownloaded = updatedMedia.every(m => m.isDownloaded);
       
       if (allDownloaded) {
-        // Se foi o último, conclui a tarefa e limpa o timer
+        // Se foi o último, conclui a tarefa e avança
         if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
         await updateDownloadStageStatus('completed');
       } else {
@@ -217,7 +242,7 @@ export default function ProjectDownload() {
       return;
     }
 
-    // Regra 5: Clicou em Baixar Todos, já conclui a etapa
+    // Regra 5: Clicou em Baixar Todos, já conclui a etapa e avança para a próxima
     if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
     await updateDownloadStageStatus('completed');
 
