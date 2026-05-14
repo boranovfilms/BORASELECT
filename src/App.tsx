@@ -10,7 +10,8 @@ import ProjectDownload from './pages/ProjectDownload';
 import ClientAccess from './pages/ClientAccess';
 import Packages from './pages/Packages';
 import Credits from './pages/Credits';
-import ModelosFluxo from './pages/ModelosFluxo'; // <-- IMPORTAÇÃO DA NOVA TELA
+import ModelosFluxo from './pages/ModelosFluxo'; 
+import ModelosEdicao from './pages/ModelosEdicao'; // <-- IMPORTAÇÃO DA TELA DE EDIÇÃO
 import Login from './pages/Login';
 import Register from './pages/Register';
 
@@ -56,8 +57,9 @@ export default function App() {
         <Route path="/packages" element={user && isAdmin ? <AppLayout><Packages /></AppLayout> : <Navigate to="/" />} />
         <Route path="/credits" element={user && isAdmin ? <AppLayout><Credits /></AppLayout> : <Navigate to="/" />} />
         
-        {/* NOVA ROTA DOS MODELOS DE FLUXO */}
+        {/* ROTAS DE MODELOS DE FLUXO */}
         <Route path="/modelos" element={user && isAdmin ? <AppLayout><ModelosFluxo /></AppLayout> : <Navigate to="/" />} />
+        <Route path="/modelos/:id" element={user && isAdmin ? <AppLayout><ModelosEdicao /></AppLayout> : <Navigate to="/" />} />
 
         <Route path="/review/:id" element={user ? <AppLayout><ProjectReview /></AppLayout> : <Navigate to="/login" />} />
         <Route path="/download/:id" element={user ? <AppLayout><ProjectDownload /></AppLayout> : <Navigate to="/login" />} />
