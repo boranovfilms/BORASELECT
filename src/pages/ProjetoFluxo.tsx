@@ -4,7 +4,7 @@ import { toast } from 'react-hot-toast';
 import { 
   ArrowLeft, Check, CheckCircle2, ChevronRight, Clock, 
   UserCircle, Save, Loader2, LayoutTemplate, PlayCircle,
-  CloudUpload, Image as ImageIcon, ExternalLink, RefreshCw, Trash2, Lock, Play, RotateCcw, X, FolderOpen, GitBranch, Info
+  CloudUpload, Image as ImageIcon, ExternalLink, RefreshCw, Trash2, Lock, Play, RotateCcw, X, FolderOpen, GitBranch, Info, Link as LinkIcon
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { db } from '../lib/firebase';
@@ -142,6 +142,14 @@ export default function ProjetoFluxo() {
 
   const handleUpdateStatus = async (newStatus: ProjectStageStatus) => {
     if (!workflow || !projectId) return;
+
+    // --- VALIDAÇÃO: Bloquear conclusão se for a etapa Subir Cortes e não houver mídia ---
+    const currentStageName = workflow.stages[workflow.currentStageIndex].name.toUpperCase();
+    if (currentStageName === 'SUBIR CORTES' && newStatus === 'completed' && media.length === 0) {
+      toast.error('Carregue pelo menos um arquivo antes de concluir a etapa.');
+      return;
+    }
+
     const updatedStages = [...workflow.stages];
     const currentIndex = workflow.currentStageIndex;
     updatedStages[currentIndex].status = newStatus;
@@ -502,6 +510,14 @@ export default function ProjetoFluxo() {
                   )
                 })}
               </div>
+
+              {/* AVISO SE TENTAR CONCLUIR SEM MÍDIA */}
+              {isSubirCortes && currentStage.status !== 'completed' && media.length === 0 && (
+                <p className="text-[#ff5351] text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5 animate-in fade-in mt-3 ml-1">
+                  <Info className="w-3 h-3" />
+                  Carregue pelo menos um arquivo para poder concluir a etapa
+                </p>
+              )}
             </div>
 
             {/* A TELA DE UPLOAD SÓ APARECE NA ETAPA "SUBIR CORTES" */}
@@ -524,21 +540,106 @@ export default function ProjetoFluxo() {
                       
                       <input type="file" multiple className="hidden" ref={fileInputRef} onChange={(e) => handleFileUpload(e.target.files)} accept="image/*,video/*" />
                       
-                      <div onClick={() => fileInputRef.current?.click()} onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }} onDrop={(e) => { e.preventDefault(); e.stopPropagation(); handleFileUpload(e.dataTransfer.files); }} className="group py-8 flex flex-col items-center justify-center bg-zinc-900/50 rounded-2xl border-2 border-dashed border-zinc-800 hover:border-[#ff5351]/50 cursor-pointer transition-all">
-                        <CloudUpload className="w-8 h-8 text-zinc-600 mb-2 group-hover:text-[#ff5351]" />
-                        <p className="text-zinc-400 text-xs font-bold uppercase tracking-widest">Arraste arquivos ou clique aqui</p>
+                      {/* VERDE: AREA DE UPLOAD MENOR */}
+                      <div onClick={() => fileInputRef.current?.click()} onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }} onDrop={(e) => { e.preventDefault(); e.stopPropagation(); handleFileUpload(e.dataTransfer.files); }} className="group py-6 flex flex-col items-center justify-center bg-zinc-900/50 rounded-2xl border-2 border-dashed border-zinc-800 hover:border-[#ff5351]/50 cursor-pointer transition-all">
+                        <CloudUpload className="w-6 h-6 text-zinc-600 mb-2 group-hover:text-[#ff5351]" />
+                        <p className="text-zinc-400 text-[11px] font-bold uppercase tracking-widest">Arraste arquivos ou clique aqui para buscar</p>
                       </div>
 
+                      {/* AMARELO: FILA DE ARQUIVOS COM LAYOUT ORIGINAL */}
                       {Object.keys(uploads).length > 0 && (
-                        <div className="mt-6 space-y-3">
-                          <div className="flex justify-between items-center"><span className="text-xs text-zinc-500 font-bold uppercase">Fila ({Object.keys(uploads).length})</span><button onClick={startAllUploads} className="text-xs text-[#ff5351] font-bold uppercase hover:underline">Iniciar Todos</button></div>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                            {Object.entries(uploads).map(([id, up]) => (
-                              <div key={id} className="bg-black/40 p-3 rounded-xl border border-zinc-800/50 flex justify-between items-center">
-                                <div className="truncate pr-4"><p className="text-[10px] text-white truncate">{up.fileName}</p><p className="text-[8px] text-zinc-500 uppercase">{up.status}</p></div>
-                                <div className="flex items-center gap-2">
-                                  <span className="text-[10px] text-zinc-500">{up.progress}%</span>
-                                  {up.status === 'pending' && <button onClick={() => startUpload(id)}><Play className="w-4 h-4 text-[#ff5351]"/></button>}
+                        <div className="mt-6 space-y-4 pt-6 border-t border-zinc-800">
+                          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
+                            <div className="flex items-center gap-3">
+                              <h5 className="text-[10px] font-black uppercase tracking-widest text-zinc-500 flex items-center gap-2">
+                                <Loader2 className={cn("w-3 h-3", Object.values(uploads).some(u => u.status === 'uploading') && "animate-spin")} />
+                                Fila de Arquivos ({Object.keys(uploads).length})
+                              </h5>
+                              
+                              <div className="flex items-center gap-2">
+                                {Object.values(uploads).some(u => u.status === 'completed') && (
+                                  <button 
+                                    onClick={clearCompletedUploads}
+                                    className="text-[10px] uppercase font-black tracking-widest text-emerald-500 hover:text-emerald-400 transition-all border border-emerald-500/30 px-2 py-1 rounded"
+                                  >
+                                    Limpar Concluídos
+                                  </button>
+                                )}
+                                <button 
+                                  onClick={clearAllUploads}
+                                  className="text-[10px] uppercase font-black tracking-widest text-zinc-600 hover:text-red-500 transition-all"
+                                >
+                                  Limpar Fila
+                                </button>
+                              </div>
+                            </div>
+
+                            {Object.values(uploads).some(u => u.status === 'pending' || u.status === 'error') && (
+                              <button 
+                                onClick={startAllUploads}
+                                className="px-4 py-2 bg-[#ff5351] text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:brightness-110 transition-all flex items-center justify-center gap-2 shadow-xl shadow-[#ff5351]/20"
+                              >
+                                <Play className="w-3 h-3 fill-current" />
+                                Enviar Todos da Fila
+                              </button>
+                            )}
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {Object.entries(uploads).map(([id, upload]) => (
+                              <div key={id} className="group/item bg-black/40 rounded-2xl p-4 border border-zinc-800/50 hover:border-[#ff5351]/30 transition-all">
+                                <div className="flex items-center justify-between gap-4 mb-3">
+                                  <div className="flex items-center gap-3 overflow-hidden">
+                                    <div className={cn(
+                                      "w-8 h-8 rounded-lg flex items-center justify-center shrink-0",
+                                      upload.status === 'completed' ? "bg-emerald-500/10 text-emerald-500" : 
+                                      upload.status === 'error' ? "bg-red-500/10 text-red-500" : 
+                                      upload.status === 'uploading' ? "bg-[#ff5351]/10 text-[#ff5351]" : "bg-zinc-800 text-zinc-500"
+                                    )}>
+                                      {upload.status === 'completed' ? <CheckCircle2 className="w-4 h-4" /> :
+                                       upload.status === 'error' ? <Info className="w-4 h-4" /> :
+                                       upload.status === 'uploading' ? <Loader2 className="w-4 h-4 animate-spin" /> : 
+                                       <Clock className="w-4 h-4" />}
+                                    </div>
+                                    <div className="overflow-hidden">
+                                      <p className="text-[10px] font-black uppercase tracking-tight text-white truncate">{upload.fileName}</p>
+                                      <p className="text-[8px] font-bold text-zinc-500 uppercase tracking-widest mt-0.5">
+                                        {upload.status === 'pending' ? 'Pendente' : 
+                                         upload.status === 'uploading' ? 'Enviando...' : 
+                                         upload.status === 'completed' ? 'Concluído' : 'Erro no envio'}
+                                      </p>
+                                    </div>
+                                  </div>
+
+                                  <div className="flex items-center gap-1">
+                                    {upload.status === 'pending' && (
+                                      <button onClick={() => startUpload(id)} className="p-1.5 text-zinc-400 hover:text-[#ff5351] hover:bg-[#ff5351]/10 rounded-lg transition-all" title="Iniciar">
+                                        <Play className="w-3.5 h-3.5 fill-current" />
+                                      </button>
+                                    )}
+                                    {upload.status === 'error' && (
+                                      <button onClick={() => retryUpload(id)} className="p-1.5 text-zinc-400 hover:text-[#ff5351] hover:bg-[#ff5351]/10 rounded-lg transition-all" title="Tentar novamente">
+                                        <RotateCcw className="w-3.5 h-3.5" />
+                                      </button>
+                                    )}
+                                    <button onClick={() => cancelUpload(id)} className="p-1.5 text-zinc-400 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-all" title="Cancelar">
+                                      <X className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                </div>
+                                
+                                <div className="flex items-center gap-3">
+                                  <div className="flex-1 h-1 bg-zinc-800 rounded-full overflow-hidden">
+                                    <div 
+                                      className={cn(
+                                        "h-full transition-all duration-300 rounded-full",
+                                        upload.status === 'completed' ? "bg-emerald-500" : 
+                                        upload.status === 'error' ? "bg-red-500" : "bg-[#ff5351]"
+                                      )}
+                                      style={{ width: `${upload.progress}%` }}
+                                    />
+                                  </div>
+                                  <span className="text-[8px] font-mono font-bold text-zinc-600 w-6">{upload.progress}%</span>
                                 </div>
                               </div>
                             ))}
@@ -546,11 +647,39 @@ export default function ProjetoFluxo() {
                         </div>
                       )}
                       
-                      <div className="mt-6">
-                         <div className="relative group">
-                          <input type="text" value={mediaLink.trim()} onChange={(e) => setMediaLink(e.target.value)} placeholder="Link do Drive (Sincronização Legacy)" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-xs text-white focus:border-[#ff5351] outline-none" />
-                          <button onClick={handleSyncMedia} disabled={fetchingDrive || !mediaLink.trim()} className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 bg-zinc-800 text-white rounded hover:bg-[#ff5351]"><RefreshCw className={cn("w-3 h-3", fetchingDrive && "animate-spin")} /></button>
-                        </div>
+                      {/* AZUL: LINK DRIVE LEGACY OCULTO POR PADRÃO */}
+                      <div className="mt-6 pt-6 border-t border-zinc-800">
+                        <button 
+                          onClick={() => setMediaLink(mediaLink ? '' : ' ')} 
+                          className="text-[10px] uppercase font-black tracking-widest text-zinc-600 hover:text-zinc-400 flex items-center gap-2 transition-all"
+                        >
+                          <RefreshCw className="w-3 h-3" />
+                          {mediaLink ? "Ocultar sincronização manual" : "Mostrar sincronização por link (Legacy)"}
+                        </button>
+                        
+                        {mediaLink && (
+                          <div className="mt-4 space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                            <div className="relative group">
+                              <LinkIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600 group-focus-within:text-[#ff5351]" />
+                              <input 
+                                type="text" 
+                                value={mediaLink.trim()}
+                                onChange={(e) => setMediaLink(e.target.value)}
+                                placeholder="Link do R2 ou Drive..."
+                                className="w-full bg-zinc-900/50 border border-zinc-800 rounded-xl pl-12 pr-12 py-3 text-xs text-white focus:border-[#ff5351] outline-none"
+                              />
+                              <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                                <button 
+                                  onClick={handleSyncMedia}
+                                  disabled={fetchingDrive || !mediaLink.trim()}
+                                  className="p-1.5 bg-zinc-800 text-white rounded hover:bg-[#ff5351] transition-all disabled:opacity-50"
+                                >
+                                  <RefreshCw className={cn("w-3 h-3", fetchingDrive && "animate-spin")} />
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
 
