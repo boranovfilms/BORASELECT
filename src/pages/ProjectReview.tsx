@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { projectService, Project } from '../services/projectService';
 import { mediaService, MediaItem } from '../services/mediaService';
+import { projetoFluxoService } from '../services/projetoFluxoService';
 import { auth } from '../lib/firebase';
 import { cn } from '../lib/utils';
 import { toast } from 'react-hot-toast';
@@ -30,6 +31,7 @@ export default function ProjectReview() {
   const [pageMode, setPageMode] = useState<PageMode>('review');
   const [project, setProject] = useState<Project | null>(null);
   const [media, setMedia] = useState<MediaItem[]>([]);
+  const [workflow, setWorkflow] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [errorStatus, setErrorStatus] = useState<'NOT_FOUND' | 'DENIED' | null>(null);
   const [selectedPreview, setSelectedPreview] = useState<MediaItem | null>(null);
@@ -89,10 +91,33 @@ export default function ProjectReview() {
       }
 
       const mediaData = await mediaService.getMedia(id!);
+      const wfData = await projetoFluxoService.getProjectWorkflow(id!);
 
       setProject(projectData);
       setMedia(mediaData);
       setProjectInfo(projectData.clientName || projectData.title, projectData.clientEmail || 'Projeto de Seleção');
+
+      // REGRA 2: Cliente entrou pela primeira vez, atualiza para "Em Andamento"
+      if (wfData && wfData.stages) {
+        let updated = false;
+        const selecaoIndex = wfData.stages.findIndex((s: any) => s.name.toUpperCase().includes('SELEÇÃO'));
+        
+        if (selecaoIndex >= 0 && wfData.stages[selecaoIndex].status === 'pending') {
+          wfData.stages[selecaoIndex].status = 'in_progress';
+          wfData.stages[selecaoIndex].startedAt = new Date().toISOString();
+          wfData.currentStageIndex = selecaoIndex;
+          updated = true;
+        }
+
+        if (updated) {
+          await projetoFluxoService.updateWorkflow(id!, { 
+            stages: wfData.stages, 
+            currentStageIndex: wfData.currentStageIndex 
+          });
+        }
+        setWorkflow(wfData);
+      }
+
     } catch (error) {
       setErrorStatus('DENIED');
       toast.error('Erro ao acessar o projeto');
@@ -101,11 +126,52 @@ export default function ProjectReview() {
     }
   };
 
+  // REGRA 3: Marca a etapa de Seleção como "Aguardando Cliente" ao interagir
+  const markAsWaitingApproval = async () => {
+    if (!workflow) return;
+    const selecaoIndex = workflow.stages.findIndex((s: any) => s.name.toUpperCase().includes('SELEÇÃO'));
+    if (selecaoIndex >= 0 && workflow.stages[selecaoIndex].status === 'in_progress') {
+      const newStages = [...workflow.stages];
+      newStages[selecaoIndex].status = 'waiting_approval';
+      newStages[selecaoIndex].waitingApprovalAt = new Date().toISOString();
+      
+      await projetoFluxoService.updateWorkflow(id!, { stages: newStages });
+      setWorkflow({ ...workflow, stages: newStages });
+    }
+  };
+
+  // REGRA 4: Ao clicar em Enviar Seleção, conclui a etapa atual e inicia o Download
+  const handleEnviarSelecao = async () => {
+    if (workflow) {
+      const newStages = [...workflow.stages];
+      const selecaoIndex = newStages.findIndex((s: any) => s.name.toUpperCase().includes('SELEÇÃO'));
+      const downloadIndex = newStages.findIndex((s: any) => s.name.toUpperCase().includes('DOWNLOAD'));
+      
+      let changed = false;
+      let newCurrentIndex = workflow.currentStageIndex;
+
+      if (selecaoIndex >= 0 && newStages[selecaoIndex].status !== 'completed') {
+         newStages[selecaoIndex].status = 'completed';
+         newStages[selecaoIndex].completedAt = new Date().toISOString();
+         changed = true;
+      }
+
+      if (downloadIndex >= 0 && newStages[downloadIndex].status === 'pending') {
+         newStages[downloadIndex].pendingAt = new Date().toISOString();
+         newCurrentIndex = downloadIndex;
+         changed = true;
+      }
+
+      if (changed) {
+         await projetoFluxoService.updateWorkflow(id!, { stages: newStages, currentStageIndex: newCurrentIndex });
+      }
+    }
+    navigate(`/download/${id}`);
+  };
+
   const loadCreditConfig = async () => {
     if (!project) return;
-
     setLoadingCreditConfig(true);
-
     try {
       const response = await fetch('/api-v2/credits/config');
       const data = await response.json();
@@ -157,18 +223,15 @@ export default function ProjectReview() {
     if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
 
     console.error('Erro ao carregar vídeo:', error || 'Timeout');
-
     if (selectedPreview) {
       console.error('URL que falhou:', getVideoUrl(selectedPreview));
     }
-
     setIsVideoError(true);
     setIsVideoLoading(false);
   };
 
   const startLoadingTimeout = () => {
     if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
-
     loadingTimeoutRef.current = setTimeout(() => {
       if (isVideoLoading) {
         handleVideoError();
@@ -178,27 +241,21 @@ export default function ProjectReview() {
 
   const getThumbnailUrl = (item: MediaItem) => {
     if (!item.url) return item.thumbnailUrl || '';
-
     if (item.externalId && item.url.includes('cloudflarestream.com')) {
       return `https://customer-qm5on0nubla4rvdf.cloudflarestream.com/${item.externalId}/thumbnails/thumbnail.jpg`;
     }
-
     if (isGoogleDriveUrl(item.url)) {
       const match = item.url.match(/(?:id=|\/d\/|\/file\/d\/)([a-zA-Z0-9_-]+)/);
       const fileId = match ? match[1] : item.url;
       return `https://drive.google.com/thumbnail?id=${fileId}&sz=w1000`;
     }
-
     let finalUrl = item.url;
-
     try {
       const urlObj = new URL(item.url);
       let path = urlObj.pathname;
       let hash = urlObj.hash;
 
-      if (!hash || !hash.startsWith('#t=')) {
-        hash = '#t=0.1';
-      }
+      if (!hash || !hash.startsWith('#t=')) hash = '#t=0.1';
 
       const encodedPath = path.split('/').map(segment => {
         if (!segment) return '';
@@ -210,12 +267,10 @@ export default function ProjectReview() {
           .replace(/\)/g, '%29')
           .replace(/\*/g, '%2a');
       }).join('/');
-
       finalUrl = `${urlObj.origin}${encodedPath}${urlObj.search}${hash}`;
     } catch (error) {
       finalUrl = item.url.replace(/#/g, '%23') + '#t=0.1';
     }
-
     return finalUrl;
   };
 
@@ -247,12 +302,10 @@ export default function ProjectReview() {
 
   const handleSubmitCreditRequest = async () => {
     if (!id || !project) return;
-
     if (!effectiveCreditUnitPrice || effectiveCreditUnitPrice <= 0) {
       toast.error('Valor por crédito não configurado');
       return;
     }
-
     if (!creditsToBuy || creditsToBuy <= 0) {
       toast.error('Informe quantos créditos deseja comprar');
       return;
@@ -260,7 +313,6 @@ export default function ProjectReview() {
 
     try {
       setSubmittingCreditRequest(true);
-
       const response = await fetch('/api-v2/credits/request', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -275,13 +327,10 @@ export default function ProjectReview() {
           clientNote: creditClientNote.trim()
         })
       });
-
       const data = await response.json();
-
       if (!response.ok) {
         throw new Error(data.error || 'Erro ao enviar solicitação');
       }
-
       toast.success('Solicitação enviada para análise');
       closeAddCreditsScreen();
     } catch (error: any) {
@@ -310,22 +359,20 @@ export default function ProjectReview() {
 
       const newStatus = !item.isSelected;
       await mediaService.updateMedia(id, item.id, { isSelected: newStatus });
-
       setMedia(prev => prev.map(m => (m.id === item.id ? { ...m, isSelected: newStatus } : m)));
 
       const updatedCreditsUsed = newStatus ? project.creditsUsed + 1 : Math.max(0, project.creditsUsed - 1);
       await projectService.updateProject(id, { creditsUsed: updatedCreditsUsed });
-
       setProject(prev => {
         if (!prev) return null;
-        return {
-          ...prev,
-          creditsUsed: updatedCreditsUsed
-        };
+        return { ...prev, creditsUsed: updatedCreditsUsed };
       });
 
       if (newStatus) toast.success('Item selecionado!');
       else toast.success('Seleção removida');
+
+      // REGRA 3: Atualiza status do fluxo
+      markAsWaitingApproval();
     } catch (error) {
       console.error('Update error:', error);
       toast.error('Erro ao atualizar seleção');
@@ -664,7 +711,7 @@ export default function ProjectReview() {
               </button>
 
               <button
-                onClick={() => navigate(`/download/${id}`)}
+                onClick={handleEnviarSelecao}
                 className="flex-1 bg-[#ff5351] text-white rounded-xl px-3 py-2 font-black uppercase tracking-wider text-[8px] active:scale-95 transition-all flex items-center justify-center gap-1.5"
               >
                 <CheckCircle2 className="w-3 h-3" />
@@ -730,7 +777,7 @@ export default function ProjectReview() {
 
                 <div className="pb-0">
                   <button
-                    onClick={() => navigate(`/download/${id}`)}
+                    onClick={handleEnviarSelecao}
                     className="h-[64px] px-10 bg-[#ff5351] text-white rounded-2xl font-black uppercase tracking-[0.2em] text-[10px] hover:brightness-110 active:scale-95 transition-all shadow-[0_0_30px_rgba(255,83,81,0.2)] flex items-center justify-center gap-3"
                   >
                     <CheckCircle2 className="w-5 h-5" />
@@ -758,6 +805,9 @@ export default function ProjectReview() {
                         setSelectedPreview(item);
                         setIsPlaying(true);
                         if (item.type === 'video') startLoadingTimeout();
+                        
+                        // REGRA 3: Atualiza status do fluxo
+                        markAsWaitingApproval();
                       }
                     }}
                     className={cn(
