@@ -27,7 +27,7 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
   // A - Título
   const [title, setTitle] = useState('');
   
-  // B - Cliente e Serviços
+  // B - Cliente e Categoria
   const [clients, setClients] = useState<Client[]>([]);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [isCreatingClient, setIsCreatingClient] = useState(false);
@@ -39,29 +39,38 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
   const [isCreatingCategory, setIsCreatingCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
 
+  // Serviço e Pacote
   const [serviceCatalogs, setServiceCatalogs] = useState<ServiceCatalog[]>([]);
   const [selectedServiceId, setSelectedServiceId] = useState('');
   const [selectedPackageId, setSelectedPackageId] = useState('');
 
-  // C e D - Modelos de Fluxo (NOVO)
+  // C - Modelos de Fluxo
   const [workflowModels, setWorkflowModels] = useState<WorkflowModel[]>([]);
   const [selectedModelId, setSelectedModelId] = useState('');
   const [workflowStages, setWorkflowStages] = useState<ProjectStage[]>([]);
 
-  // E - Links e Finalização
+  // D - Finalização
   const [originalDriveLink, setOriginalDriveLink] = useState('');
   const [includedCredits, setIncludedCredits] = useState(15);
   const [sendInviteEmail, setSendInviteEmail] = useState(true);
 
-  // --- Lógica de Cascata (Progressive Disclosure) ---
+  // --- PROGRESSIVE DISCLOSURE REGRAS ---
   const isStepBVisible = title.trim().length > 0;
-  const isStepCVisible = isStepBVisible && (
-    (isCreatingClient ? (newClientName && newClientEmail) : selectedClient) && 
-    (isCreatingCategory ? newCategoryName : selectedCategory) &&
-    selectedServiceId && selectedPackageId
-  );
-  // Se ele escolheu "Sem Fluxo", o Passo E aparece. Se escolheu um fluxo, precisa ter as etapas carregadas.
-  const isStepEVisible = isStepCVisible && (selectedModelId === 'none' || (selectedModelId !== '' && workflowStages.length > 0));
+  
+  const hasClient = isCreatingClient ? (newClientName.length > 0 && newClientEmail.length > 0) : selectedClient !== null;
+  const hasCategory = isCreatingCategory ? newCategoryName.length > 0 : selectedCategory !== '';
+  const isServicesVisible = isStepBVisible && hasClient && hasCategory;
+  
+  const hasServiceAndPackage = selectedServiceId !== '' && selectedPackageId !== '';
+  
+  // O Fluxo e Finalização aparecem se o cara preencheu Serviço/Pacote OU se ele escolheu uma categoria que não tem Serviço cadastrado.
+  const servicesAvailable = useMemo(() => {
+    return serviceCatalogs.filter((s) => s.category === (isCreatingCategory ? newCategoryName : selectedCategory));
+  }, [selectedCategory, newCategoryName, isCreatingCategory, serviceCatalogs]);
+  
+  const isFlowVisible = isServicesVisible && (hasServiceAndPackage || servicesAvailable.length === 0);
+  
+  const isFinalVisible = isFlowVisible && (selectedModelId !== '');
 
   useEffect(() => {
     if (isOpen) {
@@ -91,21 +100,15 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
     }
   };
 
-  // Memoizations para Serviços
   const allCategories = useMemo(() => {
     const dynamicCategories = categories.map((category) => category.name);
     const serviceCategories = serviceCatalogs.map((service) => service.category);
     return Array.from(new Set([...baseCategories, ...dynamicCategories, ...serviceCategories]));
   }, [categories, serviceCatalogs]);
 
-  const servicesForSelectedCategory = useMemo(() => {
-    if (!selectedCategory || isCreatingCategory) return [];
-    return serviceCatalogs.filter((service) => service.category === selectedCategory);
-  }, [selectedCategory, isCreatingCategory, serviceCatalogs]);
-
   const selectedService = useMemo(() => {
-    return servicesForSelectedCategory.find((service) => service.id === selectedServiceId) || null;
-  }, [servicesForSelectedCategory, selectedServiceId]);
+    return servicesAvailable.find((service) => service.id === selectedServiceId) || null;
+  }, [servicesAvailable, selectedServiceId]);
 
   const packagesForSelectedService = useMemo(() => {
     if (!selectedService) return [];
@@ -129,7 +132,11 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
     setIncludedCredits(15);
   };
 
-  // Tratamento de Fluxo
+  const handleCategorySelect = (category: string) => {
+    setSelectedCategory(category);
+    resetServicePackageSelection();
+  };
+
   const handleModelSelect = (modelId: string) => {
     setSelectedModelId(modelId);
     
@@ -207,7 +214,7 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
       }
       if (!finalCategory) finalCategory = 'Geral';
 
-      if (!isCreatingCategory && servicesForSelectedCategory.length > 0) {
+      if (!isCreatingCategory && servicesAvailable.length > 0) {
         if (!selectedService) throw new Error('Selecione o serviço referente a este projeto');
         if (!selectedPackage) throw new Error('Selecione o pacote referente a este projeto');
       }
@@ -237,22 +244,19 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
         selectionUnit: selectedService?.selectionUnit || '',
       };
 
-      // 1. Cria o projeto no Firebase
       const projectRef = await projectService.createProject(projectPayload);
 
-      // 2. Se escolheu um Fluxo, já inicializa o Cockpit pra esse projeto!
       if (selectedModelId && selectedModelId !== 'none' && workflowStages.length > 0) {
         const selectedModel = workflowModels.find(m => m.id === selectedModelId);
         if (selectedModel) {
           const stagesToSave = [...workflowStages];
-          stagesToSave[0].status = 'in_progress'; // Já inicia a primeira etapa
+          stagesToSave[0].status = 'in_progress'; 
           stagesToSave[0].startedAt = new Date().toISOString();
           
           await projetoFluxoService.initializeWorkflow(projectRef.id, selectedModel, stagesToSave);
         }
       }
 
-      // 3. Envia o Email
       if (sendInviteEmail && finalClientEmail) {
         const status = await clientService.checkGlobalStatus(finalClientEmail);
         const isRegistered = status === 'confirmed';
@@ -268,7 +272,6 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
       resetForm();
       onClose();
       
-      // Se tem fluxo, manda pro Cockpit. Se não, manda pro Config
       if (selectedModelId && selectedModelId !== 'none') {
         navigate(`/projetos/${projectRef.id}/fluxo`);
       } else {
@@ -319,7 +322,7 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
           </div>
 
           {/* ==========================================
-              PASSO B: CLIENTE E PACOTES 
+              PASSO B: CLIENTE E CATEGORIA 
              ========================================== */}
           <div className={cn("space-y-8 transition-all duration-700 ease-in-out origin-top", isStepBVisible ? "opacity-100 scale-y-100 h-auto" : "opacity-0 scale-y-0 h-0 overflow-hidden")}>
             <div className="space-y-4 pt-4 border-t border-zinc-800">
@@ -338,7 +341,7 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
               ) : (
                 <div className="relative group">
                   <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-600 group-focus-within:text-[#ff5351]" />
-                  <select className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-12 pr-4 py-4 text-white focus:border-[#ff5351] outline-none appearance-none cursor-pointer" value={selectedClient?.id || ''} onChange={(e) => setSelectedClient(clients.find((item) => item.id === e.target.value) || null)} required={isStepBVisible}>
+                  <select className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-12 pr-4 py-4 text-white focus:border-[#ff5351] outline-none appearance-none cursor-pointer" value={selectedClient?.id || ''} onChange={(e) => setSelectedClient(clients.find((item) => item.id === e.target.value) || null)} required={isStepBVisible && !isCreatingClient}>
                     <option value="">Selecione um cliente...</option>
                     {clients.map((client) => <option key={client.id} value={client.id}>{client.name} ({client.email})</option>)}
                   </select>
@@ -366,37 +369,38 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
                 </div>
               )}
             </div>
+          </div>
 
-            {!isCreatingCategory && selectedCategory && (
-              <div className="space-y-6 rounded-3xl border border-zinc-800 bg-zinc-900/40 p-5 md:p-6 animate-in fade-in slide-in-from-top-4">
-                {servicesForSelectedCategory.length > 0 ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1">Serviço cadastrado</label>
-                      <select value={selectedServiceId} onChange={(e) => { setSelectedServiceId(e.target.value); setSelectedPackageId(''); }} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-5 py-4 text-white focus:border-[#ff5351] outline-none">
-                        <option value="">Selecione o serviço...</option>
-                        {servicesForSelectedCategory.map((service) => <option key={service.id} value={service.id}>{service.name}</option>)}
-                      </select>
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1">Pacote do serviço</label>
-                      <select value={selectedPackageId} onChange={(e) => setSelectedPackageId(e.target.value)} disabled={!selectedService} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-5 py-4 text-white focus:border-[#ff5351] outline-none disabled:opacity-50">
-                        <option value="">Selecione o pacote...</option>
-                        {packagesForSelectedService.map((pkg) => <option key={pkg.id} value={pkg.id}>{pkg.name}</option>)}
-                      </select>
-                    </div>
+          {/* ==========================================
+              PASSO B.2: SERVIÇOS E PACOTES (Aparece após Categoria)
+             ========================================== */}
+          <div className={cn("transition-all duration-700 ease-in-out origin-top", isServicesVisible ? "opacity-100 scale-y-100 h-auto" : "opacity-0 scale-y-0 h-0 overflow-hidden")}>
+            {!isCreatingCategory && servicesAvailable.length > 0 && (
+              <div className="space-y-6 rounded-3xl border border-zinc-800 bg-zinc-900/40 p-5 md:p-6 mb-8 mt-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1">Serviço cadastrado</label>
+                    <select value={selectedServiceId} onChange={(e) => { setSelectedServiceId(e.target.value); setSelectedPackageId(''); }} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-5 py-4 text-white focus:border-[#ff5351] outline-none">
+                      <option value="">Selecione o serviço...</option>
+                      {servicesAvailable.map((service) => <option key={service.id} value={service.id}>{service.name}</option>)}
+                    </select>
                   </div>
-                ) : (
-                  <div className="rounded-2xl border border-dashed border-zinc-700 p-4 text-sm text-zinc-500">Não há serviço ativo cadastrado para esta categoria.</div>
-                )}
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1">Pacote do serviço</label>
+                    <select value={selectedPackageId} onChange={(e) => setSelectedPackageId(e.target.value)} disabled={!selectedService} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-5 py-4 text-white focus:border-[#ff5351] outline-none disabled:opacity-50">
+                      <option value="">Selecione o pacote...</option>
+                      {packagesForSelectedService.map((pkg) => <option key={pkg.id} value={pkg.id}>{pkg.name}</option>)}
+                    </select>
+                  </div>
+                </div>
               </div>
             )}
           </div>
 
           {/* ==========================================
-              PASSO C e D: MODELO DE FLUXO (NOVO)
+              PASSO C: MODELO DE FLUXO E RESPONSÁVEIS
              ========================================== */}
-          <div className={cn("space-y-6 transition-all duration-700 ease-in-out origin-top", isStepCVisible ? "opacity-100 scale-y-100 h-auto" : "opacity-0 scale-y-0 h-0 overflow-hidden")}>
+          <div className={cn("space-y-6 transition-all duration-700 ease-in-out origin-top", isFlowVisible ? "opacity-100 scale-y-100 h-auto" : "opacity-0 scale-y-0 h-0 overflow-hidden")}>
             <div className="space-y-4 pt-4 border-t border-zinc-800">
               <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1 flex items-center gap-2">
                 <GitBranch className="w-3 h-3" /> Setup de Processo (Cockpit)
@@ -407,7 +411,7 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
                   className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-12 pr-4 py-4 text-white focus:border-[#ff5351] outline-none appearance-none cursor-pointer" 
                   value={selectedModelId} 
                   onChange={(e) => handleModelSelect(e.target.value)} 
-                  required={isStepCVisible}
+                  required={isFlowVisible}
                 >
                   <option value="">Selecione um fluxo para este projeto...</option>
                   <option value="none">Nenhum (Apenas Vitrine de Seleção)</option>
@@ -418,7 +422,6 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
               </div>
             </div>
 
-            {/* Sub-passo D: Configurar etapas do fluxo escolhido */}
             {selectedModelId && selectedModelId !== 'none' && workflowStages.length > 0 && (
               <div className="space-y-4 rounded-3xl border border-zinc-800 bg-[#141414] p-5 animate-in fade-in slide-in-from-top-4">
                 <h4 className="text-white font-black uppercase tracking-tight text-sm mb-4">Personalizar Responsáveis</h4>
@@ -443,9 +446,9 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
           </div>
 
           {/* ==========================================
-              PASSO E: FINALIZAÇÃO (Drive, E-mail e Botão)
+              PASSO D: FINALIZAÇÃO (Drive, E-mail e Botão)
              ========================================== */}
-          <div className={cn("space-y-8 transition-all duration-700 ease-in-out origin-top", isStepEVisible ? "opacity-100 scale-y-100 h-auto" : "opacity-0 scale-y-0 h-0 overflow-hidden")}>
+          <div className={cn("space-y-8 transition-all duration-700 ease-in-out origin-top", isFinalVisible ? "opacity-100 scale-y-100 h-auto" : "opacity-0 scale-y-0 h-0 overflow-hidden")}>
             <div className="space-y-2 pt-4 border-t border-zinc-800">
               <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1">Link do Drive (Arquivos limpos)</label>
               <div className="relative">
