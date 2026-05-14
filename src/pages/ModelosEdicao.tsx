@@ -68,7 +68,6 @@ function SortableStageItem({ stage, index, onEdit, onRemove }: { stage: Stage; i
         isDragging ? "border-[#ff5351] shadow-[0_0_30px_rgba(255,83,81,0.15)] scale-[1.02]" : "border-zinc-800 hover:border-[#ff5351]/30 hover:shadow-[0_0_20px_rgba(255,83,81,0.05)]"
       )}
     >
-      {/* Alça de Arrastar - Onde os listeners são aplicados */}
       <div 
         {...attributes} 
         {...listeners}
@@ -77,7 +76,6 @@ function SortableStageItem({ stage, index, onEdit, onRemove }: { stage: Stage; i
         <GripVertical className="w-5 h-5" />
       </div>
 
-      {/* Conteúdo */}
       <div className="flex-1 p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
         <div className="flex items-center gap-5">
           <div className="w-10 h-10 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-400 font-black text-sm shadow-inner group-hover:border-[#ff5351]/30 group-hover:text-white transition-all">
@@ -150,7 +148,6 @@ export default function ModelosEdicao() {
   const [editModelForm, setEditModelForm] = useState({ name: '', description: '', presetIndex: 0 });
   const [editingStage, setEditingStage] = useState<Stage | null>(null);
 
-  // Configurando sensores do dnd-kit
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
@@ -183,7 +180,6 @@ export default function ModelosEdicao() {
     load();
   }, [id, navigate]);
 
-  // Evento que dispara quando você solta o item arrastado
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
 
@@ -371,7 +367,6 @@ export default function ModelosEdicao() {
             </div>
           ) : (
             <div className="space-y-3">
-              {/* ÁREA DE DRAG AND DROP */}
               <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
                 <SortableContext items={stages.map(s => s.id)} strategy={verticalListSortingStrategy}>
                   {stages.map((stage, index) => (
@@ -463,7 +458,7 @@ export default function ModelosEdicao() {
                   </div>
                   <div className="space-y-2">
                     <label className="text-[10px] uppercase font-black tracking-widest text-zinc-500 ml-1">Responsável Padrão</label>
-                    <input type="text" placeholder="Ex: Produção" value={editing   Stage.assignee} onChange={e => setEditingStage({...editingStage, assignee: e.target.value})} className="w-full h-12 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white focus:border-[#ff5351] outline-none" />
+                    <input type="text" placeholder="Ex: Produção" value={editingStage.assignee} onChange={e => setEditingStage({...editingStage, assignee: e.target.value})} className="w-full h-12 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white focus:border-[#ff5351] outline-none" />
                   </div>
                 </div>
 
@@ -481,7 +476,6 @@ export default function ModelosEdicao() {
                   </label>
                 </div>
                 
-                {/* Opção extra: Bloqueia o próximo passo até finalizar? */}
                 <div className="pt-0">
                   <label className="flex items-center gap-3 cursor-pointer p-4 rounded-xl border border-zinc-800 bg-zinc-900/50 hover:bg-zinc-900 transition-colors">
                     <div className="relative flex items-center justify-center w-6 h-6">
