@@ -22,7 +22,8 @@ import {
   ChevronRight,
   CheckCircle2,
   X,
-  FolderOpen
+  FolderOpen,
+  GitBranch
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { projectService, Project } from '../services/projectService';
@@ -207,9 +208,9 @@ export default function ProjectConfig() {
             [uploadId]: { ...prev[uploadId], status: 'completed', progress: 100 } 
           }));
           setTimeout(async () => {
-  const mediaData = await mediaService.getMedia(id!);
-  setMedia(mediaData);
-}, 1000);
+            const mediaData = await mediaService.getMedia(id!);
+            setMedia(mediaData);
+          }, 1000);
 
         } else {
           console.error('[Upload] Erro:', xhr.status, xhr.responseText);
@@ -343,7 +344,7 @@ export default function ProjectConfig() {
           await mediaService.deleteMedia(id!, item.id);
         }
       }
-            setMedia([]);
+      setMedia([]);
       await projectService.updateProject(id!, { creditsUsed: 0 });
       alert('Catálogo limpo com sucesso. Créditos resetados.');
 
@@ -432,11 +433,19 @@ export default function ProjectConfig() {
             <p className="text-[#ff5351] font-bold text-lg">{project.title}</p>
           </div>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex flex-col sm:flex-row items-center gap-4">
+          <button 
+            onClick={() => navigate(`/projetos/${id}/fluxo`)}
+            className="w-full sm:w-auto px-6 py-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-black uppercase tracking-widest hover:bg-emerald-500/20 hover:border-emerald-500/40 transition-all text-sm flex items-center justify-center gap-2"
+          >
+            <GitBranch className="w-4 h-4" />
+            Cockpit do Fluxo
+          </button>
+          
           <button 
             onClick={handleSave}
             disabled={saving}
-            className="px-8 py-4 rounded-xl bg-[#ff5351] text-white font-black uppercase tracking-widest hover:brightness-110 transition-all text-sm shadow-2xl shadow-[#ff5351]/20 flex items-center gap-2"
+            className="w-full sm:w-auto px-8 py-4 rounded-xl bg-[#ff5351] text-white font-black uppercase tracking-widest hover:brightness-110 transition-all text-sm shadow-2xl shadow-[#ff5351]/20 flex items-center justify-center gap-2"
           >
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
             Salvar Projeto
