@@ -61,12 +61,11 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
   const loadInitialData = async () => {
     setLoadingReferences(true);
     try {
-      // CORREÇÃO AQUI: getModelos() em vez de getModels()
       const [cls, cats, catalogs, fetchedModels] = await Promise.all([
         clientService.searchClients(''),
         categoryService.getCategories(),
         settingsService.getServiceCatalogs(),
-        modelosService.getModelos().catch(() => []) 
+        modelosService.getModels().catch(() => []) // Evita erro se modelos ainda não existirem
       ]);
 
       setClients(cls);
@@ -214,7 +213,7 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
         packageId: selectedPackage?.id || '',
         packageName: selectedPackage?.name || '',
         selectionUnit: selectedService?.selectionUnit || '',
-        workflowModelId: selectedModelId, 
+        workflowModelId: selectedModelId, // <-- FLUXO VINCULADO!
       };
 
       const projectRef = await projectService.createProject(projectPayload);
@@ -231,6 +230,7 @@ export default function NewProjectModal({ isOpen, onClose, onSuccess }: NewProje
         }
       }
 
+      // Redireciona para o cockpit caso tenha fluxo selecionado, ou para config
       onSuccess();
       resetForm();
       onClose();
