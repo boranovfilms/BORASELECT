@@ -23,6 +23,13 @@ interface UploadProgress {
   status: 'pending' | 'uploading' | 'completed' | 'error';
 }
 
+// Formatador de Data/Hora
+const formatStageDate = (isoString?: string) => {
+  if (!isoString) return '';
+  const d = new Date(isoString);
+  return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) + ' ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+};
+
 export default function ProjetoFluxo() {
   const { id: projectId } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -32,16 +39,12 @@ export default function ProjetoFluxo() {
   const [projectData, setProjectData] = useState<any>(null);
   const [workflow, setWorkflow] = useState<ProjectWorkflow | null>(null);
   
-  // Setup State
   const [availableModels, setAvailableModels] = useState<WorkflowModel[]>([]);
   const [selectedModel, setSelectedModel] = useState<WorkflowModel | null>(null);
   const [setupStages, setSetupStages] = useState<ProjectStage[]>([]);
   const [isInitializing, setIsInitializing] = useState(false);
-
-  // Execution State
   const [stageNotes, setStageNotes] = useState('');
 
-  // --- MÍDIAS E CONFIGURAÇÕES (PROJECT CONFIG) ---
   const [media, setMedia] = useState<MediaItem[]>([]);
   const [fetchingDrive, setFetchingDrive] = useState(false);
   const [activeTab, setActiveTab] = useState('all');
@@ -143,9 +146,8 @@ export default function ProjetoFluxo() {
   const handleUpdateStatus = async (newStatus: ProjectStageStatus) => {
     if (!workflow || !projectId) return;
 
-    // --- VALIDAÇÃO: Bloquear conclusão se for a etapa Subir Cortes e não houver mídia ---
     const currentStageName = workflow.stages[workflow.currentStageIndex].name.toUpperCase();
-    if (currentStageName === 'SUBIR CORTES' && newStatus === 'completed' && media.length === 0) {
+    if (currentStageName.includes('SUBIR CORTES') && newStatus === 'completed' && media.length === 0) {
       toast.error('Carregue pelo menos um arquivo antes de concluir a etapa.');
       return;
     }
@@ -154,17 +156,22 @@ export default function ProjetoFluxo() {
     const currentIndex = workflow.currentStageIndex;
     updatedStages[currentIndex].status = newStatus;
     
-    if (newStatus === 'in_progress' && !updatedStages[currentIndex].startedAt) {
-      updatedStages[currentIndex].startedAt = new Date().toISOString();
-    }
-    if (newStatus === 'completed') {
-      updatedStages[currentIndex].completedAt = new Date().toISOString();
+    // Mapear qual campo de data atualizar
+    const dateFieldMap: Record<string, string> = {
+      pending: 'pendingAt',
+      in_progress: 'startedAt',
+      waiting_approval: 'waitingApprovalAt',
+      completed: 'completedAt'
+    };
+    const fieldName = dateFieldMap[newStatus];
+    if (fieldName) {
+      (updatedStages[currentIndex] as any)[fieldName] = new Date().toISOString();
     }
 
     const newWorkflow = { ...workflow, stages: updatedStages };
     setWorkflow(newWorkflow);
     await projetoFluxoService.updateWorkflow(projectId, { stages: updatedStages });
-    toast.success('Status atualizado');
+    toast.success('Status atualizado e data registrada');
   };
 
   const handleSaveNotes = async () => {
@@ -185,10 +192,22 @@ export default function ProjetoFluxo() {
       toast.success('Projeto finalizado com sucesso!');
       return;
     }
-    const nextIndex = workflow.currentStageIndex + 1;
+    
+    const currentIndex = workflow.currentStageIndex;
+    const nextIndex = currentIndex + 1;
     const updatedStages = [...workflow.stages];
-    updatedStages[nextIndex].status = 'in_progress';
-    updatedStages[nextIndex].startedAt = new Date().toISOString();
+    
+    const currentName = updatedStages[currentIndex].name.toUpperCase();
+    const nextName = updatedStages[nextIndex].name.toUpperCase();
+
+    // REGRA 1: Ao finalizar "Subir Cortes", o proximo passo (Seleção) fica como Pendente
+    if (currentName.includes('SUBIR CORTES') && nextName.includes('SELEÇÃO')) {
+      updatedStages[nextIndex].status = 'pending';
+      (updatedStages[nextIndex] as any).pendingAt = new Date().toISOString();
+    } else {
+      updatedStages[nextIndex].status = 'in_progress';
+      (updatedStages[nextIndex] as any).startedAt = new Date().toISOString();
+    }
 
     const newWorkflow = { ...workflow, currentStageIndex: nextIndex, stages: updatedStages };
     setWorkflow(newWorkflow);
@@ -197,28 +216,14 @@ export default function ProjetoFluxo() {
     toast.success('Avançou para a próxima etapa!');
   };
 
-  // --- FUNÇÕES DE MÍDIA (PROJECT CONFIG) ---
   const handleSaveMediaConfig = async () => {
     if (!projectId) return;
     setSaving(true);
     try {
-      await projectService.updateProject(projectId, {
-        driveLink: mediaLink,
-        originalDriveLink,
-        clientEmail,
-        creditsTotal: includedItems,
-        includedItems,
-        extraPrice: parseFloat(extraPrice.replace(',', '.')),
-        allowHighRes
-      });
+      await projectService.updateProject(projectId, { driveLink: mediaLink, originalDriveLink, clientEmail, creditsTotal: includedItems, includedItems, extraPrice: parseFloat(extraPrice.replace(',', '.')), allowHighRes });
       await loadData();
       toast.success('Configurações do cliente salvas!');
-    } catch (error) {
-      console.error(error);
-      toast.error('Erro ao salvar configurações.');
-    } finally {
-      setSaving(false);
-    }
+    } catch (error) { toast.error('Erro ao salvar configurações.'); } finally { setSaving(false); }
   };
 
   const handleFileUpload = (files: FileList | null) => {
@@ -242,121 +247,61 @@ export default function ProjetoFluxo() {
     try {
       const workerUrl = `https://nameless-dust-4193.boranovfilms.workers.dev/api/upload`;
       const response = await fetch(workerUrl, { method: 'GET', headers: { 'Accept': 'application/json' } });
-      if (!response.ok) throw new Error(`Worker Error: ${response.status}`);
-      
+      if (!response.ok) throw new Error(`Worker Error`);
       const data = await response.json();
-      if (!data.success || !data.result?.uploadURL) throw new Error('Worker não retornou URL');
-      
+      if (!data.success || !data.result?.uploadURL) throw new Error('Worker sem URL');
       const { uid, uploadURL } = data.result;
       const xhr = new XMLHttpRequest();
       activeRequests.current[uploadId] = xhr;
-
-      const formData = new FormData();
-      formData.append('file', upload.file);
+      const formData = new FormData(); formData.append('file', upload.file);
       xhr.open('POST', uploadURL, true);
-
-      xhr.upload.onprogress = (event) => {
-        if (event.lengthComputable) {
-          const progress = Math.round((event.loaded / event.total) * 100);
-          setUploads(prev => ({ ...prev, [uploadId]: { ...prev[uploadId], progress } }));
-        }
-      };
-
+      xhr.upload.onprogress = (e) => { if (e.lengthComputable) setUploads(prev => ({ ...prev, [uploadId]: { ...prev[uploadId], progress: Math.round((e.loaded / e.total) * 100) } })); };
       xhr.onload = async () => {
         delete activeRequests.current[uploadId];
         if (xhr.status >= 200 && xhr.status < 300) {
           const streamUrl = `https://customer-qm5on0nubla4rvdf.cloudflarestream.com/${uid}/watch`;
           const thumbnailUrl = `https://customer-qm5on0nubla4rvdf.cloudflarestream.com/${uid}/thumbnails/thumbnail.jpg`;
-
-          await mediaService.addMedia(projectId, { externalId: uid, name: upload.file.name, url: streamUrl, thumbnailUrl: thumbnailUrl, type: 'video', isSelected: false });
+          await mediaService.addMedia(projectId, { externalId: uid, name: upload.file.name, url: streamUrl, thumbnailUrl, type: 'video', isSelected: false });
           setUploads(prev => ({ ...prev, [uploadId]: { ...prev[uploadId], status: 'completed', progress: 100 } }));
-          setTimeout(async () => {
-            const mediaData = await mediaService.getMedia(projectId);
-            setMedia(mediaData);
-          }, 1000);
-        } else {
-          toast.error(`Erro Cloudflare (${xhr.status})`);
-          setUploads(prev => ({ ...prev, [uploadId]: { ...prev[uploadId], status: 'error' } }));
-        }
+          setTimeout(async () => { const md = await mediaService.getMedia(projectId); setMedia(md); }, 1000);
+        } else { toast.error(`Erro Cloudflare`); setUploads(prev => ({ ...prev, [uploadId]: { ...prev[uploadId], status: 'error' } })); }
       };
-
-      xhr.onerror = () => {
-        delete activeRequests.current[uploadId];
-        toast.error('Erro de conexão com Cloudflare');
-        setUploads(prev => ({ ...prev, [uploadId]: { ...prev[uploadId], status: 'error' } }));
-      };
+      xhr.onerror = () => { delete activeRequests.current[uploadId]; setUploads(prev => ({ ...prev, [uploadId]: { ...prev[uploadId], status: 'error' } })); };
       xhr.send(formData);
-    } catch (error: any) {
-      toast.error(`Erro: ${error.message}`);
-      setUploads(prev => ({ ...prev, [uploadId]: { ...prev[uploadId], status: 'error' } }));
-    }
+    } catch (e: any) { setUploads(prev => ({ ...prev, [uploadId]: { ...prev[uploadId], status: 'error' } })); }
   };
 
-  const startAllUploads = () => {
-    Object.keys(uploads).forEach(id => {
-      if (uploads[id].status === 'pending' || uploads[id].status === 'error') startUpload(id);
-    });
-  };
-
-  const cancelUpload = (uploadId: string) => {
-    if (activeRequests.current[uploadId]) {
-      activeRequests.current[uploadId].abort();
-      delete activeRequests.current[uploadId];
-    }
-    setUploads(prev => { const next = { ...prev }; delete next[uploadId]; return next; });
-  };
-
-  const retryUpload = (uploadId: string) => startUpload(uploadId);
-  const clearCompletedUploads = () => {
-    setUploads(prev => {
-      const next = { ...prev };
-      Object.keys(next).forEach(key => { if (next[key].status === 'completed') delete next[key]; });
-      return next;
-    });
-  };
-  const clearAllUploads = () => {
-    Object.keys(activeRequests.current).forEach(id => activeRequests.current[id].abort());
-    activeRequests.current = {};
-    setUploads({});
-  };
+  const startAllUploads = () => { Object.keys(uploads).forEach(id => { if (uploads[id].status === 'pending' || uploads[id].status === 'error') startUpload(id); }); };
+  const cancelUpload = (uploadId: string) => { if (activeRequests.current[uploadId]) { activeRequests.current[uploadId].abort(); delete activeRequests.current[uploadId]; } setUploads(prev => { const n = { ...prev }; delete n[uploadId]; return n; }); };
+  const retryUpload = (id: string) => startUpload(id);
+  const clearCompletedUploads = () => { setUploads(prev => { const n = { ...prev }; Object.keys(n).forEach(k => { if (n[k].status === 'completed') delete n[k]; }); return n; }); };
+  const clearAllUploads = () => { Object.keys(activeRequests.current).forEach(id => activeRequests.current[id].abort()); activeRequests.current = {}; setUploads({}); };
 
   const handleSyncMedia = async () => {
     if (!mediaLink) { toast.error('Insira o link fonte.'); return; }
     setFetchingDrive(true);
     try {
-      const response = await fetch('/api-v2/media/sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: mediaLink })
-      });
+      const response = await fetch('/api-v2/media/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: mediaLink }) });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Erro ao sincronizar');
-
+      if (!response.ok) throw new Error(data.error);
       if (data.files && data.files.length > 0) {
-        let addedCount = 0;
-        const existingIds = new Set(media.map(m => m.externalId).filter(Boolean));
+        let added = 0; const existingIds = new Set(media.map(m => m.externalId).filter(Boolean));
         for (const file of data.files) {
           const fileId = file.id || file.uid;
-          if (!existingIds.has(fileId)) {
-            await mediaService.addMedia(projectId!, { externalId: fileId, name: file.name, url: file.url, thumbnailUrl: file.thumbnailUrl || file.url, type: file.type, isSelected: false });
-            addedCount++;
-          }
+          if (!existingIds.has(fileId)) { await mediaService.addMedia(projectId!, { externalId: fileId, name: file.name, url: file.url, thumbnailUrl: file.thumbnailUrl || file.url, type: file.type, isSelected: false }); added++; }
         }
-        if (addedCount > 0) { toast.success(`${addedCount} novos arquivos sincronizados!`); await loadData(); } 
-        else { toast.success('O catálogo já está atualizado.'); }
-      } else { toast.error('Nenhum arquivo encontrado na fonte.'); }
-    } catch (error: any) { toast.error('Falha ao sincronizar: ' + error.message); } finally { setFetchingDrive(false); }
+        if (added > 0) { toast.success(`${added} arquivos novos!`); await loadData(); } else { toast.success('Atualizado.'); }
+      } else { toast.error('Nenhum arquivo.'); }
+    } catch (e: any) { toast.error('Falha: ' + e.message); } finally { setFetchingDrive(false); }
   };
 
   const handleClearMedia = async () => {
-    if (!window.confirm('Deseja apagar TODO o catálogo? Ação irreversível.')) return;
+    if (!window.confirm('Apagar TODO o catálogo?')) return;
     setLoading(true);
     try {
       for (const item of media) if (item.id) await mediaService.deleteMedia(projectId!, item.id);
-      setMedia([]);
-      await projectService.updateProject(projectId!, { creditsUsed: 0 });
-      toast.success('Catálogo limpo com sucesso.');
-    } catch (error) { toast.error('Erro ao limpar catálogo.'); } finally { setLoading(false); }
+      setMedia([]); await projectService.updateProject(projectId!, { creditsUsed: 0 }); toast.success('Catálogo limpo.');
+    } catch (e) { toast.error('Erro ao limpar.'); } finally { setLoading(false); }
   };
 
   const getThumbnailUrl = (item: MediaItem) => {
@@ -368,9 +313,6 @@ export default function ProjetoFluxo() {
     }
     return item.url;
   };
-
-  const filteredMedia = activeTab === 'all' ? media : media.filter(m => m.isSelected);
-
 
   if (loading) return <div className="min-h-[60vh] flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-[#ff5351]" /></div>;
 
@@ -388,52 +330,29 @@ export default function ProjetoFluxo() {
         {!selectedModel ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {availableModels.length === 0 ? (
-              <div className="col-span-2 p-8 text-center border border-zinc-800 rounded-3xl bg-[#141414]">
-                <LayoutTemplate className="w-12 h-12 text-zinc-700 mx-auto mb-4" />
-                <p className="text-zinc-400 font-medium">Nenhum modelo cadastrado.</p>
-                <button onClick={() => navigate('/modelos')} className="mt-4 text-[#ff5351] text-sm font-black uppercase tracking-widest hover:underline">Ir para Modelos</button>
-              </div>
+              <div className="col-span-2 p-8 text-center border border-zinc-800 rounded-3xl bg-[#141414]"><LayoutTemplate className="w-12 h-12 text-zinc-700 mx-auto mb-4" /><p className="text-zinc-400 font-medium">Nenhum modelo cadastrado.</p><button onClick={() => navigate('/modelos')} className="mt-4 text-[#ff5351] text-sm font-black uppercase tracking-widest hover:underline">Ir para Modelos</button></div>
             ) : (
               availableModels.map(model => (
                 <button key={model.id} onClick={() => handleSelectModel(model)} className="p-6 text-left border border-zinc-800 bg-[#141414] rounded-3xl hover:border-[#ff5351] hover:bg-zinc-900/50 transition-all group">
-                  <h3 className="text-xl font-black text-white uppercase group-hover:text-[#ff5351] transition-colors">{model.name}</h3>
-                  <p className="text-zinc-500 mt-2 text-sm">{model.description || 'Sem descrição'}</p>
-                  <div className="mt-6 flex items-center gap-2 text-[10px] uppercase font-black tracking-widest text-zinc-600"><CheckCircle2 className="w-4 h-4" /> {(model.stages || []).length} etapas</div>
+                  <h3 className="text-xl font-black text-white uppercase group-hover:text-[#ff5351] transition-colors">{model.name}</h3><p className="text-zinc-500 mt-2 text-sm">{model.description || 'Sem descrição'}</p><div className="mt-6 flex items-center gap-2 text-[10px] uppercase font-black tracking-widest text-zinc-600"><CheckCircle2 className="w-4 h-4" /> {(model.stages || []).length} etapas</div>
                 </button>
               ))
             )}
           </div>
         ) : (
           <div className="space-y-6">
-            <div className="flex items-center gap-4 py-4 border-b border-zinc-800">
-              <button onClick={() => setSelectedModel(null)} className="text-zinc-500 hover:text-white"><ArrowLeft className="w-5 h-5"/></button>
-              <h2 className="text-xl font-black text-white uppercase">Personalizar: {selectedModel.name}</h2>
-            </div>
-            
+            <div className="flex items-center gap-4 py-4 border-b border-zinc-800"><button onClick={() => setSelectedModel(null)} className="text-zinc-500 hover:text-white"><ArrowLeft className="w-5 h-5"/></button><h2 className="text-xl font-black text-white uppercase">Personalizar: {selectedModel.name}</h2></div>
             <div className="space-y-4">
               {setupStages.map((stage, idx) => (
                 <div key={stage.id} className="p-5 bg-[#141414] border border-zinc-800 rounded-3xl flex flex-col md:flex-row md:items-center gap-4">
                   <div className="w-12 h-12 rounded-2xl bg-zinc-900 flex items-center justify-center text-zinc-500 font-black border border-zinc-800 shrink-0">{idx + 1}</div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-white font-black uppercase text-sm truncate">{stage.name}</p>
-                    <p className="text-zinc-500 text-xs mt-1 truncate">{stage.description || 'Sem descrição'}</p>
-                  </div>
-                  <div className="w-full md:w-64 space-y-2 shrink-0">
-                    <label className="text-[10px] uppercase font-black text-[#ff5351] tracking-widest">Responsável (Neste Projeto)</label>
-                    <input type="text" value={stage.assignee} onChange={(e) => updateSetupStage(idx, 'assignee', e.target.value)} placeholder="Ex: João" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl h-12 px-4 text-sm text-white focus:border-[#ff5351] outline-none" />
-                  </div>
-                  <div className="w-full md:w-32 space-y-2 shrink-0">
-                    <label className="text-[10px] uppercase font-black text-[#ff5351] tracking-widest">Prazo (Dias)</label>
-                    <input type="number" min="0" value={stage.durationDays} onChange={(e) => updateSetupStage(idx, 'durationDays', Number(e.target.value))} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl h-12 px-4 text-sm text-white focus:border-[#ff5351] outline-none" />
-                  </div>
+                  <div className="flex-1 min-w-0"><p className="text-white font-black uppercase text-sm truncate">{stage.name}</p><p className="text-zinc-500 text-xs mt-1 truncate">{stage.description || 'Sem descrição'}</p></div>
+                  <div className="w-full md:w-64 space-y-2 shrink-0"><label className="text-[10px] uppercase font-black text-[#ff5351] tracking-widest">Responsável (Neste Projeto)</label><input type="text" value={stage.assignee} onChange={(e) => updateSetupStage(idx, 'assignee', e.target.value)} placeholder="Ex: João" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl h-12 px-4 text-sm text-white focus:border-[#ff5351] outline-none" /></div>
+                  <div className="w-full md:w-32 space-y-2 shrink-0"><label className="text-[10px] uppercase font-black text-[#ff5351] tracking-widest">Prazo (Dias)</label><input type="number" min="0" value={stage.durationDays} onChange={(e) => updateSetupStage(idx, 'durationDays', Number(e.target.value))} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl h-12 px-4 text-sm text-white focus:border-[#ff5351] outline-none" /></div>
                 </div>
               ))}
             </div>
-            <div className="pt-6">
-              <button onClick={handleStartWorkflow} disabled={isInitializing} className="w-full h-14 bg-[#ff5351] text-white rounded-2xl font-black uppercase tracking-widest hover:bg-[#ff4240] transition-all flex items-center justify-center gap-3 disabled:opacity-50">
-                {isInitializing ? <Loader2 className="w-5 h-5 animate-spin" /> : <PlayCircle className="w-5 h-5" />} Salvar Pessoas e Iniciar
-              </button>
-            </div>
+            <div className="pt-6"><button onClick={handleStartWorkflow} disabled={isInitializing} className="w-full h-14 bg-[#ff5351] text-white rounded-2xl font-black uppercase tracking-widest hover:bg-[#ff4240] transition-all flex items-center justify-center gap-3 disabled:opacity-50">{isInitializing ? <Loader2 className="w-5 h-5 animate-spin" /> : <PlayCircle className="w-5 h-5" />} Salvar Pessoas e Iniciar</button></div>
           </div>
         )}
       </div>
@@ -443,7 +362,7 @@ export default function ProjetoFluxo() {
   const currentStage = workflow.stages?.[workflow.currentStageIndex];
   if (!currentStage) return <div className="min-h-[60vh] flex flex-col items-center justify-center text-center"><h2 className="text-white text-xl font-bold mb-2">Erro</h2><button onClick={() => navigate(-1)} className="mt-6 text-[#ff5351] font-bold">Voltar</button></div>;
 
-  const isSubirCortes = currentStage.name.toUpperCase() === 'SUBIR CORTES';
+  const isSubirCortes = currentStage.name.toUpperCase().includes('SUBIR CORTES');
 
   return (
     <div className="h-[calc(100vh-6rem)] -m-8 flex flex-col md:flex-row bg-[#0a0a0a]">
@@ -497,15 +416,22 @@ export default function ProjetoFluxo() {
               <h3 className="text-sm font-black uppercase text-zinc-500 tracking-widest">Controle de Status</h3>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 {[
-                  { id: 'pending', label: 'Pendente', color: 'border-zinc-700 text-zinc-500' },
-                  { id: 'in_progress', label: 'Em Andamento', color: 'border-blue-500 text-blue-400' },
-                  { id: 'waiting_approval', label: 'Aguard. Cliente', color: 'border-amber-500 text-amber-400' },
-                  { id: 'completed', label: 'Concluído', color: 'border-emerald-500 text-emerald-400' }
+                  { id: 'pending', label: 'Pendente', color: 'border-zinc-700 text-zinc-500', dateField: 'pendingAt' },
+                  { id: 'in_progress', label: 'Em Andamento', color: 'border-blue-500 text-blue-400', dateField: 'startedAt' },
+                  { id: 'waiting_approval', label: 'Aguard. Cliente', color: 'border-amber-500 text-amber-400', dateField: 'waitingApprovalAt' },
+                  { id: 'completed', label: 'Concluído', color: 'border-emerald-500 text-emerald-400', dateField: 'completedAt' }
                 ].map(status => {
                   const isActive = currentStage.status === status.id;
+                  const stageDate = (currentStage as any)[status.dateField];
+                  
                   return (
-                    <button key={status.id} onClick={() => handleUpdateStatus(status.id as ProjectStageStatus)} className={cn("px-4 py-4 rounded-2xl border text-[11px] font-black uppercase tracking-widest text-center transition-all", isActive ? cn("bg-[#1a1a1a]", status.color) : "bg-[#111] border-zinc-800 text-zinc-600 hover:border-zinc-600")}>
-                      {status.label}
+                    <button key={status.id} onClick={() => handleUpdateStatus(status.id as ProjectStageStatus)} className={cn("px-2 py-3 rounded-2xl border flex flex-col items-center justify-center transition-all", isActive ? cn("bg-[#1a1a1a]", status.color) : "bg-[#111] border-zinc-800 text-zinc-600 hover:border-zinc-600")}>
+                      <span className="text-[11px] font-black uppercase tracking-widest text-center">{status.label}</span>
+                      {stageDate && (
+                         <span className={cn("text-[9px] font-mono mt-1 opacity-80", isActive ? "text-current" : "text-zinc-500")}>
+                            {formatStageDate(stageDate)}
+                         </span>
+                      )}
                     </button>
                   )
                 })}
@@ -558,29 +484,15 @@ export default function ProjetoFluxo() {
                               
                               <div className="flex items-center gap-2">
                                 {Object.values(uploads).some(u => u.status === 'completed') && (
-                                  <button 
-                                    onClick={clearCompletedUploads}
-                                    className="text-[10px] uppercase font-black tracking-widest text-emerald-500 hover:text-emerald-400 transition-all border border-emerald-500/30 px-2 py-1 rounded"
-                                  >
-                                    Limpar Concluídos
-                                  </button>
+                                  <button onClick={clearCompletedUploads} className="text-[10px] uppercase font-black tracking-widest text-emerald-500 hover:text-emerald-400 transition-all border border-emerald-500/30 px-2 py-1 rounded">Limpar Concluídos</button>
                                 )}
-                                <button 
-                                  onClick={clearAllUploads}
-                                  className="text-[10px] uppercase font-black tracking-widest text-zinc-600 hover:text-red-500 transition-all"
-                                >
-                                  Limpar Fila
-                                </button>
+                                <button onClick={clearAllUploads} className="text-[10px] uppercase font-black tracking-widest text-zinc-600 hover:text-red-500 transition-all">Limpar Fila</button>
                               </div>
                             </div>
 
                             {Object.values(uploads).some(u => u.status === 'pending' || u.status === 'error') && (
-                              <button 
-                                onClick={startAllUploads}
-                                className="px-4 py-2 bg-[#ff5351] text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:brightness-110 transition-all flex items-center justify-center gap-2 shadow-xl shadow-[#ff5351]/20"
-                              >
-                                <Play className="w-3 h-3 fill-current" />
-                                Enviar Todos da Fila
+                              <button onClick={startAllUploads} className="px-4 py-2 bg-[#ff5351] text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:brightness-110 transition-all flex items-center justify-center gap-2 shadow-xl shadow-[#ff5351]/20">
+                                <Play className="w-3 h-3 fill-current" /> Enviar Todos da Fila
                               </button>
                             )}
                           </div>
@@ -590,54 +502,23 @@ export default function ProjetoFluxo() {
                               <div key={id} className="group/item bg-black/40 rounded-2xl p-4 border border-zinc-800/50 hover:border-[#ff5351]/30 transition-all">
                                 <div className="flex items-center justify-between gap-4 mb-3">
                                   <div className="flex items-center gap-3 overflow-hidden">
-                                    <div className={cn(
-                                      "w-8 h-8 rounded-lg flex items-center justify-center shrink-0",
-                                      upload.status === 'completed' ? "bg-emerald-500/10 text-emerald-500" : 
-                                      upload.status === 'error' ? "bg-red-500/10 text-red-500" : 
-                                      upload.status === 'uploading' ? "bg-[#ff5351]/10 text-[#ff5351]" : "bg-zinc-800 text-zinc-500"
-                                    )}>
-                                      {upload.status === 'completed' ? <CheckCircle2 className="w-4 h-4" /> :
-                                       upload.status === 'error' ? <Info className="w-4 h-4" /> :
-                                       upload.status === 'uploading' ? <Loader2 className="w-4 h-4 animate-spin" /> : 
-                                       <Clock className="w-4 h-4" />}
+                                    <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center shrink-0", upload.status === 'completed' ? "bg-emerald-500/10 text-emerald-500" : upload.status === 'error' ? "bg-red-500/10 text-red-500" : upload.status === 'uploading' ? "bg-[#ff5351]/10 text-[#ff5351]" : "bg-zinc-800 text-zinc-500")}>
+                                      {upload.status === 'completed' ? <CheckCircle2 className="w-4 h-4" /> : upload.status === 'error' ? <Info className="w-4 h-4" /> : upload.status === 'uploading' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Clock className="w-4 h-4" />}
                                     </div>
                                     <div className="overflow-hidden">
                                       <p className="text-[10px] font-black uppercase tracking-tight text-white truncate">{upload.fileName}</p>
-                                      <p className="text-[8px] font-bold text-zinc-500 uppercase tracking-widest mt-0.5">
-                                        {upload.status === 'pending' ? 'Pendente' : 
-                                         upload.status === 'uploading' ? 'Enviando...' : 
-                                         upload.status === 'completed' ? 'Concluído' : 'Erro no envio'}
-                                      </p>
+                                      <p className="text-[8px] font-bold text-zinc-500 uppercase tracking-widest mt-0.5">{upload.status === 'pending' ? 'Pendente' : upload.status === 'uploading' ? 'Enviando...' : upload.status === 'completed' ? 'Concluído' : 'Erro no envio'}</p>
                                     </div>
                                   </div>
-
                                   <div className="flex items-center gap-1">
-                                    {upload.status === 'pending' && (
-                                      <button onClick={() => startUpload(id)} className="p-1.5 text-zinc-400 hover:text-[#ff5351] hover:bg-[#ff5351]/10 rounded-lg transition-all" title="Iniciar">
-                                        <Play className="w-3.5 h-3.5 fill-current" />
-                                      </button>
-                                    )}
-                                    {upload.status === 'error' && (
-                                      <button onClick={() => retryUpload(id)} className="p-1.5 text-zinc-400 hover:text-[#ff5351] hover:bg-[#ff5351]/10 rounded-lg transition-all" title="Tentar novamente">
-                                        <RotateCcw className="w-3.5 h-3.5" />
-                                      </button>
-                                    )}
-                                    <button onClick={() => cancelUpload(id)} className="p-1.5 text-zinc-400 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-all" title="Cancelar">
-                                      <X className="w-3.5 h-3.5" />
-                                    </button>
+                                    {upload.status === 'pending' && <button onClick={() => startUpload(id)} className="p-1.5 text-zinc-400 hover:text-[#ff5351] hover:bg-[#ff5351]/10 rounded-lg transition-all" title="Iniciar"><Play className="w-3.5 h-3.5 fill-current" /></button>}
+                                    {upload.status === 'error' && <button onClick={() => retryUpload(id)} className="p-1.5 text-zinc-400 hover:text-[#ff5351] hover:bg-[#ff5351]/10 rounded-lg transition-all" title="Tentar novamente"><RotateCcw className="w-3.5 h-3.5" /></button>}
+                                    <button onClick={() => cancelUpload(id)} className="p-1.5 text-zinc-400 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-all" title="Cancelar"><X className="w-3.5 h-3.5" /></button>
                                   </div>
                                 </div>
-                                
                                 <div className="flex items-center gap-3">
                                   <div className="flex-1 h-1 bg-zinc-800 rounded-full overflow-hidden">
-                                    <div 
-                                      className={cn(
-                                        "h-full transition-all duration-300 rounded-full",
-                                        upload.status === 'completed' ? "bg-emerald-500" : 
-                                        upload.status === 'error' ? "bg-red-500" : "bg-[#ff5351]"
-                                      )}
-                                      style={{ width: `${upload.progress}%` }}
-                                    />
+                                    <div className={cn("h-full transition-all duration-300 rounded-full", upload.status === 'completed' ? "bg-emerald-500" : upload.status === 'error' ? "bg-red-500" : "bg-[#ff5351]")} style={{ width: `${upload.progress}%` }} />
                                   </div>
                                   <span className="text-[8px] font-mono font-bold text-zinc-600 w-6">{upload.progress}%</span>
                                 </div>
@@ -649,34 +530,15 @@ export default function ProjetoFluxo() {
                       
                       {/* AZUL: LINK DRIVE LEGACY OCULTO POR PADRÃO */}
                       <div className="mt-6 pt-6 border-t border-zinc-800">
-                        <button 
-                          onClick={() => setMediaLink(mediaLink ? '' : ' ')} 
-                          className="text-[10px] uppercase font-black tracking-widest text-zinc-600 hover:text-zinc-400 flex items-center gap-2 transition-all"
-                        >
-                          <RefreshCw className="w-3 h-3" />
-                          {mediaLink ? "Ocultar sincronização manual" : "Mostrar sincronização por link (Legacy)"}
+                        <button onClick={() => setMediaLink(mediaLink ? '' : ' ')} className="text-[10px] uppercase font-black tracking-widest text-zinc-600 hover:text-zinc-400 flex items-center gap-2 transition-all">
+                          <RefreshCw className="w-3 h-3" /> {mediaLink ? "Ocultar sincronização manual" : "Mostrar sincronização por link (Legacy)"}
                         </button>
-                        
                         {mediaLink && (
                           <div className="mt-4 space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
                             <div className="relative group">
                               <LinkIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600 group-focus-within:text-[#ff5351]" />
-                              <input 
-                                type="text" 
-                                value={mediaLink.trim()}
-                                onChange={(e) => setMediaLink(e.target.value)}
-                                placeholder="Link do R2 ou Drive..."
-                                className="w-full bg-zinc-900/50 border border-zinc-800 rounded-xl pl-12 pr-12 py-3 text-xs text-white focus:border-[#ff5351] outline-none"
-                              />
-                              <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                                <button 
-                                  onClick={handleSyncMedia}
-                                  disabled={fetchingDrive || !mediaLink.trim()}
-                                  className="p-1.5 bg-zinc-800 text-white rounded hover:bg-[#ff5351] transition-all disabled:opacity-50"
-                                >
-                                  <RefreshCw className={cn("w-3 h-3", fetchingDrive && "animate-spin")} />
-                                </button>
-                              </div>
+                              <input type="text" value={mediaLink.trim()} onChange={(e) => setMediaLink(e.target.value)} placeholder="Link do R2 ou Drive..." className="w-full bg-zinc-900/50 border border-zinc-800 rounded-xl pl-12 pr-12 py-3 text-xs text-white focus:border-[#ff5351] outline-none" />
+                              <div className="absolute right-3 top-1/2 -translate-y-1/2"><button onClick={handleSyncMedia} disabled={fetchingDrive || !mediaLink.trim()} className="p-1.5 bg-zinc-800 text-white rounded hover:bg-[#ff5351] transition-all disabled:opacity-50"><RefreshCw className={cn("w-3 h-3", fetchingDrive && "animate-spin")} /></button></div>
                             </div>
                           </div>
                         )}
@@ -688,25 +550,13 @@ export default function ProjetoFluxo() {
                       <h4 className="text-lg font-bold text-white uppercase mb-6 border-b border-zinc-800 pb-4">Regras e Cliente</h4>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div className="space-y-4">
-                          <div>
-                            <label className="text-[10px] text-zinc-500 uppercase font-bold tracking-widest mb-1 block">E-mail do Cliente</label>
-                            <input type="email" value={clientEmail} onChange={e => setClientEmail(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-white text-sm" />
-                          </div>
-                          <div>
-                            <label className="text-[10px] text-zinc-500 uppercase font-bold tracking-widest mb-1 block">Link Drive (Arquivos Limpos)</label>
-                            <input type="text" value={originalDriveLink} onChange={e => setOriginalDriveLink(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-white text-sm" />
-                          </div>
+                          <div><label className="text-[10px] text-zinc-500 uppercase font-bold tracking-widest mb-1 block">E-mail do Cliente</label><input type="email" value={clientEmail} onChange={e => setClientEmail(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-white text-sm" /></div>
+                          <div><label className="text-[10px] text-zinc-500 uppercase font-bold tracking-widest mb-1 block">Link Drive (Arquivos Limpos)</label><input type="text" value={originalDriveLink} onChange={e => setOriginalDriveLink(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-white text-sm" /></div>
                         </div>
                         <div className="space-y-4">
                            <div className="flex gap-4">
-                             <div className="flex-1">
-                               <label className="text-[10px] text-zinc-500 uppercase font-bold tracking-widest mb-1 block">Qtd Inclusa</label>
-                               <input type="number" value={includedItems} onChange={e => setIncludedItems(parseInt(e.target.value))} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-white text-sm" />
-                             </div>
-                             <div className="flex-1">
-                               <label className="text-[10px] text-zinc-500 uppercase font-bold tracking-widest mb-1 block">Preço Extra (R$)</label>
-                               <input type="text" value={extraPrice} onChange={e => setExtraPrice(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-white text-sm" />
-                             </div>
+                             <div className="flex-1"><label className="text-[10px] text-zinc-500 uppercase font-bold tracking-widest mb-1 block">Qtd Inclusa</label><input type="number" value={includedItems} onChange={e => setIncludedItems(parseInt(e.target.value))} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-white text-sm" /></div>
+                             <div className="flex-1"><label className="text-[10px] text-zinc-500 uppercase font-bold tracking-widest mb-1 block">Preço Extra (R$)</label><input type="text" value={extraPrice} onChange={e => setExtraPrice(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-white text-sm" /></div>
                            </div>
                            <div className="pt-2 flex items-center justify-between bg-black/20 p-4 rounded-xl border border-zinc-800">
                              <div><p className="text-sm text-white font-bold">Download Alta Res.</p><p className="text-[10px] text-zinc-500 uppercase">Liberar arquivo original</p></div>
@@ -742,7 +592,6 @@ export default function ProjetoFluxo() {
                 </div>
               </div>
             ) : (
-              // SE NÃO FOR "SUBIR CORTES", MOSTRA O CAMPO DE NOTAS NORMAL
               <div className="space-y-4 pt-4">
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-black uppercase text-zinc-500 tracking-widest">Anotações Internas (Log)</h3>
