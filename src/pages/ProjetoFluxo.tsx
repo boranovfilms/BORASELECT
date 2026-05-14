@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { 
   ArrowLeft, Check, CheckCircle2, ChevronRight, Clock, 
-  UserCircle, Save, Loader2, LayoutTemplate 
+  UserCircle, Save, Loader2, LayoutTemplate, PlayCircle
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { db } from '../lib/firebase';
@@ -19,13 +19,13 @@ export default function ProjetoFluxo() {
   const [projectData, setProjectData] = useState<any>(null);
   const [workflow, setWorkflow] = useState<ProjectWorkflow | null>(null);
   
-  // Setup State (Quando o projeto ainda não tem fluxo)
+  // Setup State
   const [availableModels, setAvailableModels] = useState<WorkflowModel[]>([]);
   const [selectedModel, setSelectedModel] = useState<WorkflowModel | null>(null);
   const [setupStages, setSetupStages] = useState<ProjectStage[]>([]);
   const [isInitializing, setIsInitializing] = useState(false);
 
-  // Execution State (Cockpit)
+  // Execution State
   const [stageNotes, setStageNotes] = useState('');
 
   useEffect(() => {
@@ -36,43 +36,43 @@ export default function ProjetoFluxo() {
     if (!projectId) return;
     setLoading(true);
     try {
-      // 1. Carrega dados básicos do projeto (só pra gente ter o Título/Cliente no cabeçalho)
       const projSnap = await getDoc(doc(db, 'projects', projectId));
       if (projSnap.exists()) setProjectData(projSnap.data());
 
-      // 2. Tenta carregar o fluxo existente
       const existingWorkflow = await projetoFluxoService.getProjectWorkflow(projectId);
       
       if (existingWorkflow) {
         setWorkflow(existingWorkflow);
-        setStageNotes(existingWorkflow.stages[existingWorkflow.currentStageIndex]?.notes || '');
+        setStageNotes(existingWorkflow.stages?.[existingWorkflow.currentStageIndex]?.notes || '');
       } else {
-        // Se não tem, carrega a lista de modelos para o usuário escolher
         const models = await modelosService.getModelos();
-        setAvailableModels(models);
+        setAvailableModels(models || []);
       }
     } catch (error) {
+      console.error(error);
       toast.error('Erro ao carregar dados do projeto');
     } finally {
       setLoading(false);
     }
   };
 
-  // --- FUNÇÕES DE SETUP (Antes de iniciar) ---
-
   const handleSelectModel = (model: WorkflowModel) => {
     setSelectedModel(model);
-    // Cria uma cópia das etapas padrão para o usuário preencher/alterar
-    const initialStages: ProjectStage[] = model.stages.map(stage => ({
+    
+    // Fallback de segurança se as etapas vierem vazias ou mal formatadas
+    const stages = model.stages || [];
+    
+    const initialStages: ProjectStage[] = stages.map(stage => ({
       id: crypto.randomUUID(),
-      originalStageId: stage.id,
-      name: stage.name,
-      description: stage.description,
-      assignee: stage.assignee, // Puxa o padrão, mas o input vai deixar alterar
-      durationDays: stage.durationDays,
-      requiresClientApproval: stage.requiresClientApproval,
+      originalStageId: stage?.id || crypto.randomUUID(),
+      name: stage?.name || 'Etapa sem nome',
+      description: stage?.description || '',
+      assignee: stage?.assignee || '', 
+      durationDays: Number(stage?.durationDays) || 0,
+      requiresClientApproval: Boolean(stage?.requiresClientApproval),
       status: 'pending',
     }));
+    
     setSetupStages(initialStages);
   };
 
@@ -86,7 +86,6 @@ export default function ProjetoFluxo() {
     if (!projectId || !selectedModel) return;
     setIsInitializing(true);
     try {
-      // A primeira etapa já começa "Em Andamento"
       const stagesToSave = [...setupStages];
       if (stagesToSave.length > 0) {
         stagesToSave[0].status = 'in_progress';
@@ -97,13 +96,12 @@ export default function ProjetoFluxo() {
       setWorkflow(newWorkflow);
       toast.success('Fluxo iniciado com sucesso!');
     } catch (error) {
+      console.error(error);
       toast.error('Erro ao iniciar fluxo');
     } finally {
       setIsInitializing(false);
     }
   };
-
-  // --- FUNÇÕES DO COCKPIT (Após iniciar) ---
 
   const handleUpdateStatus = async (newStatus: ProjectStageStatus) => {
     if (!workflow || !projectId) return;
@@ -171,9 +169,6 @@ export default function ProjetoFluxo() {
     );
   }
 
-  // =======================================================================
-  // TELA DE SETUP (Se não tem fluxo)
-  // =======================================================================
   if (!workflow) {
     return (
       <div className="max-w-4xl mx-auto space-y-8 pb-16">
@@ -212,7 +207,7 @@ export default function ProjetoFluxo() {
                   <h3 className="text-xl font-black text-white uppercase group-hover:text-[#ff5351] transition-colors">{model.name}</h3>
                   <p className="text-zinc-500 mt-2 text-sm">{model.description || 'Sem descrição'}</p>
                   <div className="mt-6 flex items-center gap-2 text-[10px] uppercase font-black tracking-widest text-zinc-600">
-                    <CheckCircle2 className="w-4 h-4" /> {model.stages.length} etapas
+                    <CheckCircle2 className="w-4 h-4" /> {(model.stages || []).length} etapas
                   </div>
                 </button>
               ))
@@ -231,23 +226,25 @@ export default function ProjetoFluxo() {
                   <div className="w-12 h-12 rounded-2xl bg-zinc-900 flex items-center justify-center text-zinc-500 font-black border border-zinc-800 shrink-0">
                     {idx + 1}
                   </div>
-                  <div className="flex-1">
-                    <p className="text-white font-black uppercase text-sm">{stage.name}</p>
-                    <p className="text-zinc-500 text-xs mt-1">{stage.description}</p>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-white font-black uppercase text-sm truncate">{stage.name}</p>
+                    <p className="text-zinc-500 text-xs mt-1 truncate">{stage.description || 'Sem descrição'}</p>
                   </div>
-                  <div className="w-full md:w-64 space-y-2">
+                  <div className="w-full md:w-64 space-y-2 shrink-0">
                     <label className="text-[10px] uppercase font-black text-[#ff5351] tracking-widest">Responsável (Neste Projeto)</label>
                     <input 
                       type="text" 
                       value={stage.assignee} 
                       onChange={(e) => updateSetupStage(idx, 'assignee', e.target.value)}
+                      placeholder="Ex: João"
                       className="w-full bg-zinc-900 border border-zinc-800 rounded-xl h-12 px-4 text-sm text-white focus:border-[#ff5351] outline-none transition-colors"
                     />
                   </div>
-                  <div className="w-full md:w-32 space-y-2">
+                  <div className="w-full md:w-32 space-y-2 shrink-0">
                     <label className="text-[10px] uppercase font-black text-[#ff5351] tracking-widest">Prazo (Dias)</label>
                     <input 
                       type="number" 
+                      min="0"
                       value={stage.durationDays} 
                       onChange={(e) => updateSetupStage(idx, 'durationDays', Number(e.target.value))}
                       className="w-full bg-zinc-900 border border-zinc-800 rounded-xl h-12 px-4 text-sm text-white focus:border-[#ff5351] outline-none transition-colors"
@@ -255,33 +252,46 @@ export default function ProjetoFluxo() {
                   </div>
                 </div>
               ))}
+
+              {setupStages.length === 0 && (
+                <div className="p-8 text-center border border-zinc-800 rounded-3xl bg-[#141414]">
+                  <p className="text-zinc-500 font-medium">Este modelo não tem etapas cadastradas.</p>
+                </div>
+              )}
             </div>
 
-            <div className="pt-6">
-              <button 
-                onClick={handleStartWorkflow} 
-                disabled={isInitializing}
-                className="w-full h-14 bg-[#ff5351] text-white rounded-2xl font-black uppercase tracking-widest hover:bg-[#ff4240] transition-all flex items-center justify-center gap-3 disabled:opacity-50"
-              >
-                {isInitializing ? <Loader2 className="w-5 h-5 animate-spin" /> : <PlayCircle className="w-5 h-5" />}
-                Salvar Pessoas e Iniciar Projeto
-              </button>
-            </div>
+            {setupStages.length > 0 && (
+              <div className="pt-6">
+                <button 
+                  onClick={handleStartWorkflow} 
+                  disabled={isInitializing}
+                  className="w-full h-14 bg-[#ff5351] text-white rounded-2xl font-black uppercase tracking-widest hover:bg-[#ff4240] transition-all flex items-center justify-center gap-3 disabled:opacity-50"
+                >
+                  {isInitializing ? <Loader2 className="w-5 h-5 animate-spin" /> : <PlayCircle className="w-5 h-5" />}
+                  Salvar Pessoas e Iniciar Projeto
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>
     );
   }
-
-  // =======================================================================
-  // COCKPIT DO PROJETO (Timeline + Execução)
-  // =======================================================================
   
-  const currentStage = workflow.stages[workflow.currentStageIndex];
+  const currentStage = workflow.stages?.[workflow.currentStageIndex];
+
+  if (!currentStage) {
+    return (
+       <div className="min-h-[60vh] flex flex-col items-center justify-center text-center">
+         <h2 className="text-white text-xl font-bold mb-2">Erro no Fluxo</h2>
+         <p className="text-zinc-500">Etapa atual não encontrada.</p>
+         <button onClick={() => navigate(-1)} className="mt-6 text-[#ff5351] font-bold">Voltar</button>
+       </div>
+    )
+  }
 
   return (
     <div className="h-[calc(100vh-6rem)] -m-8 flex flex-col md:flex-row bg-[#0a0a0a]">
-      {/* TIMELINE LATERAL */}
       <div className="w-full md:w-[320px] lg:w-[380px] border-r border-zinc-800 bg-[#111111] flex flex-col">
         <div className="p-6 border-b border-zinc-800">
           <p className="text-[10px] uppercase tracking-[0.2em] text-[#ff5351] font-black mb-1">
@@ -302,7 +312,6 @@ export default function ProjetoFluxo() {
               
               return (
                 <div key={stage.id} className={cn("flex gap-4 relative p-3 rounded-2xl transition-all", isCurrent ? "bg-zinc-900/80 border border-zinc-800" : !isPast && "opacity-50")}>
-                  {/* Linha vertical conectora */}
                   {idx !== workflow.stages.length - 1 && (
                     <div className="absolute left-[27px] top-[40px] bottom-[-16px] w-[2px] bg-zinc-800 z-0" />
                   )}
@@ -321,7 +330,7 @@ export default function ProjetoFluxo() {
                       {stage.name}
                     </p>
                     <p className="text-[10px] text-zinc-500 uppercase font-bold tracking-widest mt-1">
-                      Resp: <span className={isCurrent ? "text-[#ff5351]" : ""}>{stage.assignee}</span>
+                      Resp: <span className={isCurrent ? "text-[#ff5351]" : ""}>{stage.assignee || 'Não definido'}</span>
                     </p>
                   </div>
                 </div>
@@ -331,7 +340,6 @@ export default function ProjetoFluxo() {
         </div>
       </div>
 
-      {/* ÁREA DE TRABALHO (CENTRO) */}
       <div className="flex-1 overflow-y-auto p-6 md:p-12">
         {workflow.status === 'completed' ? (
           <div className="h-full flex flex-col items-center justify-center text-center max-w-lg mx-auto">
@@ -350,7 +358,7 @@ export default function ProjetoFluxo() {
               
               <div className="flex flex-wrap gap-4 mt-6">
                 <span className="px-4 py-2 bg-[#1a1a1a] border border-zinc-800 rounded-full text-xs font-black text-zinc-300 uppercase tracking-widest flex items-center gap-2">
-                  <UserCircle className="w-4 h-4 text-[#ff5351]"/> {currentStage.assignee}
+                  <UserCircle className="w-4 h-4 text-[#ff5351]"/> {currentStage.assignee || 'Não definido'}
                 </span>
                 <span className="px-4 py-2 bg-[#1a1a1a] border border-zinc-800 rounded-full text-xs font-black text-zinc-300 uppercase tracking-widest flex items-center gap-2">
                   <Clock className="w-4 h-4 text-[#ff5351]"/> Prazo: {currentStage.durationDays} dias
@@ -358,14 +366,13 @@ export default function ProjetoFluxo() {
               </div>
             </header>
 
-            {/* Status da Etapa */}
             <div className="space-y-4">
               <h3 className="text-sm font-black uppercase text-zinc-500 tracking-widest">Controle de Status</h3>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 {[
                   { id: 'pending', label: 'Pendente', color: 'border-zinc-700 text-zinc-500' },
                   { id: 'in_progress', label: 'Em Andamento', color: 'border-blue-500 text-blue-400' },
-                  { id: 'waiting_approval', label: 'Aguardando Cliente', color: 'border-amber-500 text-amber-400' },
+                  { id: 'waiting_approval', label: 'Aguard. Cliente', color: 'border-amber-500 text-amber-400' },
                   { id: 'completed', label: 'Concluído', color: 'border-emerald-500 text-emerald-400' }
                 ].map(status => {
                   const isActive = currentStage.status === status.id;
@@ -385,7 +392,6 @@ export default function ProjetoFluxo() {
               </div>
             </div>
 
-            {/* Bloco de Notas */}
             <div className="space-y-4 pt-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-black uppercase text-zinc-500 tracking-widest">Anotações Internas (Log)</h3>
@@ -404,7 +410,6 @@ export default function ProjetoFluxo() {
               />
             </div>
 
-            {/* Avançar Etapa (Só aparece se o status atual for concluído) */}
             {currentStage.status === 'completed' && (
               <div className="pt-8 border-t border-zinc-800 flex justify-end animate-in fade-in slide-in-from-bottom-4">
                 <button 
