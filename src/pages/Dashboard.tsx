@@ -1,6 +1,6 @@
 export const dynamic = 'force-dynamic';
 import { useState, useEffect } from 'react';
-import { Plus, Calendar, Image as ImageIcon, Link as LinkIcon, LayoutGrid, CheckCircle2, Trash2 } from 'lucide-react';
+import { Plus, Calendar, Image as ImageIcon, Link as LinkIcon, LayoutGrid, CheckCircle2, Trash2, GitBranch } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { projectService, Project } from '../services/projectService';
@@ -23,7 +23,6 @@ export default function Dashboard() {
   const loadProjects = async () => {
     setLoading(true);
     const currentUserEmail = auth.currentUser?.email;
-    console.log('Loading projects for user:', currentUserEmail);
     
     try {
       let adminData: Project[] = [];
@@ -31,14 +30,12 @@ export default function Dashboard() {
 
       try {
         adminData = await projectService.getProjects();
-        console.log('Admin projects fetch success:', adminData.length);
       } catch (adminErr) {
         console.error('Admin projects fetch failed:', adminErr);
       }
 
       try {
         clientData = await projectService.getProjectsForClient();
-        console.log('Client projects fetch success:', clientData.length);
       } catch (clientErr) {
         console.error('Client projects fetch failed:', clientErr);
         if (currentUserEmail && currentUserEmail !== 'boranovfilms@gmail.com') {
@@ -168,7 +165,8 @@ export default function Dashboard() {
                     onClick={() => navigate(`/projects/${project.id}/config`)}
                     className="group relative bg-[#1f1f1f] rounded-2xl border border-zinc-800 overflow-hidden hover:border-zinc-700 transition-all cursor-pointer flex flex-col h-full"
                   >
-                    <div className="absolute top-4 right-4 z-20 flex gap-2">
+                    <div className="absolute top-4 right-4 z-20 flex gap-2 flex-wrap justify-end max-w-[80%]">
+                      {/* BOTOES DE AÇÃO (Esquerda para Direita) */}
                       <button
                         onClick={(e) => handleDeleteProject(e, project.id!)}
                         className="p-2 bg-black/50 backdrop-blur-md border border-zinc-800 rounded-full text-zinc-400 hover:text-white hover:bg-red-500/50 hover:border-red-500/50 transition-all"
@@ -183,6 +181,19 @@ export default function Dashboard() {
                         title="Copiar Link da Vitrine"
                       >
                         <LinkIcon className="w-3.5 h-3.5" />
+                      </button>
+
+                      {/* NOVO BOTÃO DE FLUXO */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation(); // Evita que clique no card inteiro
+                          navigate(`/projetos/${project.id}/fluxo`);
+                        }}
+                        className="px-3 py-1 bg-black/50 backdrop-blur-md border border-zinc-800 rounded-full text-[10px] uppercase font-black tracking-widest text-emerald-400 hover:border-emerald-500/50 hover:bg-emerald-500/10 transition-all flex items-center gap-1.5"
+                        title="Ir para o Cockpit do Fluxo"
+                      >
+                        <GitBranch className="w-3.5 h-3.5" />
+                        Fluxo
                       </button>
 
                       <span className="px-3 py-1 bg-black/50 backdrop-blur-md border border-zinc-800 rounded-full text-[10px] uppercase font-black tracking-widest text-zinc-300">
