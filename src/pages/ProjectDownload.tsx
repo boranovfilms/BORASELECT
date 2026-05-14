@@ -1,5 +1,5 @@
 export const dynamic = 'force-dynamic';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   ChevronLeft, 
@@ -14,6 +14,7 @@ import {
 import { cn } from '../lib/utils';
 import { projectService, Project } from '../services/projectService';
 import { mediaService, MediaItem } from '../services/mediaService';
+import { projetoFluxoService } from '../services/projetoFluxoService';
 import { toast } from 'react-hot-toast';
 
 export default function ProjectDownload() {
@@ -24,9 +25,22 @@ export default function ProjectDownload() {
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState<string | null>(null);
 
+  // Timer para controle do status de inatividade (1 minuto)
+  const idleTimerRef = useRef<NodeJS.Timeout | null>(null);
+
   useEffect(() => {
     if (id) loadData();
+
+    return () => {
+      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+    };
   }, [id]);
+
+  // Função auxiliar para ignorar acentos/maiúsculas
+  const normalize = (s: string) => {
+    if (!s) return '';
+    return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+  };
 
   const loadData = async () => {
     setLoading(true);
@@ -38,14 +52,74 @@ export default function ProjectDownload() {
         return;
       }
       const m = await mediaService.getMedia(id!);
+      const selectedMedia = m.filter(item => item.isSelected);
+      
       setProject(p);
-      setMedia(m.filter(item => item.isSelected));
+      setMedia(selectedMedia);
+
+      // Verificação inicial: se TUDO já está baixado, conclui a etapa
+      const allDownloaded = selectedMedia.length > 0 && selectedMedia.every(item => item.isDownloaded);
+      if (allDownloaded) {
+        await updateDownloadStageStatus('completed');
+      }
+
     } catch (error) {
       console.error(error);
       toast.error('Erro ao carregar projeto');
     } finally {
       setLoading(false);
     }
+  };
+
+  // Função centralizada para atualizar o status do fluxo
+  const updateDownloadStageStatus = async (status: 'pending' | 'in_progress' | 'waiting_approval' | 'completed') => {
+    if (!id) return;
+    try {
+      const currentWf = await projetoFluxoService.getProjectWorkflow(id);
+      if (!currentWf || !currentWf.stages) return;
+
+      const downloadIndex = currentWf.stages.findIndex((s: any) => normalize(s.name).includes('DOWNLOAD'));
+      
+      if (downloadIndex >= 0) {
+        const newStages = [...currentWf.stages];
+        const currentStatus = newStages[downloadIndex].status;
+        
+        // Só atualiza se o status for diferente (para economizar escritas) ou se for pra concluir
+        if (currentStatus !== status) {
+          newStages[downloadIndex].status = status;
+          
+          const now = new Date().toISOString();
+          if (status === 'in_progress') newStages[downloadIndex].startedAt = now;
+          if (status === 'waiting_approval') newStages[downloadIndex].waitingApprovalAt = now;
+          if (status === 'completed') newStages[downloadIndex].completedAt = now;
+
+          await projetoFluxoService.updateWorkflow(id, { stages: newStages });
+        }
+      }
+    } catch (e) {
+      console.error('Erro ao atualizar status do fluxo:', e);
+    }
+  };
+
+  // Reseta o timer de inatividade de 1 minuto (60.000 ms)
+  const resetIdleTimer = () => {
+    if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+    
+    idleTimerRef.current = setTimeout(async () => {
+      // Passou 1 minuto sem cliques. Verifica se ainda faltam downloads.
+      try {
+        const m = await mediaService.getMedia(id!);
+        const selectedMedia = m.filter(item => item.isSelected);
+        const allDownloaded = selectedMedia.length > 0 && selectedMedia.every(item => item.isDownloaded);
+        
+        if (!allDownloaded) {
+          // Ainda falta baixar, então muda para Aguardando Cliente
+          await updateDownloadStageStatus('waiting_approval');
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }, 60000); // 1 minuto
   };
 
   const extractFolderId = (driveLink: string): string | null => {
@@ -90,17 +164,29 @@ export default function ProjectDownload() {
       await mediaService.markAsDownloaded(id!, item.id!);
       
       // Atualizar estado local
-      setMedia(prev => prev.map(m => 
+      const updatedMedia = media.map(m => 
         m.id === item.id 
           ? { ...m, isDownloaded: true, downloadCount: (m.downloadCount || 0) + 1 } 
           : m
-      ));
+      );
+      setMedia(updatedMedia);
+
+      // Verificação da Regra 5: Todos foram baixados agora?
+      const allDownloaded = updatedMedia.every(m => m.isDownloaded);
+      
+      if (allDownloaded) {
+        // Se foi o último, conclui a tarefa e limpa o timer
+        if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+        await updateDownloadStageStatus('completed');
+      } else {
+        // Se ainda faltam, põe "Em andamento" e inicia timer de 1 min
+        await updateDownloadStageStatus('in_progress');
+        resetIdleTimer();
+      }
 
       if (isMobile()) {
-        // Mobile: abrir link direto (único jeito que funciona)
         window.location.href = file.downloadUrl;
       } else {
-        // Desktop: iframe invisível (não abre aba)
         const iframe = document.createElement('iframe');
         iframe.style.display = 'none';
         iframe.src = file.downloadUrl;
@@ -131,10 +217,16 @@ export default function ProjectDownload() {
       return;
     }
 
+    // Regra 5: Clicou em Baixar Todos, já conclui a etapa
+    if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+    await updateDownloadStageStatus('completed');
+
     toast.success(`Iniciando download de ${media.length} arquivos...`);
 
-    for (let i = 0; i < media.length; i++) {
-      const item = media[i];
+    let currentMedia = [...media];
+
+    for (let i = 0; i < currentMedia.length; i++) {
+      const item = currentMedia[i];
       setDownloading(item.id!);
 
       try {
@@ -150,19 +242,18 @@ export default function ProjectDownload() {
 
         await mediaService.markAsDownloaded(id!, item.id!);
 
-        setMedia(prev => prev.map(m => 
+        currentMedia = currentMedia.map(m => 
           m.id === item.id 
             ? { ...m, isDownloaded: true, downloadCount: (m.downloadCount || 0) + 1 } 
             : m
-        ));
+        );
+        setMedia(currentMedia);
 
-        // Download via iframe invisível (não abre aba, não bloqueia popup)
         const iframe = document.createElement('iframe');
         iframe.style.display = 'none';
         iframe.src = file.downloadUrl;
         document.body.appendChild(iframe);
         
-        // Remover iframe após 10 segundos
         setTimeout(() => {
           document.body.removeChild(iframe);
         }, 10000);
@@ -172,8 +263,7 @@ export default function ProjectDownload() {
         toast.error(`Erro: ${item.name}`);
       }
 
-      // Delay entre downloads para não sobrecarregar
-      if (i < media.length - 1) {
+      if (i < currentMedia.length - 1) {
         await new Promise(resolve => setTimeout(resolve, 2000));
       }
     }
