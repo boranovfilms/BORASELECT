@@ -4,7 +4,7 @@ import { toast } from 'react-hot-toast';
 import { 
   ArrowLeft, Check, CheckCircle2, ChevronRight, Clock, 
   UserCircle, Save, Loader2, LayoutTemplate, PlayCircle,
-  CloudUpload, Image as ImageIcon, ExternalLink, RefreshCw, Trash2, Lock, Play, RotateCcw, X, FolderOpen, GitBranch, Info, Link as LinkIcon
+  CloudUpload, Image as ImageIcon, ExternalLink, RefreshCw, Trash2, Lock, Play, RotateCcw, X, FolderOpen, GitBranch, Info
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { db } from '../lib/firebase';
@@ -204,7 +204,7 @@ export default function ProjetoFluxo() {
         allowHighRes
       });
       await loadData();
-      toast.success('Configurações salvas!');
+      toast.success('Configurações do cliente salvas!');
     } catch (error) {
       console.error(error);
       toast.error('Erro ao salvar configurações.');
@@ -363,6 +363,7 @@ export default function ProjetoFluxo() {
 
   const filteredMedia = activeTab === 'all' ? media : media.filter(m => m.isSelected);
 
+
   if (loading) return <div className="min-h-[60vh] flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-[#ff5351]" /></div>;
 
   if (!workflow) {
@@ -475,21 +476,13 @@ export default function ProjetoFluxo() {
           </div>
         ) : (
           <div className="max-w-4xl mx-auto space-y-8 pb-12">
-            <header className="pb-8 border-b border-zinc-800 flex justify-between items-start">
-              <div>
-                <p className="text-[11px] uppercase tracking-widest font-black text-zinc-500 mb-3">Etapa Atual</p>
-                <h2 className="text-4xl md:text-5xl font-black text-white uppercase italic tracking-tight">{currentStage.name}</h2>
-                <div className="flex flex-wrap gap-4 mt-6">
-                  <span className="px-4 py-2 bg-[#1a1a1a] border border-zinc-800 rounded-full text-xs font-black text-zinc-300 uppercase tracking-widest flex items-center gap-2"><UserCircle className="w-4 h-4 text-[#ff5351]"/> {currentStage.assignee || 'Não definido'}</span>
-                  <span className="px-4 py-2 bg-[#1a1a1a] border border-zinc-800 rounded-full text-xs font-black text-zinc-300 uppercase tracking-widest flex items-center gap-2"><Clock className="w-4 h-4 text-[#ff5351]"/> Prazo: {currentStage.durationDays} dias</span>
-                </div>
+            <header className="pb-8 border-b border-zinc-800">
+              <p className="text-[11px] uppercase tracking-widest font-black text-zinc-500 mb-3">Etapa Atual</p>
+              <h2 className="text-4xl md:text-5xl font-black text-white uppercase italic tracking-tight">{currentStage.name}</h2>
+              <div className="flex flex-wrap gap-4 mt-6">
+                <span className="px-4 py-2 bg-[#1a1a1a] border border-zinc-800 rounded-full text-xs font-black text-zinc-300 uppercase tracking-widest flex items-center gap-2"><UserCircle className="w-4 h-4 text-[#ff5351]"/> {currentStage.assignee || 'Não definido'}</span>
+                <span className="px-4 py-2 bg-[#1a1a1a] border border-zinc-800 rounded-full text-xs font-black text-zinc-300 uppercase tracking-widest flex items-center gap-2"><Clock className="w-4 h-4 text-[#ff5351]"/> Prazo: {currentStage.durationDays} dias</span>
               </div>
-              
-              {isSubirCortes && (
-                <button onClick={handleSaveMediaConfig} disabled={saving} className="px-8 py-4 rounded-xl bg-[#ff5351] text-white font-black uppercase tracking-widest hover:brightness-110 transition-all text-sm shadow-2xl shadow-[#ff5351]/20 flex items-center justify-center gap-2">
-                  {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Salvar Projeto
-                </button>
-              )}
             </header>
 
             <div className="space-y-4">
@@ -511,194 +504,116 @@ export default function ProjetoFluxo() {
               </div>
             </div>
 
+            {/* A TELA DE UPLOAD SÓ APARECE NA ETAPA "SUBIR CORTES" */}
             {isSubirCortes ? (
-              <div className="space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-500 pt-8 border-t border-zinc-800">
-                <section className="bg-[#1f1f1f] border border-zinc-800 rounded-3xl p-8 space-y-8 shadow-2xl relative overflow-hidden">
-                  <div className="flex justify-between items-center border-b border-zinc-800 pb-4">
-                    <h2 className="text-xl font-bold text-white uppercase tracking-tight">1. Upload de Mídia</h2>
-                    <span className="px-3 py-1 bg-[#ff5351]/10 border border-[#ff5351]/20 rounded text-[10px] font-bold uppercase tracking-widest text-[#ff5351]">Cloudflare Stream Direct</span>
-                  </div>
-                  <div className="space-y-6">
-                    <input type="file" multiple className="hidden" ref={fileInputRef} onChange={(e) => handleFileUpload(e.target.files)} accept="image/*,video/*" />
-                    <div onClick={() => fileInputRef.current?.click()} onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }} onDrop={(e) => { e.preventDefault(); e.stopPropagation(); handleFileUpload(e.dataTransfer.files); }} className="group py-12 flex flex-col items-center justify-center bg-zinc-900/50 rounded-2xl border-2 border-dashed border-zinc-800 hover:border-[#ff5351]/50 hover:bg-[#ff5351]/5 cursor-pointer transition-all duration-500">
-                      <div className="w-16 h-16 rounded-3xl bg-zinc-800 flex items-center justify-center mb-4 group-hover:scale-110 group-hover:bg-[#ff5351] group-hover:text-white transition-all duration-500 shadow-xl group-hover:shadow-[#ff5351]/20"><CloudUpload className="w-8 h-8" /></div>
-                      <h4 className="text-white font-black uppercase tracking-widest text-sm mb-2 italic">Subir Arquivos</h4>
-                      <p className="text-zinc-600 text-xs font-bold uppercase tracking-widest">Arraste seus vídeos e fotos ou clique para buscar</p>
-                      <p className="text-[10px] text-zinc-700 mt-4 font-mono uppercase tracking-widest border border-zinc-800 px-3 py-1 rounded-full group-hover:border-[#ff5351]/30">JPG, PNG, MP4, MOV</p>
-                    </div>
+              <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 pt-8 border-t border-zinc-800">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-2xl font-black uppercase text-white tracking-tight">Upload e Configuração de Cliente</h3>
+                  <button onClick={handleSaveMediaConfig} disabled={saving} className="px-6 py-3 rounded-xl bg-[#ff5351] text-white font-black uppercase tracking-widest hover:brightness-110 transition-all text-xs shadow-lg shadow-[#ff5351]/20 flex items-center gap-2">
+                    {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Salvar Regras
+                  </button>
+                </div>
 
-                    {Object.keys(uploads).length > 0 && (
-                      <div className="space-y-4 pt-6 border-t border-zinc-800">
-                          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
-                            <div className="flex items-center gap-3">
-                              <h5 className="text-[10px] font-black uppercase tracking-widest text-zinc-500 flex items-center gap-2"><Loader2 className={cn("w-3 h-3", Object.values(uploads).some(u => u.status === 'uploading') && "animate-spin")} /> Fila de Arquivos ({Object.keys(uploads).length})</h5>
-                              <div className="flex items-center gap-2">
-                                {Object.values(uploads).some(u => u.status === 'completed') && <button onClick={clearCompletedUploads} className="text-[10px] uppercase font-black tracking-widest text-emerald-500 hover:text-emerald-400 transition-all border border-emerald-500/30 px-2 py-1 rounded">Limpar Concluídos</button>}
-                                <button onClick={clearAllUploads} className="text-[10px] uppercase font-black tracking-widest text-zinc-600 hover:text-red-500 transition-all">Limpar Fila</button>
-                              </div>
-                            </div>
-                            {Object.values(uploads).some(u => u.status === 'pending' || u.status === 'error') && <button onClick={startAllUploads} className="px-4 py-2 bg-[#ff5351] text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:brightness-110 transition-all flex items-center justify-center gap-2 shadow-xl shadow-[#ff5351]/20"><Play className="w-3 h-3 fill-current" /> Enviar Todos da Fila</button>}
-                          </div>
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                  <div className="lg:col-span-12 space-y-8">
+                    {/* AREA DE UPLOAD E SYNC */}
+                    <div className="bg-[#1a1a1a] border border-zinc-800 rounded-3xl p-6">
+                      <div className="flex justify-between items-center border-b border-zinc-800 pb-4 mb-6">
+                        <h4 className="text-lg font-bold text-white uppercase">Upload de Mídia</h4>
+                      </div>
+                      
+                      <input type="file" multiple className="hidden" ref={fileInputRef} onChange={(e) => handleFileUpload(e.target.files)} accept="image/*,video/*" />
+                      
+                      <div onClick={() => fileInputRef.current?.click()} onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }} onDrop={(e) => { e.preventDefault(); e.stopPropagation(); handleFileUpload(e.dataTransfer.files); }} className="group py-8 flex flex-col items-center justify-center bg-zinc-900/50 rounded-2xl border-2 border-dashed border-zinc-800 hover:border-[#ff5351]/50 cursor-pointer transition-all">
+                        <CloudUpload className="w-8 h-8 text-zinc-600 mb-2 group-hover:text-[#ff5351]" />
+                        <p className="text-zinc-400 text-xs font-bold uppercase tracking-widest">Arraste arquivos ou clique aqui</p>
+                      </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                          {Object.entries(uploads).map(([id, upload]) => (
-                            <div key={id} className="group/item bg-black/40 rounded-2xl p-4 border border-zinc-800/50 hover:border-[#ff5351]/30 transition-all">
-                              <div className="flex items-center justify-between gap-4 mb-3">
-                                <div className="flex items-center gap-3 overflow-hidden">
-                                  <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center shrink-0", upload.status === 'completed' ? "bg-emerald-500/10 text-emerald-500" : upload.status === 'error' ? "bg-red-500/10 text-red-500" : upload.status === 'uploading' ? "bg-[#ff5351]/10 text-[#ff5351]" : "bg-zinc-800 text-zinc-500")}>
-                                    {upload.status === 'completed' ? <CheckCircle2 className="w-4 h-4" /> : upload.status === 'error' ? <Info className="w-4 h-4" /> : upload.status === 'uploading' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Clock className="w-4 h-4" />}
-                                  </div>
-                                  <div className="overflow-hidden">
-                                    <p className="text-[10px] font-black uppercase tracking-tight text-white truncate">{upload.fileName}</p>
-                                    <p className="text-[8px] font-bold text-zinc-500 uppercase tracking-widest mt-0.5">{upload.status === 'pending' ? 'Pendente' : upload.status === 'uploading' ? 'Enviando...' : upload.status === 'completed' ? 'Concluído' : 'Erro no envio'}</p>
-                                  </div>
-                                </div>
-                                <div className="flex items-center gap-1">
-                                  {upload.status === 'pending' && <button onClick={() => startUpload(id)} className="p-1.5 text-zinc-400 hover:text-[#ff5351] hover:bg-[#ff5351]/10 rounded-lg transition-all" title="Iniciar"><Play className="w-3.5 h-3.5 fill-current" /></button>}
-                                  {upload.status === 'error' && <button onClick={() => retryUpload(id)} className="p-1.5 text-zinc-400 hover:text-[#ff5351] hover:bg-[#ff5351]/10 rounded-lg transition-all" title="Tentar novamente"><RotateCcw className="w-3.5 h-3.5" /></button>}
-                                  <button onClick={() => cancelUpload(id)} className="p-1.5 text-zinc-400 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-all" title="Cancelar"><X className="w-3.5 h-3.5" /></button>
+                      {Object.keys(uploads).length > 0 && (
+                        <div className="mt-6 space-y-3">
+                          <div className="flex justify-between items-center"><span className="text-xs text-zinc-500 font-bold uppercase">Fila ({Object.keys(uploads).length})</span><button onClick={startAllUploads} className="text-xs text-[#ff5351] font-bold uppercase hover:underline">Iniciar Todos</button></div>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            {Object.entries(uploads).map(([id, up]) => (
+                              <div key={id} className="bg-black/40 p-3 rounded-xl border border-zinc-800/50 flex justify-between items-center">
+                                <div className="truncate pr-4"><p className="text-[10px] text-white truncate">{up.fileName}</p><p className="text-[8px] text-zinc-500 uppercase">{up.status}</p></div>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[10px] text-zinc-500">{up.progress}%</span>
+                                  {up.status === 'pending' && <button onClick={() => startUpload(id)}><Play className="w-4 h-4 text-[#ff5351]"/></button>}
                                 </div>
                               </div>
-                              <div className="flex items-center gap-3">
-                                <div className="flex-1 h-1 bg-zinc-800 rounded-full overflow-hidden">
-                                  <div className={cn("h-full transition-all duration-300 rounded-full", upload.status === 'completed' ? "bg-emerald-500" : upload.status === 'error' ? "bg-red-500" : "bg-[#ff5351]")} style={{ width: `${upload.progress}%` }} />
-                                </div>
-                                <span className="text-[8px] font-mono font-bold text-zinc-600 w-6">{upload.progress}%</span>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="pt-8 border-t border-zinc-800">
-                    <button onClick={() => setMediaLink(mediaLink ? '' : ' ')} className="text-[10px] uppercase font-black tracking-widest text-zinc-600 hover:text-zinc-400 flex items-center gap-2 transition-all">
-                      <RefreshCw className="w-3 h-3" /> {mediaLink ? "Ocultar sincronização manual" : "Mostrar sincronização por link (Legacy)"}
-                    </button>
-                    {mediaLink && (
-                      <div className="mt-4 space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
-                        <div className="relative group">
-                          <LinkIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600 group-focus-within:text-[#ff5351]" />
-                          <input type="text" value={mediaLink.trim()} onChange={(e) => setMediaLink(e.target.value)} placeholder="Link do R2 ou Drive..." className="w-full bg-zinc-900/50 border border-zinc-800 rounded-xl pl-12 pr-12 py-3 text-xs text-white focus:border-[#ff5351] outline-none" />
-                          <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                            <button onClick={handleSyncMedia} disabled={fetchingDrive || !mediaLink.trim()} className="p-1.5 bg-zinc-800 text-white rounded hover:bg-[#ff5351] transition-all disabled:opacity-50">
-                              <RefreshCw className={cn("w-3 h-3", fetchingDrive && "animate-spin")} />
-                            </button>
+                            ))}
                           </div>
                         </div>
-                      </div>
-                    )}
-                  </div>
-                </section>
-
-                <section className="bg-[#1f1f1f] border border-zinc-800 rounded-3xl p-8 shadow-2xl">
-                  <h2 className="text-xl font-bold text-white mb-8 border-b border-zinc-800 pb-4 uppercase tracking-tight">2. Regras de Acesso</h2>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    <div className="space-y-6">
-                      <div className="space-y-4">
-                        <label className="text-[10px] uppercase font-bold tracking-widest text-zinc-500 flex items-center justify-between ml-1">
-                          <span className="flex items-center gap-2">E-mail de Acesso do Cliente <Lock className="w-3 h-3" /></span>
-                          {projectData?.status === 'Em Seleção' && (
-                            <span className={cn("text-[10px] px-2 py-0.5 rounded-full border font-black tracking-tighter", projectData?.clientStatus === 'confirmed' ? "text-emerald-400 border-emerald-500/30 bg-emerald-500/10" : "text-amber-400 border-amber-500/30 bg-amber-500/10")}>
-                              {projectData?.clientStatus === 'confirmed' ? '✓ OK, SENHA CRIADA' : '⏳ AGUARDANDO SENHA'}
-                            </span>
-                          )}
-                        </label>
-                        <div className="relative">
-                          <CheckCircle2 className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-600" />
-                          <input type="email" value={clientEmail} onChange={(e) => setClientEmail(e.target.value)} placeholder="email@cliente.com" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-12 pr-4 py-4 text-white focus:border-[#ff5351] outline-none" />
-                        </div>
-                        <p className="text-[10px] text-zinc-600 ml-1">O cliente deve usar este mesmo e-mail para fazer login e acessar a seleção.</p>
-                      </div>
-
-                      <div className="space-y-4">
-                        <label className="text-[10px] uppercase font-bold tracking-widest text-zinc-500 flex items-center gap-2"><FolderOpen className="w-3 h-3" /> Link da Pasta do Drive (Originais sem marca)</label>
-                        <div className="relative">
-                          <FolderOpen className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-600" />
-                          <input type="text" value={originalDriveLink} onChange={(e) => setOriginalDriveLink(e.target.value)} placeholder="https://drive.google.com/drive/folders/..." className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-12 pr-4 py-4 text-white focus:border-[#ff5351] outline-none" />
-                        </div>
-                        <p className="text-[10px] text-zinc-600 ml-1">Pasta com os arquivos originais para download do cliente. O cliente não verá este link.</p>
-                      </div>
-
-                      <div className="space-y-4">
-                        <label className="text-[10px] uppercase font-bold tracking-widest text-zinc-500 flex items-center gap-2">Mídias Inclusas (Gratuitas) <Info className="w-3 h-3" /></label>
-                        <div className="relative">
-                          <ImageIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-600" />
-                          <input type="number" value={includedItems} onChange={(e) => setIncludedItems(parseInt(e.target.value))} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-12 pr-4 py-4 text-white focus:border-[#ff5351] outline-none" />
-                        </div>
-                      </div>
-
-                      <div className="space-y-4">
-                        <label className="text-[10px] uppercase font-bold tracking-widest text-zinc-500 flex items-center gap-2">Preço por Mídia Extra <Info className="w-3 h-3" /></label>
-                        <div className="relative font-mono">
-                          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-600 font-bold">R$</span>
-                          <input type="text" value={extraPrice} onChange={(e) => setExtraPrice(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-12 pr-4 py-4 text-white focus:border-[#ff5351] outline-none" />
+                      )}
+                      
+                      <div className="mt-6">
+                         <div className="relative group">
+                          <input type="text" value={mediaLink.trim()} onChange={(e) => setMediaLink(e.target.value)} placeholder="Link do Drive (Sincronização Legacy)" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-xs text-white focus:border-[#ff5351] outline-none" />
+                          <button onClick={handleSyncMedia} disabled={fetchingDrive || !mediaLink.trim()} className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 bg-zinc-800 text-white rounded hover:bg-[#ff5351]"><RefreshCw className={cn("w-3 h-3", fetchingDrive && "animate-spin")} /></button>
                         </div>
                       </div>
                     </div>
 
-                    <div className="flex flex-col justify-center space-y-6 bg-black/20 p-6 rounded-2xl border border-zinc-800/50">
-                      <div className="flex items-center justify-between">
-                        <div className="flex flex-col">
-                          <span className="text-sm font-bold text-white">Download em Alta Resolução</span>
-                          <span className="text-[10px] text-zinc-500 uppercase tracking-widest">Liberar arquivo original</span>
-                        </div>
-                        <div onClick={() => setAllowHighRes(!allowHighRes)} className={cn("w-12 h-7 rounded-full relative cursor-pointer transition-all p-1", allowHighRes ? "bg-[#ff5351]" : "bg-zinc-800")}>
-                          <div className={cn("w-5 h-5 bg-white rounded-full transition-all shadow-md", allowHighRes ? "translate-x-5" : "translate-x-0")} />
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-between opacity-50">
-                        <div className="flex flex-col">
-                          <span className="text-sm font-bold text-zinc-400">Proteção de Marca d'água</span>
-                          <span className="text-[10px] text-zinc-600 uppercase tracking-widest">Sempre ativo em prévias</span>
-                        </div>
-                        <div className="w-12 h-7 bg-[#ff5351]/20 rounded-full relative p-1">
-                          <div className="w-5 h-5 bg-[#ff5351] rounded-full translate-x-5 flex items-center justify-center"><Lock className="w-3 h-3 text-white" /></div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </section>
-
-                <section className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-                  <div className="flex flex-col md:flex-row md:items-end justify-between border-b border-zinc-800 pb-4 gap-4">
-                    <div>
-                      <h3 className="text-3xl font-bold text-white">Právia do Catálogo ({media.length})</h3>
-                      <p className="text-zinc-500 text-sm mt-1">Media sincronizada da nova fonte Cloudflare.</p>
-                    </div>
-                    <div className="flex flex-col md:flex-row md:items-center gap-4">
-                      <div className="flex bg-zinc-900 rounded-full p-1 border border-zinc-800 self-start">
-                        <button onClick={() => setActiveTab('all')} className={cn("px-6 py-2 rounded-full text-xs font-black uppercase tracking-widest transition-all", activeTab === 'all' ? "bg-zinc-800 text-white" : "text-zinc-600 hover:text-zinc-400")}>Tudo</button>
-                        <button onClick={() => setActiveTab('selected')} className={cn("px-6 py-2 rounded-full text-xs font-black uppercase tracking-widest transition-all", activeTab === 'selected' ? "bg-zinc-800 text-white" : "text-zinc-600 hover:text-zinc-400")}>Selecionados ({media.filter(m => m.isSelected).length})</button>
-                      </div>
-                      {media.length > 0 && <button onClick={handleClearMedia} className="flex items-center gap-2 text-zinc-600 hover:text-red-500 text-[10px] font-black uppercase tracking-widest transition-all ml-4"><Trash2 className="w-3 h-3" /> Limpar Catálogo</button>}
-                    </div>
-                  </div>
-
-                  {media.length === 0 ? (
-                    <div className="py-20 flex flex-col items-center justify-center bg-zinc-900/20 rounded-3xl border-2 border-dashed border-zinc-800">
-                      <CloudUpload className="w-12 h-12 text-zinc-700 mb-4" />
-                      <p className="text-zinc-500 font-medium">Nenhuma mídia encontrada.</p>
-                      <p className="text-zinc-600 text-xs">Insira o link da nova fonte e clique no ícone de sincronização acima.</p>
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6">
-                      {filteredMedia.map((item, idx) => (
-                        <div key={item.id || idx} className="group relative aspect-[9/16] bg-zinc-900 rounded-2xl overflow-hidden border border-zinc-800 hover:border-[#ff5351] transition-all shadow-xl">
-                          <img src={getThumbnailUrl(item)} className="w-full h-full object-cover opacity-60 group-hover:opacity-100 transition-all duration-700" alt={item.name || 'Preview'} onError={(e) => { const target = e.target as HTMLImageElement; if (item.type === 'video' && !target.src.includes('drive.google.com')) { if (target.src.includes('#t=0.1')) { target.src = target.src.split('#')[0]; } } }} />
-                          {item.type === 'video' && <div className="absolute inset-0 flex items-center justify-center"><div className="w-10 h-10 rounded-full bg-[#ff5351] flex items-center justify-center text-white shadow-lg shadow-[#ff5351]/40"><Play className="w-4 h-4 fill-current ml-0.5" /></div></div>}
-                          <div className="absolute top-4 right-4 z-20"><div className={cn("w-6 h-6 rounded-full border border-white/20 bg-black/40 backdrop-blur-md flex items-center justify-center", item.isSelected ? "bg-[#ff5351] border-[#ff5351]" : "")}>{item.isSelected && <Check className="w-3 h-3 text-white" />}</div></div>
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-4">
-                            <p className="text-[10px] text-zinc-200 font-bold uppercase tracking-widest bg-black/40 backdrop-blur-sm px-2 py-1 rounded self-start truncate max-w-full">{item.name || `FILE_${idx + 1}.JPG`}</p>
+                    {/* REGRAS DE ACESSO */}
+                    <div className="bg-[#1a1a1a] border border-zinc-800 rounded-3xl p-6">
+                      <h4 className="text-lg font-bold text-white uppercase mb-6 border-b border-zinc-800 pb-4">Regras e Cliente</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="space-y-4">
+                          <div>
+                            <label className="text-[10px] text-zinc-500 uppercase font-bold tracking-widest mb-1 block">E-mail do Cliente</label>
+                            <input type="email" value={clientEmail} onChange={e => setClientEmail(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-white text-sm" />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-zinc-500 uppercase font-bold tracking-widest mb-1 block">Link Drive (Arquivos Limpos)</label>
+                            <input type="text" value={originalDriveLink} onChange={e => setOriginalDriveLink(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-white text-sm" />
                           </div>
                         </div>
-                      ))}
+                        <div className="space-y-4">
+                           <div className="flex gap-4">
+                             <div className="flex-1">
+                               <label className="text-[10px] text-zinc-500 uppercase font-bold tracking-widest mb-1 block">Qtd Inclusa</label>
+                               <input type="number" value={includedItems} onChange={e => setIncludedItems(parseInt(e.target.value))} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-white text-sm" />
+                             </div>
+                             <div className="flex-1">
+                               <label className="text-[10px] text-zinc-500 uppercase font-bold tracking-widest mb-1 block">Preço Extra (R$)</label>
+                               <input type="text" value={extraPrice} onChange={e => setExtraPrice(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-white text-sm" />
+                             </div>
+                           </div>
+                           <div className="pt-2 flex items-center justify-between bg-black/20 p-4 rounded-xl border border-zinc-800">
+                             <div><p className="text-sm text-white font-bold">Download Alta Res.</p><p className="text-[10px] text-zinc-500 uppercase">Liberar arquivo original</p></div>
+                             <div onClick={() => setAllowHighRes(!allowHighRes)} className={cn("w-12 h-7 rounded-full cursor-pointer p-1 transition-all", allowHighRes ? "bg-[#ff5351]" : "bg-zinc-800")}><div className={cn("w-5 h-5 bg-white rounded-full transition-all", allowHighRes ? "translate-x-5" : "translate-x-0")} /></div>
+                           </div>
+                        </div>
+                      </div>
                     </div>
-                  )}
-                </section>
+
+                    {/* GALERIA */}
+                    <div className="bg-[#1a1a1a] border border-zinc-800 rounded-3xl p-6">
+                      <div className="flex justify-between items-center mb-6">
+                        <h4 className="text-lg font-bold text-white uppercase">Mídias ({media.length})</h4>
+                        {media.length > 0 && <button onClick={handleClearMedia} className="text-[10px] text-zinc-500 hover:text-red-500 uppercase font-bold flex items-center gap-1"><Trash2 className="w-3 h-3"/> Limpar Catálogo</button>}
+                      </div>
+                      
+                      {media.length === 0 ? (
+                         <div className="py-12 text-center text-zinc-600 text-sm border-2 border-dashed border-zinc-800 rounded-2xl"><ImageIcon className="w-8 h-8 mx-auto mb-2 opacity-50"/> Sem mídias carregadas</div>
+                      ) : (
+                         <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                           {media.map((item, idx) => (
+                             <div key={item.id || idx} className="aspect-[9/16] bg-zinc-900 rounded-xl overflow-hidden relative border border-zinc-800">
+                               <img src={getThumbnailUrl(item)} className="w-full h-full object-cover" alt="" />
+                               {item.type === 'video' && <div className="absolute inset-0 flex items-center justify-center"><Play className="w-6 h-6 text-white bg-[#ff5351]/80 rounded-full p-1.5" /></div>}
+                               {item.isSelected && <div className="absolute top-2 right-2 w-5 h-5 bg-[#ff5351] rounded-full flex items-center justify-center"><Check className="w-3 h-3 text-white" /></div>}
+                             </div>
+                           ))}
+                         </div>
+                      )}
+                    </div>
+
+                  </div>
+                </div>
               </div>
             ) : (
+              // SE NÃO FOR "SUBIR CORTES", MOSTRA O CAMPO DE NOTAS NORMAL
               <div className="space-y-4 pt-4">
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-black uppercase text-zinc-500 tracking-widest">Anotações Internas (Log)</h3>
