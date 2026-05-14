@@ -11,7 +11,8 @@ import ClientAccess from './pages/ClientAccess';
 import Packages from './pages/Packages';
 import Credits from './pages/Credits';
 import ModelosFluxo from './pages/ModelosFluxo'; 
-import ModelosEdicao from './pages/ModelosEdicao'; // <-- IMPORTAÇÃO DA TELA DE EDIÇÃO
+import ModelosEdicao from './pages/ModelosEdicao';
+import ProjetoFluxo from './pages/ProjetoFluxo'; // <-- IMPORTAÇÃO DO COCKPIT DO PROJETO
 import Login from './pages/Login';
 import Register from './pages/Register';
 
@@ -60,6 +61,9 @@ export default function App() {
         {/* ROTAS DE MODELOS DE FLUXO */}
         <Route path="/modelos" element={user && isAdmin ? <AppLayout><ModelosFluxo /></AppLayout> : <Navigate to="/" />} />
         <Route path="/modelos/:id" element={user && isAdmin ? <AppLayout><ModelosEdicao /></AppLayout> : <Navigate to="/" />} />
+
+        {/* NOVA ROTA: COCKPIT DO PROJETO (EXECUÇÃO) */}
+        <Route path="/projetos/:id/fluxo" element={user && isAdmin ? <AppLayout><ProjetoFluxo /></AppLayout> : <Navigate to="/" />} />
 
         <Route path="/review/:id" element={user ? <AppLayout><ProjectReview /></AppLayout> : <Navigate to="/login" />} />
         <Route path="/download/:id" element={user ? <AppLayout><ProjectDownload /></AppLayout> : <Navigate to="/login" />} />
