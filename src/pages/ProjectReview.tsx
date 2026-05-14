@@ -54,6 +54,12 @@ export default function ProjectReview() {
   const effectiveCreditUnitPrice = Number(project?.extraPrice || creditUnitPrice || 0);
   const creditRequestTotal = Number((creditsToBuy * effectiveCreditUnitPrice).toFixed(2));
 
+  // Função auxiliar para ignorar acentos e letras maiúsculas/minúsculas
+  const normalize = (s: string) => {
+    if (!s) return '';
+    return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+  };
+
   useEffect(() => {
     if (id) loadData();
 
@@ -100,7 +106,7 @@ export default function ProjectReview() {
       // REGRA 2: Cliente entrou pela primeira vez, atualiza para "Em Andamento"
       if (wfData && wfData.stages) {
         let updated = false;
-        const selecaoIndex = wfData.stages.findIndex((s: any) => s.name.toUpperCase().includes('SELEÇÃO'));
+        const selecaoIndex = wfData.stages.findIndex((s: any) => normalize(s.name).includes('SELECAO'));
         
         if (selecaoIndex >= 0 && wfData.stages[selecaoIndex].status === 'pending') {
           wfData.stages[selecaoIndex].status = 'in_progress';
@@ -126,46 +132,64 @@ export default function ProjectReview() {
     }
   };
 
-  // REGRA 3: Marca a etapa de Seleção como "Aguardando Cliente" ao interagir
+  // REGRA 3: Marca a etapa de Seleção como "Aguardando Cliente" ao interagir com o vídeo
   const markAsWaitingApproval = async () => {
-    if (!workflow) return;
-    const selecaoIndex = workflow.stages.findIndex((s: any) => s.name.toUpperCase().includes('SELEÇÃO'));
-    if (selecaoIndex >= 0 && workflow.stages[selecaoIndex].status === 'in_progress') {
-      const newStages = [...workflow.stages];
-      newStages[selecaoIndex].status = 'waiting_approval';
-      newStages[selecaoIndex].waitingApprovalAt = new Date().toISOString();
+    try {
+      const currentWf = await projetoFluxoService.getProjectWorkflow(id!);
+      if (!currentWf || !currentWf.stages) return;
+
+      const selecaoIndex = currentWf.stages.findIndex((s: any) => normalize(s.name).includes('SELECAO'));
       
-      await projetoFluxoService.updateWorkflow(id!, { stages: newStages });
-      setWorkflow({ ...workflow, stages: newStages });
+      if (selecaoIndex >= 0 && currentWf.stages[selecaoIndex].status === 'in_progress') {
+        const newStages = [...currentWf.stages];
+        newStages[selecaoIndex].status = 'waiting_approval';
+        newStages[selecaoIndex].waitingApprovalAt = new Date().toISOString();
+        
+        await projetoFluxoService.updateWorkflow(id!, { stages: newStages });
+        setWorkflow((prev: any) => prev ? { ...prev, stages: newStages } : null);
+      }
+    } catch (e) {
+      console.error('Erro na Regra 3:', e);
     }
   };
 
-  // REGRA 4: Ao clicar em Enviar Seleção, conclui a etapa atual e inicia o Download
+  // REGRA 4: Ao clicar em Enviar Seleção, conclui a etapa atual e inicia o Download de forma garantida
   const handleEnviarSelecao = async () => {
-    if (workflow) {
-      const newStages = [...workflow.stages];
-      const selecaoIndex = newStages.findIndex((s: any) => s.name.toUpperCase().includes('SELEÇÃO'));
-      const downloadIndex = newStages.findIndex((s: any) => s.name.toUpperCase().includes('DOWNLOAD'));
-      
-      let changed = false;
-      let newCurrentIndex = workflow.currentStageIndex;
+    const loadingToast = toast.loading('Processando e salvando seleção...');
+    try {
+      const currentWf = await projetoFluxoService.getProjectWorkflow(id!);
+      if (currentWf && currentWf.stages) {
+        const newStages = [...currentWf.stages];
+        const selecaoIndex = newStages.findIndex((s: any) => normalize(s.name).includes('SELECAO'));
+        const downloadIndex = newStages.findIndex((s: any) => normalize(s.name).includes('DOWNLOAD'));
+        
+        let changed = false;
+        let newCurrentIndex = currentWf.currentStageIndex;
 
-      if (selecaoIndex >= 0 && newStages[selecaoIndex].status !== 'completed') {
-         newStages[selecaoIndex].status = 'completed';
-         newStages[selecaoIndex].completedAt = new Date().toISOString();
-         changed = true;
-      }
+        if (selecaoIndex >= 0 && newStages[selecaoIndex].status !== 'completed') {
+           newStages[selecaoIndex].status = 'completed';
+           newStages[selecaoIndex].completedAt = new Date().toISOString();
+           changed = true;
+        }
 
-      if (downloadIndex >= 0 && newStages[downloadIndex].status === 'pending') {
-         newStages[downloadIndex].pendingAt = new Date().toISOString();
-         newCurrentIndex = downloadIndex;
-         changed = true;
-      }
+        if (downloadIndex >= 0 && newStages[downloadIndex].status === 'pending') {
+           newStages[downloadIndex].status = 'pending';
+           newStages[downloadIndex].pendingAt = new Date().toISOString();
+           newCurrentIndex = downloadIndex;
+           changed = true;
+        }
 
-      if (changed) {
-         await projetoFluxoService.updateWorkflow(id!, { stages: newStages, currentStageIndex: newCurrentIndex });
+        if (changed) {
+           await projetoFluxoService.updateWorkflow(id!, { stages: newStages, currentStageIndex: newCurrentIndex });
+        }
       }
+      toast.success('Seleção salva com sucesso!', { id: loadingToast });
+    } catch(e) {
+      console.error('Erro na Regra 4:', e);
+      toast.error('Erro ao processar', { id: loadingToast });
     }
+    
+    // Só navega DEPOIS de confirmar no banco
     navigate(`/download/${id}`);
   };
 
