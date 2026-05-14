@@ -14,7 +14,8 @@ import {
   Trash2,
   Save,
   Package,
-  CreditCard
+  CreditCard,
+  LayoutTemplate
 } from 'lucide-react';
 import { auth } from '@/src/lib/firebase';
 import { cn } from '@/src/lib/utils';
@@ -90,7 +91,8 @@ export default function AppLayout({ children }: AppLayoutProps) {
         { icon: CreditCard, label: 'Créditos', path: '/credits' },
         { icon: Library, label: 'Projetos', path: '/' },
         { icon: Users, label: 'Clientes', path: '/clients' },
-        { icon: Package, label: 'Cadastro de Pacotes', path: '/packages' }
+        { icon: Package, label: 'Cadastro de Pacotes', path: '/packages' },
+        { icon: LayoutTemplate, label: 'Modelos', path: '/modelos' }
       ]
     : [{ icon: LayoutDashboard, label: 'Dashboard', path: '/' }];
 
@@ -155,6 +157,20 @@ export default function AppLayout({ children }: AppLayoutProps) {
                 }
               >
                 Pacotes
+              </NavLink>
+            )}
+            
+            {isAdmin && (
+              <NavLink
+                to="/modelos"
+                className={({ isActive }) =>
+                  cn(
+                    'text-sm font-semibold transition-all pb-1 border-b-2',
+                    isActive ? 'text-white border-[#ff5351]' : 'text-zinc-500 border-transparent hover:text-zinc-300'
+                  )
+                }
+              >
+                Modelos
               </NavLink>
             )}
           </nav>
