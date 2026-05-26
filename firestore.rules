@@ -1,0 +1,108 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // -------------------------------------------------------------------------
+    // Global Helpers
+    // -------------------------------------------------------------------------
+    
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && request.auth.token.get('email', '') == 'boranovfilms@gmail.com';
+    }
+
+    function isOwner(ownerId) {
+      return isSignedIn() && (request.auth.uid == ownerId || isAdmin());
+    }
+
+    function isClient(projectData) {
+      return isSignedIn() && 
+             projectData.get('clientEmail', '').lower() == request.auth.token.get('email', '').lower();
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // -------------------------------------------------------------------------
+    // Rules
+    // -------------------------------------------------------------------------
+
+    // clients/{clientId}
+    match /clients/{clientId} {
+      allow read, list: if true; 
+      allow create: if (isAdmin() || (isSignedIn() && request.auth.token.get('email_verified', false)));
+      allow update: if (isSignedIn() && (
+                      (isOwner(existing().ownerId)) || 
+                      (existing().get('email', '').lower() == request.auth.token.get('email', '').lower())
+                    )) && (
+                      incoming().diff(existing()).affectedKeys().hasOnly(['lastAccess', 'status', 'updatedAt'])
+                      || isAdmin()
+                    );
+      allow delete: if isAdmin();
+    }
+
+    // industries/{industryId} (if any) or Categories
+    match /categories/{categoryId} {
+      allow read, list: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // projects/{projectId}
+    match /projects/{projectId} {
+      allow create: if (isAdmin() || (isSignedIn() && request.auth.token.get('email_verified', false)));
+      allow get: if isOwner(existing().ownerId) || isClient(existing()); 
+      allow list: if isSignedIn() && (
+        isOwner(resource.data.ownerId) || 
+        isClient(resource.data) || 
+        isAdmin()
+      );
+      
+      allow update: if (isSignedIn() && (
+                      isOwner(existing().ownerId) || 
+                      isClient(existing())
+                    )) && (
+                      incoming().diff(existing()).affectedKeys().hasOnly(['clientStatus', 'creditsUsed', 'updatedAt'])
+                      || isAdmin()
+                    );
+        
+      allow delete: if isAdmin();
+
+      // subcollections
+      match /galleries/{galleryId} {
+        allow read, write: if isOwner(get(/databases/$(database)/documents/projects/$(projectId)).data.ownerId);
+      }
+
+      match /media/{mediaId} {
+        allow read: if isOwner(get(/databases/$(database)/documents/projects/$(projectId)).data.ownerId) || isClient(get(/databases/$(database)/documents/projects/$(projectId)).data);
+        allow create: if isOwner(get(/databases/$(database)/documents/projects/$(projectId)).data.ownerId);
+        allow update: if (isOwner(get(/databases/$(database)/documents/projects/$(projectId)).data.ownerId))
+                      || (isClient(get(/databases/$(database)/documents/projects/$(projectId)).data) && incoming().diff(existing()).affectedKeys().hasOnly(['isSelected', 'updatedAt']));
+        allow delete: if isOwner(get(/databases/$(database)/documents/projects/$(projectId)).data.ownerId);
+      }
+
+      match /access/{accessId} {
+        allow read, write: if isOwner(get(/databases/$(database)/documents/projects/$(projectId)).data.ownerId);
+      }
+    }
+
+    match /settings/{settingsId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
