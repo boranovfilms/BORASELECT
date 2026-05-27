@@ -35,7 +35,7 @@ export default function Tarefas() {
     delegadoPara: ''
   });
 
-  // Função para emitir som de notificação
+  // Função para emitir som de notificação (Success - 3 notas ascendentes)
   const playNotificationSound = () => {
     try {
       if (!audioContext.current) {
@@ -44,21 +44,22 @@ export default function Tarefas() {
       const ctx = audioContext.current;
       if (ctx.state === 'suspended') ctx.resume();
       
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(880, ctx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.1);
-      
-      gain.gain.setValueAtTime(0.1, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2);
-      
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      
-      osc.start();
-      osc.stop(ctx.currentTime + 0.2);
+      [523, 659, 784].forEach((freq, i) => {
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        
+        o.connect(g);
+        g.connect(ctx.destination);
+        
+        o.type = 'sine';
+        o.frequency.setValueAtTime(freq, ctx.currentTime + i * 0.15);
+        
+        g.gain.setValueAtTime(0.25, ctx.currentTime + i * 0.15);
+        g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.15 + 0.3);
+        
+        o.start(ctx.currentTime + i * 0.15);
+        o.stop(ctx.currentTime + i * 0.15 + 0.3);
+      });
     } catch (e) {
       console.warn('Som de notificação bloqueado pelo navegador');
     }
@@ -122,7 +123,7 @@ export default function Tarefas() {
               played = true;
             }
             notifiedTasks.push(t.id);
-            // Opcional: marcar como visto no banco para não repetir em outros dispositivos
+            // Marcar como visto no banco para não repetir
             taskService.markAsSeen(t.id!);
           }
         });
