@@ -37,32 +37,18 @@ export default function Tarefas() {
 
   // Função para emitir som de notificação (Success - 3 notas ascendentes)
   const playNotificationSound = () => {
-    try {
-      if (!audioContext.current) {
-        audioContext.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-      }
-      const ctx = audioContext.current;
-      if (ctx.state === 'suspended') ctx.resume();
-      
-      [523, 659, 784].forEach((freq, i) => {
-        const o = ctx.createOscillator();
-        const g = ctx.createGain();
-        
-        o.connect(g);
-        g.connect(ctx.destination);
-        
-        o.type = 'sine';
-        o.frequency.setValueAtTime(freq, ctx.currentTime + i * 0.15);
-        
-        g.gain.setValueAtTime(0.25, ctx.currentTime + i * 0.15);
-        g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.15 + 0.3);
-        
-        o.start(ctx.currentTime + i * 0.15);
-        o.stop(ctx.currentTime + i * 0.15 + 0.3);
-      });
-    } catch (e) {
-      console.warn('Som de notificação bloqueado pelo navegador');
-    }
+    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    [523, 659, 784].forEach((freq, i) => {
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.connect(g); g.connect(ctx.destination);
+      o.type = 'sine';
+      o.frequency.setValueAtTime(freq, ctx.currentTime + i * 0.15);
+      g.gain.setValueAtTime(0.25, ctx.currentTime + i * 0.15);
+      g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.15 + 0.3);
+      o.start(ctx.currentTime + i * 0.15);
+      o.stop(ctx.currentTime + i * 0.15 + 0.3);
+    });
   };
 
   useEffect(() => {
@@ -425,31 +411,4 @@ export default function Tarefas() {
               </div>
             ),
             className: 'w-10'
-          }] : []),
-          {
-            header: 'Atividade',
-            accessor: (task) => (
-              <div className="py-1">
-                <div className="font-bold text-sm text-white mb-0.5 uppercase group-hover:text-[#ff5351] transition-colors">{task.nome}</div>
-                <div className="flex items-center gap-2 text-[10px] text-zinc-500 font-bold uppercase tracking-widest">
-                  <MessageSquare className="w-3 h-3" />
-                  {task.historico?.length || 0} registros no histórico
-                  {task.delegadoNome && <span className="text-[#ff5351] ml-2">• Delegada para: {task.delegadoNome.toUpperCase()}</span>}
-                </div>
-              </div>
-            )
-          },
-          { header: 'Prioridade', accessor: (task) => getPriorityBadge(task.prioridade), align: 'center' },
-          { header: 'Acesso', accessor: (task) => <span className="text-[10px] font-black uppercase text-zinc-500 tracking-widest flex items-center gap-1.5"><Shield className="w-3 h-3" />{task.tipoAcesso}</span> },
-          { header: 'Responsável', accessor: (task) => <span className="text-zinc-300 text-xs font-bold uppercase">{task.responsavelTarefa}</span> }
-        ]}
-        actions={(task) => (
-          <div className="flex items-center gap-2">
-            <button onClick={(e) => { e.stopPropagation(); handleEditTask(task); }} className="p-2 bg-zinc-800 border border-zinc-700 hover:bg-zinc-700 rounded-xl text-zinc-400 hover:text-white transition-all"><Edit className="w-4 h-4" /></button>
-            <button onClick={async (e) => { e.stopPropagation(); if (window.confirm('Excluir esta tarefa permanentemente?')) { await taskService.deleteTask(task.id!); } }} className="p-2 bg-zinc-800/50 hover:bg-red-500/10 rounded-xl text-zinc-600 hover:text-red-500 transition-all"><Trash2 className="w-4 h-4" /></button>
-          </div>
-        )}
-      />
-    </div>
-  );
-}
+          }] : []),\n          {\n            header: 'Atividade',\n            accessor: (task) => (\n              <div className=\"py-1\">\n                <div className=\"font-bold text-sm text-white mb-0.5 uppercase group-hover:text-[#ff5351] transition-colors\">{task.nome}</div>\n                <div className=\"flex items-center gap-2 text-[10px] text-zinc-500 font-bold uppercase tracking-widest\">\n                  <MessageSquare className=\"w-3 h-3\" />\n                  {task.historico?.length || 0} registros no histórico\n                  {task.delegadoNome && <span className=\"text-[#ff5351] ml-2\">• Delegada para: {task.delegadoNome.toUpperCase()}</span>}\n                </div>\n              </div>\n            )\n          },\n          { header: 'Prioridade', accessor: (task) => getPriorityBadge(task.prioridade), align: 'center' },\n          { header: 'Acesso', accessor: (task) => <span className=\"text-[10px] font-black uppercase text-zinc-500 tracking-widest flex items-center gap-1.5\"><Shield className=\"w-3 h-3\" />{task.tipoAcesso}</span> },\n          { header: 'Responsável', accessor: (task) => <span className=\"text-zinc-300 text-xs font-bold uppercase\">{task.responsavelTarefa}</span> }\n        ]}\n        actions={(task) => (\n          <div className=\"flex items-center gap-2\">\n            <button onClick={(e) => { e.stopPropagation(); handleEditTask(task); }} className=\"p-2 bg-zinc-800 border border-zinc-700 hover:bg-zinc-700 rounded-xl text-zinc-400 hover:text-white transition-all\"><Edit className=\"w-4 h-4\" /></button>\n            <button onClick={async (e) => { e.stopPropagation(); if (window.confirm('Excluir esta tarefa permanentemente?')) { await taskService.deleteTask(task.id!); } }} className=\"p-2 bg-zinc-800/50 hover:bg-red-500/10 rounded-xl text-zinc-600 hover:text-red-500 transition-all\"><Trash2 className=\"w-4 h-4\" /></button>\n          </div>\n        )}\n      />\n    </div>\n  );\n}\n
