@@ -33,16 +33,21 @@ export default function DebugTable() {
       
       if (docs.length > 0) {
         // Extrai as chaves do primeiro documento para criar as colunas dinamicamente
-        const keys = Object.keys(docs[0]);
-        const dynamicCols = keys.map(key => ({
+        const allKeys = new Set<string>();
+        docs.forEach(doc => Object.keys(doc).forEach(key => allKeys.add(key)));
+        
+        const dynamicCols = Array.from(allKeys).map(key => ({
           header: key.toUpperCase(),
           accessor: (item: any) => {
             const val = item[key];
-            if (typeof val === 'object' && val !== null) return JSON.stringify(val).substring(0, 30) + '...';
+            if (val === undefined || val === null) return '-';
+            if (typeof val === 'object') return JSON.stringify(val).substring(0, 30) + '...';
             return String(val);
           }
         }));
         setColumns(dynamicCols);
+      } else {
+        setColumns([]);
       }
       
       setData(docs);
@@ -80,7 +85,7 @@ export default function DebugTable() {
               {col.label}
             </button>
           ))}
-          <button onClick={fetchData} className="p-3 bg-zinc-800 border border-zinc-700 rounded-xl text-zinc-400 hover:text-white ml-auto">
+          <button onClick={fetchData} className="p-3 bg-zinc-900 border border-zinc-800 rounded-xl text-zinc-400 hover:text-white ml-auto transition-all">
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
         </div>
@@ -95,7 +100,7 @@ export default function DebugTable() {
         ) : (
           <div className="py-20 text-center border border-dashed border-zinc-800 rounded-3xl">
             <Search className="w-12 h-12 text-zinc-800 mx-auto mb-4" />
-            <p className="text-zinc-500 font-bold uppercase text-xs">Selecione uma coleção para visualizar os dados</p>
+            <p className="text-zinc-500 font-bold uppercase text-xs">Selecione uma coleção ou aguarde o carregamento</p>
           </div>
         )}
       </div>
