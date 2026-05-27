@@ -43,20 +43,23 @@ export default function App() {
       if (currentUser) {
         try {
           const cleanEmail = currentUser.email?.toLowerCase().trim();
-          const q = query(collection(db, 'clients'), where('email', '==', cleanEmail));
-          const snapshot = await getDocs(q);
           
-          let role = 'cliente';
-          
-          if (!snapshot.empty) {
-            const data = snapshot.docs[0].data();
-            // Pega a role como estiver no banco (editor, designer, etc)
-            role = data.role || 'cliente';
-          } else if (cleanEmail === 'boranovfilms@gmail.com') {
-            role = 'master';
+          // REGRA DE SUPER USUÁRIO (MASTER)
+          if (cleanEmail === 'admin@boraselect.com.br') {
+            setUserRole('master');
+          } else {
+            // Busca outros usuários (Equipe e Clientes) no banco
+            const q = query(collection(db, 'clients'), where('email', '==', cleanEmail));
+            const snapshot = await getDocs(q);
+            
+            if (!snapshot.empty) {
+              const data = snapshot.docs[0].data();
+              setUserRole(data.role || 'cliente');
+            } else {
+              setUserRole('cliente');
+            }
           }
           
-          setUserRole(role);
           const matrix = await permissionsService.getPermissions();
           setPermissions(matrix || {});
 
@@ -85,9 +88,9 @@ export default function App() {
     </AppLayout>
   );
 
-  // Considera Admin qualquer um que tenha permissão na Matriz ou seja o e-mail Master
-  const isInternal = ['master', 'admin', 'editor', 'designer', 'redator', 'midia_social'].includes(userRole);
-  const isAdmin = user?.email === 'boranovfilms@gmail.com' || isInternal;
+  // Define se o usuário tem poderes administrativos (Equipe Interna ou Master)
+  const internalRoles = ['master', 'admin', 'editor', 'designer', 'redator', 'midia_social'];
+  const isAdmin = internalRoles.includes(userRole);
 
   return (
     <BrowserRouter>
@@ -101,6 +104,7 @@ export default function App() {
         <Route path="/review/:id" element={user ? wrapLayout(<ProjectReview />) : <Navigate to="/login" />} />
         <Route path="/download/:id" element={user ? wrapLayout(<ProjectDownload />) : <Navigate to="/login" />} />
         
+        {/* Rotas de Gestão (Protegidas por isAdmin) */}
         <Route path="/projects/:id/config" element={user && isAdmin ? wrapLayout(<ProjectConfig />) : <Navigate to="/" />} />
         <Route path="/clients" element={user && isAdmin ? wrapLayout(<ClientAccess />) : <Navigate to="/" />} />
         <Route path="/clients/:id" element={user && isAdmin ? wrapLayout(<ClientDetails />) : <Navigate to="/" />} />
@@ -112,6 +116,7 @@ export default function App() {
         <Route path="/modelos" element={user && isAdmin ? wrapLayout(<ModelosFluxo />) : <Navigate to="/" />} />
         <Route path="/modelos/:id" element={user && isAdmin ? wrapLayout(<ModelosEdicao />) : <Navigate to="/" />} />
         <Route path="/projetos/:id/fluxo" element={user && isAdmin ? wrapLayout(<ProjetoFluxo />) : <Navigate to="/" />} />
+        
         <Route path="/equipe" element={user ? wrapLayout(<EquipeAccess />) : <Navigate to="/login" />} />
         <Route path="/painel-master" element={user ? wrapLayout(<PainelMaster />) : <Navigate to="/login" />} />
         <Route path="/tarefas" element={user ? wrapLayout(<Tarefas />) : <Navigate to="/login" />} />
