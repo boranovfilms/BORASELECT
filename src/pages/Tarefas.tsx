@@ -1,17 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
-  CheckSquare, Plus, Clock, User, Shield, X, Save, Loader2, Check, Edit, Trash2, MessageSquare, ChevronDown
+  CheckSquare, Plus, Clock, User, Shield, X, Save, Loader2, Check, Edit, Trash2, MessageSquare, ChevronDown, UserPlus
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { cn } from '../lib/utils';
 import { taskService, Task, TaskHistory } from '../services/taskService';
 import { teamService, TeamMember } from '../services/teamService';
+import { clientService, Client } from '../services/clientService';
 import { auth } from '../lib/firebase';
 import { DataTable } from '../components/ui/DataTable';
 
 export default function Tarefas() {
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+  const [allUsers, setAllUsers] = useState<{email: string, name: string}[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'pendentes' | 'executadas'>('pendentes');
   const [isAdding, setIsAdding] = useState(false);
@@ -21,37 +22,96 @@ export default function Tarefas() {
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [newComment, setNewComment] = useState('');
 
+  const audioContext = useRef<AudioContext | null>(null);
+
   const [newTask, setNewTask] = useState<Partial<Task>>({
     nome: '',
     prioridade: 'media',
     dataLimite: '',
     tipoAcesso: 'particular',
     descricao: '',
-    equipeSelecionada: 'Todos'
+    equipeSelecionada: 'Todos',
+    delegadoPara: ''
   });
 
   useEffect(() => {
     loadInitialData();
   }, []);
 
+  const playNotificationSound = () => {
+    try {
+      if (!audioContext.current) {
+        audioContext.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      }
+      const ctx = audioContext.current;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.1);
+      
+      gain.gain.setValueAtTime(0.1, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2);
+      
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      
+      osc.start();
+      osc.stop(ctx.currentTime + 0.2);
+    } catch (e) {
+      console.warn('Som de notificação bloqueado pelo navegador');
+    }
+  };
+
   const loadInitialData = async () => {
     setLoading(true);
     try {
-      const [allTasks, teamData] = await Promise.all([
+      const [allTasks, teamData, clientsData] = await Promise.all([
         taskService.getTasks(),
-        teamService.getTeamMembers().catch(() => [])
+        teamService.getTeamMembers().catch(() => []),
+        clientService.searchClients('').catch(() => [])
       ]);
       
       const userEmail = (auth.currentUser?.email || '').toLowerCase().trim();
+      
+      // Lista unificada para delegação
+      const usersList = [
+        ...teamData.map(m => ({ email: m.email, name: m.name })),
+        ...clientsData.map(c => ({ email: c.email, name: c.name }))
+      ];
+      setAllUsers(usersList);
+
       const filterTasks = allTasks.filter(task => {
+        const creatorEmail = (task.responsavelCriacaoEmail || '').toLowerCase().trim();
+        const delegateEmail = (task.delegadoPara || '').toLowerCase().trim();
+        
+        // Regra de Delegação: Apenas criador e delegado veem
+        if (task.delegadoPara) {
+          return creatorEmail === userEmail || delegateEmail === userEmail;
+        }
+
+        // Regra de Acesso Particular
         if (task.tipoAcesso === 'particular') {
-           return (task.responsavelCriacaoEmail || '').toLowerCase().trim() === userEmail;
+           return creatorEmail === userEmail;
         }
         return true; 
       });
 
+      // Notificação sonora para novas tarefas delegadas
+      const newDelegatedTasks = filterTasks.filter(t => 
+        t.delegadoPara?.toLowerCase().trim() === userEmail && 
+        !t.vistoPeloDelegado && 
+        t.status === 'pendente'
+      );
+
+      if (newDelegatedTasks.length > 0) {
+        playNotificationSound();
+        // Marca como visto após notificar
+        newDelegatedTasks.forEach(t => taskService.markAsSeen(t.id!));
+      }
+
       setTasks(filterTasks);
-      setTeamMembers(teamData);
     } catch (error) {
       toast.error('Erro ao carregar dados.');
     } finally {
@@ -64,8 +124,15 @@ export default function Tarefas() {
       const allTasks = await taskService.getTasks();
       const userEmail = (auth.currentUser?.email || '').toLowerCase().trim();
       const filterTasks = allTasks.filter(task => {
+        const creatorEmail = (task.responsavelCriacaoEmail || '').toLowerCase().trim();
+        const delegateEmail = (task.delegadoPara || '').toLowerCase().trim();
+        
+        if (task.delegadoPara) {
+          return creatorEmail === userEmail || delegateEmail === userEmail;
+        }
+
         if (task.tipoAcesso === 'particular') {
-           return (task.responsavelCriacaoEmail || '').toLowerCase().trim() === userEmail;
+           return creatorEmail === userEmail;
         }
         return true; 
       });
@@ -86,18 +153,20 @@ export default function Tarefas() {
         ? (currentUser?.displayName || 'Você') 
         : (newTask.equipeSelecionada || 'Todos');
 
+      const delegadoObj = allUsers.find(u => u.email === newTask.delegadoPara);
+
+      const taskData = {
+        ...newTask,
+        nome: newTask.nome?.toUpperCase(),
+        responsavelTarefa: responsavel,
+        delegadoNome: delegadoObj?.name || ''
+      };
+
       if (editingTaskId) {
-        await taskService.updateTask(editingTaskId, {
-          nome: newTask.nome,
-          prioridade: newTask.prioridade,
-          dataLimite: newTask.dataLimite,
-          tipoAcesso: newTask.tipoAcesso,
-          equipeSelecionada: newTask.equipeSelecionada,
-          responsavelTarefa: responsavel
-        }, newComment);
+        await taskService.updateTask(editingTaskId, taskData, newComment);
         toast.success('Tarefa atualizada!');
       } else {
-        await taskService.createTask({ ...newTask, responsavelTarefa: responsavel, descricao: newComment });
+        await taskService.createTask({ ...taskData, descricao: newComment });
         toast.success('Tarefa criada!');
       }
 
@@ -116,7 +185,8 @@ export default function Tarefas() {
       prioridade: task.prioridade,
       dataLimite: task.dataLimite || '',
       tipoAcesso: task.tipoAcesso,
-      equipeSelecionada: task.equipeSelecionada || 'Todos'
+      equipeSelecionada: task.equipeSelecionada || 'Todos',
+      delegadoPara: task.delegadoPara || ''
     });
     setEditingTaskId(task.id!);
     setNewComment('');
@@ -128,7 +198,7 @@ export default function Tarefas() {
     setIsAdding(false);
     setEditingTaskId(null);
     setNewComment('');
-    setNewTask({ nome: '', prioridade: 'media', dataLimite: '', tipoAcesso: 'particular', descricao: '', equipeSelecionada: 'Todos' });
+    setNewTask({ nome: '', prioridade: 'media', dataLimite: '', tipoAcesso: 'particular', descricao: '', equipeSelecionada: 'Todos', delegadoPara: '' });
   };
 
   const toggleTaskSelection = (id: string) => {
@@ -178,6 +248,16 @@ export default function Tarefas() {
 
   return (
     <div className="animate-in fade-in duration-700 pb-20">
+      <style>{`
+        input[type=\"date\"]::-webkit-calendar-picker-indicator {
+          filter: invert(0.5) sepia(1) saturate(5) hue-rotate(320deg);
+          cursor: pointer;
+        }
+        input[type=\"date\"] {
+          color-scheme: dark;
+        }
+      `}</style>
+
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8">
         <div>
           <h1 className="text-4xl font-black tracking-tight text-white uppercase italic flex items-center gap-3">
@@ -202,48 +282,68 @@ export default function Tarefas() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
               <div className="space-y-2 lg:col-span-2">
                 <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1">Título da Tarefa</label>
-                <input required type="text" value={newTask.nome} onChange={e => setNewTask({...newTask, nome: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-4 text-sm text-white focus:border-[#ff5351] outline-none" placeholder="O que precisa ser feito?" />
+                <input required type="text" value={newTask.nome} onChange={e => setNewTask({...newTask, nome: e.target.value.toUpperCase()})} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-4 text-sm text-white focus:border-[#ff5351] outline-none uppercase" placeholder=\"O QUE PRECISA SER FEITO?\" />
               </div>
               <div className="space-y-2">
                 <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1">Prioridade</label>
                 <select value={newTask.prioridade} onChange={e => setNewTask({...newTask, prioridade: e.target.value as any})} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-4 text-sm text-white focus:border-[#ff5351] outline-none appearance-none cursor-pointer">
-                  <option value="alta">Alta</option><option value="media">Média</option><option value="baixa">Baixa</option>
+                  <option value="alta">ALTA</option><option value="media">MÉDIA</option><option value="baixa">BAIXA</option>
                 </select>
               </div>
               <div className="space-y-2">
                 <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1">Data Limite</label>
-                <input type="date" value={newTask.dataLimite} onChange={e => setNewTask({...newTask, dataLimite: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-4 text-sm text-white focus:border-[#ff5351] outline-none" />
+                <input type="date" value={newTask.dataLimite} onChange={e => setNewTask({...newTask, dataLimite: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-4 text-sm text-white focus:border-[#ff5351] outline-none bg-[#1f1f1f]" />
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
                <div className="space-y-2">
                 <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1">Visibilidade</label>
                 <select value={newTask.tipoAcesso} onChange={e => {
                   const val = e.target.value as any;
                   setNewTask({...newTask, tipoAcesso: val, equipeSelecionada: val === 'equipe' ? 'Todos' : ''});
                 }} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-4 text-sm text-white focus:border-[#ff5351] outline-none appearance-none cursor-pointer">
-                  <option value="particular">Particular (Só eu vejo)</option><option value="equipe">Equipe Boranov</option>
+                  <option value="particular">PARTICULAR (SÓ EU VEJO)</option><option value="equipe">EQUIPE BORANOV</option>
                 </select>
               </div>
+              
               {newTask.tipoAcesso === 'equipe' && (
                 <div className="space-y-2 animate-in fade-in">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1">Responsável pela Tarefa</label>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1">Equipe Responsável</label>
                   <div className="relative">
                     <select 
                       value={newTask.equipeSelecionada} 
                       onChange={e => setNewTask({...newTask, equipeSelecionada: e.target.value})}
                       className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-4 text-sm text-white focus:border-[#ff5351] outline-none appearance-none cursor-pointer"
                     >
-                      <option value="Todos">Toda a Equipe (Todos)</option>
-                      {teamMembers.map(member => (
-                        <option key={member.id} value={member.name}>{member.name}</option>
+                      <option value="Todos">TODA A EQUIPE (TODOS)</option>
+                      {allUsers.filter(u => u.email !== auth.currentUser?.email).map(user => (
+                        <option key={user.email} value={user.name}>{user.name.toUpperCase()}</option>
                       ))}
                     </select>
                     <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600 pointer-events-none" />
                   </div>
                 </div>
               )}
+
+              <div className="space-y-2 relative">
+                <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1 flex items-center gap-2">
+                  <UserPlus className=\"w-3 h-3 text-[#ff5351]\" /> Delegar Tarefa (Opcional)
+                </label>
+                <div className="relative">
+                  <select 
+                    value={newTask.delegadoPara} 
+                    onChange={e => setNewTask({...newTask, delegadoPara: e.target.value})}
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-4 text-sm text-white focus:border-[#ff5351] outline-none appearance-none cursor-pointer"
+                  >
+                    <option value=\"\">NÃO DELEGAR</option>
+                    {allUsers.filter(u => u.email !== auth.currentUser?.email).map(user => (
+                      <option key={user.email} value={user.email}>{user.name.toUpperCase()}</option>
+                    ))}
+                  </select>
+                  <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600 pointer-events-none" />
+                </div>
+              </div>
             </div>
 
             <div className="space-y-2 mb-8">
@@ -251,8 +351,8 @@ export default function Tarefas() {
                 <MessageSquare className="w-3 h-3" /> Adicionar Atualização ao Histórico
               </label>
               <div className="relative">
-                <textarea value={newComment} onChange={e => setNewComment(e.target.value)} rows={3} className="w-full bg-zinc-950 border border-zinc-800 rounded-2xl p-5 text-sm text-white focus:border-[#ff5351] outline-none resize-none placeholder:text-zinc-700" placeholder="Digite aqui o que foi feito ou novas informações..." />
-                <div className="absolute bottom-4 right-4 text-[9px] text-zinc-600 font-bold uppercase tracking-widest">Pressione salvar para registrar</div>
+                <textarea value={newComment} onChange={e => setNewComment(e.target.value.toUpperCase())} rows={3} className="w-full bg-zinc-950 border border-zinc-800 rounded-2xl p-5 text-sm text-white focus:border-[#ff5351] outline-none resize-none placeholder:text-zinc-700 uppercase" placeholder=\"DIGITE AQUI O QUE FOI FEITO...\" />
+                <div className=\"absolute bottom-4 right-4 text-[9px] text-zinc-600 font-bold uppercase tracking-widest\">PRESSIONE SALVAR PARA REGISTRAR</div>
               </div>
             </div>
 
@@ -266,7 +366,7 @@ export default function Tarefas() {
                         <span className="text-[10px] font-black text-[#ff5351] uppercase tracking-widest">{item.autor || 'Usuário Desconhecido'}</span>
                         <span className="text-[9px] font-mono text-zinc-600 uppercase font-black">{formatFullDate(item.date)}</span>
                       </div>
-                      <p className="text-zinc-300 text-sm leading-relaxed">{item.texto}</p>
+                      <p className="text-zinc-300 text-sm leading-relaxed uppercase">{item.texto}</p>
                     </div>
                   ))}
                 </div>
@@ -276,7 +376,7 @@ export default function Tarefas() {
             <div className="flex justify-end pt-8 border-t border-zinc-800 mt-8">
               <button type="submit" disabled={saving} className="h-14 px-10 bg-white text-black rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-[#ff5351] hover:text-white transition-all flex items-center gap-3 shadow-2xl">
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                {editingTaskId ? 'Salvar Registro' : 'Criar Tarefa'}
+                {editingTaskId ? 'Salvar Planejamento' : 'Salvar Planejamento'}
               </button>
             </div>
           </div>
@@ -289,70 +389,5 @@ export default function Tarefas() {
             <button 
               key={tab} 
               onClick={() => { setActiveTab(tab as any); setSelectedTasks(new Set()); }} 
-              className={cn("text-[10px] uppercase font-black tracking-widest pb-2 border-b-2 transition-all", activeTab === tab ? 'text-white border-[#ff5351]' : 'text-zinc-500 border-transparent')}
-            >
-              {tab}
-            </button>
-          ))}
-        </div>
-
-        {activeTab === 'pendentes' && selectedTasks.size > 0 && (
-          <button 
-            onClick={handleCompleteSelectedTasks}
-            disabled={saving}
-            className="px-6 py-2.5 bg-emerald-500 text-white rounded-xl font-black uppercase tracking-widest text-[10px] hover:bg-emerald-600 transition-all flex items-center gap-2 shadow-lg shadow-emerald-500/20 animate-in zoom-in-95"
-          >
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-            Finalizar Selecionadas ({selectedTasks.size})
-          </button>
-        )}
-      </div>
-
-      <DataTable 
-        data={tasks.filter(t => (activeTab === 'pendentes' && t.status === 'pendente') || (activeTab === 'executadas' && t.status === 'executada'))}
-        loading={loading}
-        onRowClick={(task) => handleEditTask(task)}
-        columns={[
-          ...(activeTab === 'pendentes' ? [{
-            header: '',
-            accessor: (task: Task) => (
-              <div className="flex justify-center" onClick={(e) => e.stopPropagation()}>
-                <button 
-                  onClick={() => toggleTaskSelection(task.id!)}
-                  className={cn(
-                    "w-5 h-5 rounded border-2 transition-all flex items-center justify-center",
-                    selectedTasks.has(task.id!) ? "bg-[#ff5351] border-[#ff5351]" : "border-zinc-700 bg-zinc-900 hover:border-zinc-500"
-                  )}
-                >
-                  {selectedTasks.has(task.id!) && <Check className="w-3 h-3 text-white" strokeWidth={4} />}
-                </button>
-              </div>
-            ),
-            className: 'w-10'
-          }] : []),
-          {
-            header: 'Atividade',
-            accessor: (task) => (
-              <div className="py-1">
-                <div className="font-bold text-sm text-white mb-0.5">{task.nome}</div>
-                <div className="flex items-center gap-2 text-[10px] text-zinc-500 font-bold uppercase tracking-widest">
-                  <MessageSquare className="w-3 h-3" />
-                  {task.historico?.length || 0} registros no histórico
-                </div>
-              </div>
-            )
-          },
-          { header: 'Prioridade', accessor: (task) => getPriorityBadge(task.prioridade), align: 'center' },
-          { header: 'Acesso', accessor: (task) => <span className="text-[10px] font-black uppercase text-zinc-500 tracking-widest flex items-center gap-1.5"><Shield className="w-3 h-3" />{task.tipoAcesso}</span> },
-          { header: 'Responsável', accessor: (task) => <span className="text-zinc-300 text-xs font-bold">{task.responsavelTarefa}</span> }
-        ]}
-        actions={(task) => (
-          <div className="flex items-center gap-2">
-            <button onClick={(e) => { e.stopPropagation(); handleEditTask(task); }} className="p-2 bg-zinc-800 border border-zinc-700 hover:bg-zinc-700 rounded-xl text-zinc-400 hover:text-white transition-all"><Edit className="w-4 h-4" /></button>
-            <button onClick={async (e) => { e.stopPropagation(); if (window.confirm('Excluir esta tarefa permanentemente?')) { await taskService.deleteTask(task.id!); loadTasks(); } }} className="p-2 bg-zinc-800/50 hover:bg-red-500/10 rounded-xl text-zinc-600 hover:text-red-500 transition-all"><Trash2 className="w-4 h-4" /></button>
-          </div>
-        )}
-      />
-    </div>
-  );
-}
+              className={cn(\"text-[10px] uppercase font-black tracking-widest pb-2 border-b-2 transition-all\", activeTab === tab ? 'text-white border-[#ff5351]' : 'text-zinc-500 border-transparent')}
+            >\n              {tab}\n            </button>\n          ))}\n        </div>\n\n        {activeTab === 'pendentes' && selectedTasks.size > 0 && (\n          <button \n            onClick={handleCompleteSelectedTasks}\n            disabled={saving}\n            className=\"px-6 py-2.5 bg-emerald-500 text-white rounded-xl font-black uppercase tracking-widest text-[10px] hover:bg-emerald-600 transition-all flex items-center gap-2 shadow-lg shadow-emerald-500/20 animate-in zoom-in-95\"\n          >\n            {saving ? <Loader2 className=\"w-4 h-4 animate-spin\" /> : <Check className=\"w-4 h-4\" />}\n            Finalizar Selecionadas ({selectedTasks.size})\n          </button>\n        )}\n      </div>\n\n      <DataTable \n        data={tasks.filter(t => (activeTab === 'pendentes' && t.status === 'pendente') || (activeTab === 'executadas' && t.status === 'executada'))}\n        loading={loading}\n        onRowClick={(task) => handleEditTask(task)}\n        columns={[\n          ...(activeTab === 'pendentes' ? [{\n            header: '',\n            accessor: (task: Task) => (\n              <div className=\"flex justify-center\" onClick={(e) => e.stopPropagation()}>\n                <button \n                  onClick={() => toggleTaskSelection(task.id!)}\n                  className={cn(\n                    \"w-5 h-5 rounded border-2 transition-all flex items-center justify-center\",\n                    selectedTasks.has(task.id!) ? \"bg-[#ff5351] border-[#ff5351]\" : \"border-zinc-700 bg-zinc-900 hover:border-zinc-500\"\n                  )}\n                >\n                  {selectedTasks.has(task.id!) && <Check className=\"w-3 h-3 text-white\" strokeWidth={4} />}\n                </button>\n              </div>\n            ),\n            className: 'w-10'\n          }] : []),\n          {\n            header: 'Atividade',\n            accessor: (task) => (\n              <div className=\"py-1\">\n                <div className=\"font-bold text-sm text-white mb-0.5 uppercase group-hover:text-[#ff5351] transition-colors\">{task.nome}</div>\n                <div className=\"flex items-center gap-2 text-[10px] text-zinc-500 font-bold uppercase tracking-widest\">\n                  <MessageSquare className=\"w-3 h-3\" />\n                  {task.historico?.length || 0} registros no histórico\n                  {task.delegadoNome && <span className=\"text-[#ff5351] ml-2\">• Delegada para: {task.delegadoNome.toUpperCase()}</span>}\n                </div>\n              </div>\n            )\n          },\n          { header: 'Prioridade', accessor: (task) => getPriorityBadge(task.prioridade), align: 'center' },\n          { header: 'Acesso', accessor: (task) => <span className=\"text-[10px] font-black uppercase text-zinc-500 tracking-widest flex items-center gap-1.5\"><Shield className=\"w-3 h-3\" />{task.tipoAcesso}</span> },\n          { header: 'Responsável', accessor: (task) => <span className=\"text-zinc-300 text-xs font-bold uppercase\">{task.responsavelTarefa}</span> }\n        ]}\n        actions={(task) => (\n          <div className=\"flex items-center gap-2\">\n            <button onClick={(e) => { e.stopPropagation(); handleEditTask(task); }} className=\"p-2 bg-zinc-800 border border-zinc-700 hover:bg-zinc-700 rounded-xl text-zinc-400 hover:text-white transition-all\"><Edit className=\"w-4 h-4\" /></button>\n            <button onClick={async (e) => { e.stopPropagation(); if (window.confirm('Excluir esta tarefa permanentemente?')) { await taskService.deleteTask(task.id!); loadTasks(); } }} className=\"p-2 bg-zinc-800/50 hover:bg-red-500/10 rounded-xl text-zinc-600 hover:text-red-500 transition-all\"><Trash2 className=\"w-4 h-4\" /></button>\n          </div>\n        )}\n      />\n    </div>\n  );\n}\n

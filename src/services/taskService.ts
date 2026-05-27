@@ -20,6 +20,9 @@ export interface Task {
   responsavelTarefa: string;
   tipoAcesso: 'particular' | 'equipe';
   equipeSelecionada?: string;
+  delegadoPara?: string; // E-mail do usuário delegado
+  delegadoNome?: string; // Nome do usuário delegado
+  vistoPeloDelegado?: boolean; // Controle para notificação sonora
   descricao?: string;
   historico?: TaskHistory[];
 }
@@ -54,18 +57,20 @@ export const taskService = {
     const now = new Date().toISOString();
     
     const newHistory: TaskHistory[] = taskData.descricao ? [{
-      texto: taskData.descricao,
+      texto: taskData.descricao.toUpperCase(),
       autor: realName,
       data: now
     }] : [];
 
     const docRef = await addDoc(collection(db, 'tasks'), {
       ...taskData,
+      nome: taskData.nome?.toUpperCase(),
       status: 'pendente',
       dataCriacao: serverTimestamp(),
       responsavelCriacao: realName,
       responsavelCriacaoEmail: user?.email || '',
       historico: newHistory,
+      vistoPeloDelegado: false,
       descricao: ''
     });
     return docRef.id;
@@ -73,12 +78,15 @@ export const taskService = {
 
   async updateTask(id: string, data: Partial<Task>, newComment?: string) {
     const docRef = doc(db, 'tasks', id);
-    const updatePayload: any = { ...data };
+    const updatePayload: any = { 
+      ...data,
+      nome: data.nome?.toUpperCase()
+    };
 
     if (newComment?.trim()) {
       const realName = await getCurrentUserName();
       updatePayload.historico = arrayUnion({
-        texto: newComment.trim(),
+        texto: newComment.trim().toUpperCase(),
         autor: realName,
         data: new Date().toISOString()
       });
@@ -86,6 +94,11 @@ export const taskService = {
     }
 
     await updateDoc(docRef, updatePayload);
+  },
+
+  async markAsSeen(id: string) {
+    const docRef = doc(db, 'tasks', id);
+    await updateDoc(docRef, { vistoPeloDelegado: true });
   },
 
   async completeTask(id: string) {
