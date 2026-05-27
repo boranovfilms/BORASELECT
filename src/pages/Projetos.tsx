@@ -39,11 +39,14 @@ export default function Projetos() {
     if (!currentUser) return;
 
     try {
+      const cleanEmail = currentUser.email?.toLowerCase().trim();
+      
+      // REGRA DE IDENTIFICAÇÃO DE ROLE IGUAL AO APP.TSX
       let role = 'cliente';
-      if (currentUser.email === 'boranovfilms@gmail.com') {
+      if (cleanEmail === 'admin@boraselect.com.br') {
         role = 'master';
       } else {
-        const q = query(collection(db, 'clients'), where('email', '==', currentUser.email));
+        const q = query(collection(db, 'clients'), where('email', '==', cleanEmail));
         const snap = await getDocs(q);
         if (!snap.empty) {
           role = snap.docs[0].data().role || 'cliente';
@@ -51,7 +54,7 @@ export default function Projetos() {
       }
       setUserRole(role);
 
-      const isInternal = role === 'master' || role === 'editor' || role === 'designer' || role === 'admin';
+      const isInternal = ['master', 'admin', 'editor', 'designer', 'redator', 'midia_social'].includes(role);
 
       if (isInternal) {
         const [adminData, allClients] = await Promise.all([
@@ -61,14 +64,11 @@ export default function Projetos() {
         setAdminProjects(adminData);
         setClients(allClients);
       } else {
-        // VISÃO DO CLIENTE: Busca Projetos e Planejamentos
         const [clientProjects, clientPlans] = await Promise.all([
           projectService.getProjectsForClient().catch(() => []),
           contentPlanService.getPlansByClientEmail(currentUser.email!)
         ]);
 
-        // Unificar itens transformando em um formato comum para a tabela
-        // FILTRO ADICIONADO: Planejamentos com status 'rascunho' não são incluídos
         const unified = [
           ...clientProjects.map(p => ({
             id: p.id,
@@ -80,7 +80,7 @@ export default function Projetos() {
             route: `/review/${p.id}`
           })),
           ...clientPlans
-            .filter(p => p.status !== 'rascunho') // Regra: Não mostrar rascunhos para o cliente
+            .filter(p => p.status !== 'rascunho')
             .map(p => ({
               id: p.id,
               name: p.name,
@@ -140,9 +140,8 @@ export default function Projetos() {
     return <span className={cn("px-2 py-0.5 rounded-md border text-[9px] font-black uppercase tracking-widest", configs[type])}>{type}</span>;
   };
 
-  const isAdminOrTeam = userRole === 'master' || userRole === 'editor' || userRole === 'designer' || userRole === 'admin';
+  const isInternal = ['master', 'admin', 'editor', 'designer', 'redator', 'midia_social'].includes(userRole);
 
-  // Filtros Administrador
   const filteredAdminProjects = useMemo(() => {
     return adminProjects.filter(p => {
       const matchClient = !selectedClientEmail || p.clientEmail?.toLowerCase() === selectedClientEmail.toLowerCase();
@@ -151,7 +150,6 @@ export default function Projetos() {
     });
   }, [adminProjects, selectedClientEmail, searchTerm]);
 
-  // Filtros Cliente
   const filteredClientItems = useMemo(() => {
     return unifiedItems.filter(item => {
       const matchType = selectedType === 'todos' || item.type === selectedType;
@@ -169,20 +167,19 @@ export default function Projetos() {
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div>
           <h1 className="text-5xl font-bold tracking-tight text-white mb-2 uppercase italic font-black">
-            {isAdminOrTeam ? 'Projeto Seleção' : 'Minhas Entregas'}
+            {isInternal ? 'Projeto Seleção' : 'Minhas Entregas'}
           </h1>
           <p className="text-zinc-500 text-lg">
-            {isAdminOrTeam ? 'Gerencie os projetos de seleção de podcast e fotos.' : 'Acompanhe seus planejamentos, podcasts e fotos em um só lugar.'}
+            {isInternal ? 'Gerencie os projetos de seleção de podcast e fotos.' : 'Acompanhe seus materiais em um só lugar.'}
           </p>
         </div>
-        {isAdminOrTeam && (
-          <button onClick={() => setIsModalOpen(true)} className="flex items-center gap-2 bg-[#ff5351] text-white px-8 py-3.5 rounded-xl font-bold uppercase tracking-widest hover:opacity-90 transition-all text-xs shadow-lg shadow-[#ff5351]/20">
+        {isInternal && (
+          <button onClick={() => setIsModalOpen(true)} className="flex items-center gap-2 bg-[#ff5351] text-white px-8 py-3.5 rounded-xl font-bold uppercase tracking-widest hover:opacity-90 transition-all shadow-lg shadow-[#ff5351]/20 active:scale-95 text-xs">
             <Plus className="w-5 h-5" /> Novo Projeto
           </button>
         )}
       </header>
 
-      {/* ÁREA DE FILTROS */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in duration-500">
         <div className="relative">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
@@ -195,7 +192,7 @@ export default function Projetos() {
           />
         </div>
 
-        {isAdminOrTeam ? (
+        {isInternal ? (
           <div className="relative group">
             <div className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center gap-2 pointer-events-none">
               <User className={cn("w-4 h-4 transition-colors", selectedClientEmail ? "text-[#ff5351]" : "text-zinc-500")} />
@@ -235,8 +232,7 @@ export default function Projetos() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {[1, 2, 3].map((item) => <div key={item} className="aspect-[4/3] bg-zinc-900/50 rounded-2xl animate-pulse border border-zinc-800" />)}
           </div>
-        ) : isAdminOrTeam ? (
-          // VISÃO ADMINISTRADOR (MANTER CARDS)
+        ) : isInternal ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {filteredAdminProjects.map((project) => (
               <article key={project.id} onClick={() => navigate(`/projects/${project.id}/config`)} className="group relative bg-[#1f1f1f] rounded-3xl border border-zinc-800 overflow-hidden hover:border-[#ff5351]/30 transition-all cursor-pointer flex flex-col h-full shadow-2xl">
@@ -253,7 +249,7 @@ export default function Projetos() {
                     <span className={cn('px-2.5 py-1 border rounded-lg text-[9px] uppercase font-black tracking-widest', getStatusColor(project.status))}>{project.status}</span>
                   </div>
                 </div>
-                <div className="p-6 flex flex-col flex-1">
+                <div className="p-6 flex flex-col flex-1 text-left">
                   <div className="mb-6">
                     <h3 className="text-xl font-bold text-white truncate mb-2">{project.title}</h3>
                     <div className="flex items-center gap-2 text-zinc-500">
@@ -273,11 +269,10 @@ export default function Projetos() {
             ))}
           </div>
         ) : (
-          // VISÃO CLIENTE (TABELA UNIFICADA)
           <DataTable 
             data={filteredClientItems}
             onRowClick={(item) => navigate(item.route)}
-            emptyMessage="Nenhuma entrega encontrada para os filtros selecionados."
+            emptyMessage="Nenhuma entrega encontrada."
             columns={[
               {
                 header: 'Nome do Item',
@@ -290,20 +285,8 @@ export default function Projetos() {
                   </div>
                 )
               },
-              {
-                header: 'Tipo',
-                accessor: (item) => getTypeBadge(item.type),
-                align: 'center'
-              },
-              {
-                header: 'Status',
-                accessor: (item) => (
-                  <span className={cn("px-3 py-1 rounded-full border text-[9px] font-black uppercase tracking-widest", getStatusColor(item.status))}>
-                    {item.status.replace(/_/g, ' ')}
-                  </span>
-                ),
-                align: 'center'
-              },
+              { header: 'Tipo', accessor: (item) => getTypeBadge(item.type), align: 'center' },
+              { header: 'Status', accessor: (item) => <span className={cn("px-3 py-1 rounded-full border text-[9px] font-black uppercase tracking-widest", getStatusColor(item.status))}>{item.status.replace(/_/g, ' ')}</span>, align: 'center' },
               {
                 header: 'Última Atualização',
                 accessor: (item) => {
