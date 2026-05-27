@@ -75,11 +75,17 @@ export default function Tarefas() {
       
       const userEmail = (auth.currentUser?.email || '').toLowerCase().trim();
       
-      // Lista unificada para delegação
-      const usersList = [
-        ...teamData.map(m => ({ email: m.email, name: m.name })),
-        ...clientsData.map(c => ({ email: c.email, name: c.name }))
-      ];
+      // Deduplicação por email para evitar nomes duplicados no dropdown
+      const uniqueUsersMap = new Map<string, string>();
+      
+      teamData.forEach(m => uniqueUsersMap.set(m.email.toLowerCase().trim(), m.name));
+      clientsData.forEach(c => uniqueUsersMap.set(c.email.toLowerCase().trim(), c.name));
+      
+      const usersList = Array.from(uniqueUsersMap.entries()).map(([email, name]) => ({
+        email,
+        name
+      }));
+      
       setAllUsers(usersList);
 
       const filterTasks = allTasks.filter(task => {
@@ -106,9 +112,19 @@ export default function Tarefas() {
       );
 
       if (newDelegatedTasks.length > 0) {
-        playNotificationSound();
-        // Marca como visto após notificar
-        newDelegatedTasks.forEach(t => taskService.markAsSeen(t.id!));
+        const sessionKey = `notified_tasks_${userEmail}`;
+        const notifiedTasks = JSON.parse(sessionStorage.getItem(sessionKey) || '[]');
+        
+        const tasksToNotify = newDelegatedTasks.filter(t => !notifiedTasks.includes(t.id));
+        
+        if (tasksToNotify.length > 0) {
+          playNotificationSound();
+          const newNotifiedList = [...notifiedTasks, ...tasksToNotify.map(t => t.id)];
+          sessionStorage.setItem(sessionKey, JSON.stringify(newNotifiedList));
+          
+          // Marca no banco como visto (opcional, dependendo se quer que toque em outros dispositivos)
+          tasksToNotify.forEach(t => taskService.markAsSeen(t.id!));
+        }
       }
 
       setTasks(filterTasks);
