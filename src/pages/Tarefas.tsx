@@ -311,6 +311,7 @@ export default function Tarefas() {
       <DataTable 
         data={tasks.filter(t => (activeTab === 'pendentes' && t.status === 'pendente') || (activeTab === 'executadas' && t.status === 'executada'))}
         loading={loading}
+        onRowClick={(task) => handleEditTask(task)}
         columns={[
           ...(activeTab === 'pendentes' ? [{
             header: '',
@@ -346,10 +347,10 @@ export default function Tarefas() {
           { header: 'Responsável', accessor: (task) => <span className="text-zinc-300 text-xs font-bold">{task.responsavelTarefa}</span> }
         ]}
         actions={(task) => (
-          <>
-            <button onClick={() => handleEditTask(task)} className="p-2 bg-zinc-800 border border-zinc-700 hover:bg-zinc-700 rounded-xl text-zinc-400 hover:text-white transition-all"><Edit className="w-4 h-4" /></button>
-            <button onClick={async () => { if (window.confirm('Excluir esta tarefa permanentemente?')) { await taskService.deleteTask(task.id!); loadTasks(); } }} className="p-2 bg-zinc-800/50 hover:bg-red-500/10 rounded-xl text-zinc-600 hover:text-red-500 transition-all"><Trash2 className="w-4 h-4" /></button>
-          </>
+          <div className="flex items-center gap-2">
+            <button onClick={(e) => { e.stopPropagation(); handleEditTask(task); }} className="p-2 bg-zinc-800 border border-zinc-700 hover:bg-zinc-700 rounded-xl text-zinc-400 hover:text-white transition-all"><Edit className="w-4 h-4" /></button>
+            <button onClick={async (e) => { e.stopPropagation(); if (window.confirm('Excluir esta tarefa permanentemente?')) { await taskService.deleteTask(task.id!); loadTasks(); } }} className="p-2 bg-zinc-800/50 hover:bg-red-500/10 rounded-xl text-zinc-600 hover:text-red-500 transition-all"><Trash2 className="w-4 h-4" /></button>
+          </div>
         )}
       />
     </div>
