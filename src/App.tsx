@@ -28,6 +28,7 @@ import ProjetoFluxo from './pages/ProjetoFluxo';
 import PainelMaster from './pages/PainelMaster';
 import Tarefas from './pages/Tarefas';
 import EquipeAccess from './pages/Equipe';
+import DebugTable from './pages/DebugTable';
 
 export default function App() {
   const [loading, setLoading] = useState(true);
@@ -49,11 +50,10 @@ export default function App() {
           
           if (!snapshot.empty) {
             const data = snapshot.docs[0].data();
-            // Normaliza a role vinda do banco (remove acentos e espaços para bater com a Matriz)
             const rawRole = data.role || 'cliente';
             role = rawRole.toLowerCase()
-              .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // Remove acentos
-              .replace(/\s+/g, '_'); // Troca espaços por underscore
+              .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+              .replace(/\s+/g, '_');
           } else if (cleanEmail === 'boranovfilms@gmail.com') {
             role = 'master';
           }
@@ -92,7 +92,9 @@ export default function App() {
 
   return (
     <BrowserRouter>
-      <Toaster position="top-right" />
+      <Toaster position="top-right" toastOptions={{
+        style: { background: '#222', color: '#fff', border: '1px solid #333' }
+      }} />
       <Routes>
         <Route path="/login" element={!user ? <Login /> : <Navigate to="/" />} />
         <Route path="/register" element={!user ? <Register /> : <Navigate to="/" />} />
@@ -101,12 +103,10 @@ export default function App() {
         <Route path="/projetos" element={user ? wrapLayout(<Projetos />) : <Navigate to="/login" />} />
         <Route path="/review/:id" element={user ? wrapLayout(<ProjectReview />) : <Navigate to="/login" />} />
         <Route path="/download/:id" element={user ? wrapLayout(<ProjectDownload />) : <Navigate to="/login" />} />
-        
         <Route path="/projects/:id/config" element={user && isAdmin ? wrapLayout(<ProjectConfig />) : <Navigate to="/" />} />
         <Route path="/clients" element={user && isAdmin ? wrapLayout(<ClientAccess />) : <Navigate to="/" />} />
         <Route path="/clients/:id" element={user && isAdmin ? wrapLayout(<ClientDetails />) : <Navigate to="/" />} />
         <Route path="/clients/:id/novo-planejamento" element={user && isAdmin ? wrapLayout(<NewContentPlan />) : <Navigate to="/" />} />
-        
         <Route path="/planejamento/:id" element={user ? wrapLayout(<ContentPlanDetails />) : <Navigate to="/login" />} />
         <Route path="/packages" element={user && isAdmin ? wrapLayout(<Packages />) : <Navigate to="/" />} />
         <Route path="/credits" element={user && isAdmin ? wrapLayout(<Credits />) : <Navigate to="/" />} />
@@ -116,6 +116,7 @@ export default function App() {
         <Route path="/equipe" element={user ? wrapLayout(<EquipeAccess />) : <Navigate to="/login" />} />
         <Route path="/painel-master" element={user ? wrapLayout(<PainelMaster />) : <Navigate to="/login" />} />
         <Route path="/tarefas" element={user ? wrapLayout(<Tarefas />) : <Navigate to="/login" />} />
+        <Route path="/diagnostico" element={user && isAdmin ? wrapLayout(<DebugTable />) : <Navigate to="/" />} />
 
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
