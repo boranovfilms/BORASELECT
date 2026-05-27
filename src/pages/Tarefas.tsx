@@ -7,7 +7,8 @@ import { cn } from '../lib/utils';
 import { taskService, Task, TaskHistory } from '../services/taskService';
 import { teamService, TeamMember } from '../services/teamService';
 import { clientService, Client } from '../services/clientService';
-import { auth } from '../lib/firebase';
+import { auth, db } from '../lib/firebase';
+import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { DataTable } from '../components/ui/DataTable';
 
 export default function Tarefas() {
@@ -34,16 +35,15 @@ export default function Tarefas() {
     delegadoPara: ''
   });
 
-  useEffect(() => {
-    loadInitialData();
-  }, []);
-
+  // Função para emitir som de notificação
   const playNotificationSound = () => {
     try {
       if (!audioContext.current) {
         audioContext.current = new (window.AudioContext || (window as any).webkitAudioContext)();
       }
       const ctx = audioContext.current;
+      if (ctx.state === 'suspended') ctx.resume();
+      
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       
@@ -64,48 +64,47 @@ export default function Tarefas() {
     }
   };
 
-  const loadInitialData = async () => {
-    setLoading(true);
-    try {
-      const [allTasks, teamData, clientsData] = await Promise.all([
-        taskService.getTasks(),
-        teamService.getTeamMembers().catch(() => []),
-        clientService.searchClients('').catch(() => [])
-      ]);
-      
-      const userEmail = (auth.currentUser?.email || '').toLowerCase().trim();
-      
-      // Deduplicação por email para evitar nomes duplicados no dropdown
-      const uniqueUsersMap = new Map<string, string>();
-      
-      teamData.forEach(m => uniqueUsersMap.set(m.email.toLowerCase().trim(), m.name));
-      clientsData.forEach(c => uniqueUsersMap.set(c.email.toLowerCase().trim(), c.name));
-      
-      const usersList = Array.from(uniqueUsersMap.entries()).map(([email, name]) => ({
-        email,
-        name
-      }));
-      
-      setAllUsers(usersList);
+  useEffect(() => {
+    // Carregar usuários para o dropdown (uma vez)
+    const loadUsers = async () => {
+      try {
+        const [teamData, clientsData] = await Promise.all([
+          teamService.getTeamMembers().catch(() => []),
+          clientService.searchClients('').catch(() => [])
+        ]);
+        
+        const uniqueUsersMap = new Map<string, string>();
+        teamData.forEach(m => uniqueUsersMap.set(m.email.toLowerCase().trim(), m.name));
+        clientsData.forEach(c => uniqueUsersMap.set(c.email.toLowerCase().trim(), c.name));
+        
+        setAllUsers(Array.from(uniqueUsersMap.entries()).map(([email, name]) => ({ email, name })));
+      } catch (error) {
+        console.error('Erro ao carregar usuários:', error);
+      }
+    };
+    loadUsers();
 
-      const filterTasks = allTasks.filter(task => {
+    // Escuta em tempo real usando onSnapshot
+    const q = query(collection(db, 'tasks'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const userEmail = (auth.currentUser?.email || '').toLowerCase().trim();
+      const allTasks = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Task));
+
+      const filtered = allTasks.filter(task => {
         const creatorEmail = (task.responsavelCriacaoEmail || '').toLowerCase().trim();
         const delegateEmail = (task.delegadoPara || '').toLowerCase().trim();
         
-        // Regra de Delegação: Apenas criador e delegado veem
         if (task.delegadoPara) {
           return creatorEmail === userEmail || delegateEmail === userEmail;
         }
-
-        // Regra de Acesso Particular
         if (task.tipoAcesso === 'particular') {
            return creatorEmail === userEmail;
         }
         return true; 
       });
 
-      // Notificação sonora para novas tarefas delegadas
-      const newDelegatedTasks = filterTasks.filter(t => 
+      // Lógica de notificação sonora em tempo real
+      const newDelegatedTasks = filtered.filter(t => 
         t.delegadoPara?.toLowerCase().trim() === userEmail && 
         !t.vistoPeloDelegado && 
         t.status === 'pendente'
@@ -114,49 +113,32 @@ export default function Tarefas() {
       if (newDelegatedTasks.length > 0) {
         const sessionKey = `notified_tasks_${userEmail}`;
         const notifiedTasks = JSON.parse(sessionStorage.getItem(sessionKey) || '[]');
-        
-        const tasksToNotify = newDelegatedTasks.filter(t => !notifiedTasks.includes(t.id));
-        
-        if (tasksToNotify.length > 0) {
-          playNotificationSound();
-          const newNotifiedList = [...notifiedTasks, ...tasksToNotify.map(t => t.id)];
-          sessionStorage.setItem(sessionKey, JSON.stringify(newNotifiedList));
-          
-          // Marca no banco como visto (opcional, dependendo se quer que toque em outros dispositivos)
-          tasksToNotify.forEach(t => taskService.markAsSeen(t.id!));
-        }
+        let played = false;
+
+        newDelegatedTasks.forEach(t => {
+          if (!notifiedTasks.includes(t.id)) {
+            if (!played) {
+              playNotificationSound();
+              played = true;
+            }
+            notifiedTasks.push(t.id);
+            // Opcional: marcar como visto no banco para não repetir em outros dispositivos
+            taskService.markAsSeen(t.id!);
+          }
+        });
+        sessionStorage.setItem(sessionKey, JSON.stringify(notifiedTasks));
       }
 
-      setTasks(filterTasks);
-    } catch (error) {
-      toast.error('Erro ao carregar dados.');
-    } finally {
+      setTasks(filtered);
       setLoading(false);
-    }
-  };
+    }, (error) => {
+      console.error('Erro no Snapshot:', error);
+      toast.error('Erro na atualização em tempo real.');
+      setLoading(false);
+    });
 
-  const loadTasks = async () => {
-    try {
-      const allTasks = await taskService.getTasks();
-      const userEmail = (auth.currentUser?.email || '').toLowerCase().trim();
-      const filterTasks = allTasks.filter(task => {
-        const creatorEmail = (task.responsavelCriacaoEmail || '').toLowerCase().trim();
-        const delegateEmail = (task.delegadoPara || '').toLowerCase().trim();
-        
-        if (task.delegadoPara) {
-          return creatorEmail === userEmail || delegateEmail === userEmail;
-        }
-
-        if (task.tipoAcesso === 'particular') {
-           return creatorEmail === userEmail;
-        }
-        return true; 
-      });
-      setTasks(filterTasks);
-    } catch (error) {
-      console.error(error);
-    }
-  };
+    return () => unsubscribe();
+  }, []);
 
   const handleSaveTask = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -185,9 +167,7 @@ export default function Tarefas() {
         await taskService.createTask({ ...taskData, descricao: newComment });
         toast.success('Tarefa criada!');
       }
-
       closeForm();
-      await loadTasks(); 
     } catch (error) {
       toast.error('Erro ao salvar.');
     } finally {
@@ -236,7 +216,6 @@ export default function Tarefas() {
       }
       toast.success(`${selectedTasks.size} tarefa(s) finalizada(s)!`);
       setSelectedTasks(new Set()); 
-      await loadTasks(); 
     } catch (error) {
       toast.error('Erro ao finalizar tarefas.');
     } finally {
@@ -466,7 +445,7 @@ export default function Tarefas() {
         actions={(task) => (
           <div className="flex items-center gap-2">
             <button onClick={(e) => { e.stopPropagation(); handleEditTask(task); }} className="p-2 bg-zinc-800 border border-zinc-700 hover:bg-zinc-700 rounded-xl text-zinc-400 hover:text-white transition-all"><Edit className="w-4 h-4" /></button>
-            <button onClick={async (e) => { e.stopPropagation(); if (window.confirm('Excluir esta tarefa permanentemente?')) { await taskService.deleteTask(task.id!); loadTasks(); } }} className="p-2 bg-zinc-800/50 hover:bg-red-500/10 rounded-xl text-zinc-600 hover:text-red-500 transition-all"><Trash2 className="w-4 h-4" /></button>
+            <button onClick={async (e) => { e.stopPropagation(); if (window.confirm('Excluir esta tarefa permanentemente?')) { await taskService.deleteTask(task.id!); } }} className="p-2 bg-zinc-800/50 hover:bg-red-500/10 rounded-xl text-zinc-600 hover:text-red-500 transition-all"><Trash2 className="w-4 h-4" /></button>
           </div>
         )}
       />
