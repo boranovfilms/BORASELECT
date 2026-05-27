@@ -73,7 +73,7 @@ export function DataTable<T extends { id?: string | number }>({
                   className={cn(
                     "group transition-all duration-300",
                     onRowClick 
-                      ? "cursor-pointer hover:bg-[#ff5351]/10 hover:shadow-inner" 
+                      ? "cursor-pointer hover:bg-[#ff5351]/15" 
                       : "hover:bg-zinc-800/30"
                   )}
                 >
@@ -81,7 +81,7 @@ export function DataTable<T extends { id?: string | number }>({
                     <td 
                       key={colIdx} 
                       className={cn(
-                        "px-6 py-4 text-sm transition-colors",
+                        "px-6 py-3 text-sm transition-colors",
                         col.align === 'center' && "text-center",
                         col.align === 'right' && "text-right",
                         onRowClick && "group-hover:text-white",
@@ -94,7 +94,7 @@ export function DataTable<T extends { id?: string | number }>({
                     </td>
                   ))}
                   {actions && (
-                    <td className="px-6 py-4 text-right">
+                    <td className="px-6 py-3 text-right">
                       <div className="flex items-center justify-end gap-2">
                         {actions(item)}
                       </div>
