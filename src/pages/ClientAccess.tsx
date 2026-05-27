@@ -37,7 +37,7 @@ export default function ClientAccess() {
   // Estado do Formulário de Membro da Equipe
   const [memberForm, setMemberForm] = useState({ 
     firstName: '', lastName: '', email: '', phone: '', 
-    password: '', jobTitle: '', role: '', accessLevel: 'validador', photoUrl: '' 
+    password: '', jobTitle: '', role: 'equipe', accessLevel: 'validador', photoUrl: '' 
   });
 
   useEffect(() => {
@@ -48,11 +48,30 @@ export default function ClientAccess() {
     try {
       setLoading(true);
       const allData = await clientService.searchClients('');
-      setClients(allData.filter(c => c.role === 'cliente' || !c.role));
-      setAllTeamMembers(allData.filter(m => m.role === 'equipe' && (m as any).clienteId) as any);
+      
+      // Filtra clientes reais e garante que o ID esteja mapeado corretamente para a navegação e vínculo
+      const loadedClients = allData
+        .filter(c => c.role === 'cliente' || !c.role)
+        .map(c => ({
+          ...c,
+          id: c.id || (c as any).uid || (c as any).docId // Garante a captura do ID único
+        }));
+
+      setClients(loadedClients);
+      
+      // Diagnóstico para o console
+      console.log('Filtro de Clientes (ID Check):', loadedClients.map(c => ({ name: c.name, id: c.id })));
+      
+      // Filtra todos os membros da equipe vinculados
+      const team = allData.filter(m => 
+        (m.role === 'equipe' || (m as any).clienteId) && 
+        (m as any).clienteId !== undefined
+      ) as any;
+      
+      setAllTeamMembers(team);
     } catch (error) {
-      console.error(error);
-      toast.error('Erro ao carregar dados');
+      console.error('Erro ao carregar dados:', error);
+      toast.error('Erro ao atualizar lista de dados.');
     } finally {
       setLoading(false);
     }
@@ -153,6 +172,11 @@ export default function ClientAccess() {
       return;
     }
 
+    if (!selectedClient?.id) {
+      toast.error('ID do cliente não encontrado. Tente recarregar a página.');
+      return;
+    }
+
     try {
       setLoading(true);
       const fullName = `${memberForm.firstName} ${memberForm.lastName}`.trim();
@@ -163,7 +187,8 @@ export default function ClientAccess() {
         role: memberForm.role,
         jobTitle: memberForm.jobTitle,
         accessLevel: memberForm.accessLevel,
-        clienteId: selectedClient?.id
+        clienteId: selectedClient.id,
+        status: 'pending'
       };
       
       await teamService.createTeamMember(normalizedMember as any);
@@ -172,12 +197,13 @@ export default function ClientAccess() {
       toast.success('Membro adicionado e convite enviado!');
       setMemberForm({ 
         firstName: '', lastName: '', email: '', phone: '', 
-        password: '', jobTitle: '', role: '', accessLevel: 'validador', photoUrl: '' 
+        password: '', jobTitle: '', role: 'equipe', accessLevel: 'validador', photoUrl: '' 
       });
       setIsAddingTeamMember(false);
-      loadAllData();
+      await loadAllData();
     } catch (error) {
-      toast.error('Erro ao adicionar membro');
+      console.error('Erro ao cadastrar membro da equipe:', error);
+      toast.error('Erro ao adicionar membro da equipe.');
     } finally {
       setLoading(false);
     }
@@ -214,11 +240,11 @@ export default function ClientAccess() {
   };
 
   const getClientTeamCount = (clientId: string) => {
-    return allTeamMembers.filter(m => m.clienteId === clientId).length;
+    return allTeamMembers.filter(m => (m as any).clienteId === clientId).length;
   };
   
   const clientTeamMembers = selectedClient 
-    ? allTeamMembers.filter(m => m.clienteId === selectedClient.id) 
+    ? allTeamMembers.filter(m => (m as any).clienteId === selectedClient.id) 
     : [];
 
   const filteredClients = clients.filter(c => 
@@ -227,10 +253,10 @@ export default function ClientAccess() {
   );
 
   return (
-    <div className="space-y-12 pb-20">
+    <div className="space-y-12 pb-20 text-left">
       {!isClientFormOpen && !isTeamViewOpen && (
         <header className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-          <div>
+          <div className="text-left">
             <h1 className="text-5xl font-bold tracking-tight text-white mb-2 uppercase italic font-black">Gestão de Clientes</h1>
             <p className="text-zinc-500 text-lg">Gerencie o cadastro e os planejamentos dos seus clientes.</p>
           </div>
@@ -245,7 +271,7 @@ export default function ClientAccess() {
       {isClientFormOpen && (
         <form autoComplete="off" onSubmit={handleSaveClient} className="animate-in slide-in-from-right-8 duration-500">
           <header className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8">
-            <div>
+            <div className="text-left">
               <button type="button" onClick={() => setIsClientFormOpen(false)} className="text-[#ff5351] hover:text-white transition-colors text-sm font-bold flex items-center gap-2 mb-4 uppercase tracking-widest">
                 <ChevronDown className="w-4 h-4 rotate-90" /> Voltar para Clientes
               </button>
@@ -287,7 +313,7 @@ export default function ClientAccess() {
             <section className="bg-[#1f1f1f] border border-zinc-800/80 rounded-3xl p-6 shadow-xl mb-10">
               <h3 className="text-lg font-bold text-white mb-5 flex items-center gap-2"><Briefcase className="w-5 h-5 text-[#ff5351]"/> Dados Comerciais</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                <div className="space-y-2"><label className="text-[10px] uppercase font-black tracking-widest text-zinc-500">Telefone / WhatsApp</label><input type="text" value={clientForm.phone} onChange={e => setClientForm({...clientForm, phone: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-white text-sm" placeholder="(00) 00000-0000"/></div>
+                <div className="space-y-2"><label className="text-[10px] uppercase font-black tracking-widest text-zinc-500">Telefone / WhatsApp</label><input type="text" value={clientForm.phone} onChange={e => setClientForm({...clientForm, phone: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-white focus:border-[#ff5351] outline-none text-sm" placeholder="(00) 00000-0000"/></div>
                 <div className="space-y-2"><label className="text-[10px] uppercase font-black tracking-widest text-zinc-500">Plano Atual</label><div className="relative"><select value={clientForm.plan} onChange={e => setClientForm({...clientForm, plan: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-white focus:border-[#ff5351] outline-none text-sm appearance-none"><option value="Básico">Básico</option><option value="Pro">Pro</option><option value="Premium">Premium</option></select><ChevronDown className="w-4 h-4 text-zinc-500 absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none" /></div></div>
               </div>
             </section>
@@ -298,7 +324,7 @@ export default function ClientAccess() {
       {isTeamViewOpen && selectedClient && (
         <div className="animate-in slide-in-from-bottom-8 duration-500">
           <header className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8 border-b border-zinc-800 pb-6">
-            <div>
+            <div className="text-left">
               <button onClick={() => setIsTeamViewOpen(false)} className="text-[#ff5351] hover:text-white transition-colors text-sm font-bold flex items-center gap-2 mb-4 uppercase tracking-widest">
                 <ChevronDown className="w-4 h-4 rotate-90" /> Voltar
               </button>
@@ -312,8 +338,8 @@ export default function ClientAccess() {
           </header>
 
           {isAddingTeamMember && (
-            <form autoComplete="off" onSubmit={handleSaveTeamMember} className="space-y-6 mb-12 animate-in fade-in duration-300">
-              <section className="bg-[#1f1f1f] border border-zinc-800/80 rounded-3xl p-6 shadow-xl">
+            <form autoComplete="off" onSubmit={handleSaveTeamMember} className="space-y-6 mb-12 animate-in fade-in duration-300 text-left">
+              <section className="bg-[#1f1f1f] border border-zinc-800/80 rounded-3xl p-6 shadow-xl text-left">
                 <div className="flex items-center gap-3 mb-6"><Camera className="w-5 h-5 text-[#ff5351]" /><h3 className="text-lg font-bold text-white">Foto de Perfil</h3></div>
                 <div className="flex items-center gap-6 p-4 bg-zinc-900/50 border border-zinc-800/50 rounded-2xl">
                   <div className="w-24 h-24 rounded-2xl bg-zinc-800 border border-zinc-700 flex flex-col items-center justify-center text-zinc-500 relative group overflow-hidden"><User className="w-8 h-8 mb-1 group-hover:scale-110 transition-transform" /><div className="absolute bottom-2 right-2 w-6 h-6 bg-[#ff5351] rounded-full flex items-center justify-center shadow-lg"><Upload className="w-3 h-3 text-white" /></div></div>
@@ -330,7 +356,6 @@ export default function ClientAccess() {
                   <div className="space-y-2"><label className="text-[10px] uppercase font-black tracking-widest text-zinc-500">E-MAIL</label><div className="relative"><input type="email" value={memberForm.email} onChange={e => setMemberForm({...memberForm, email: e.target.value})} placeholder="joao.silva@empresa.com" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3.5 pl-11 text-white focus:border-[#ff5351] outline-none text-sm"/><Mail className="w-4 h-4 text-zinc-500 absolute left-4 top-1/2 -translate-y-1/2" /></div></div>
                   <div className="space-y-2"><label className="text-[10px] uppercase font-black tracking-widest text-zinc-500">TELEFONE</label><div className="relative"><input type="text" value={memberForm.phone} onChange={e => setMemberForm({...memberForm, phone: e.target.value})} placeholder="(00) 00000-0000" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3.5 pl-11 text-white focus:border-[#ff5351] outline-none text-sm"/><Phone className="w-4 h-4 text-zinc-500 absolute left-4 top-1/2 -translate-y-1/2" /></div></div>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5 hidden"><div className="space-y-2"><label className="text-[10px] uppercase font-black tracking-widest text-zinc-500">SENHA DE ACESSO</label><div className="relative"><input type="password" value={memberForm.password} onChange={e => setMemberForm({...memberForm, password: e.target.value})} placeholder="Defina uma senha" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3.5 pl-11 text-white focus:border-[#ff5351] outline-none text-sm"/><Lock className="w-4 h-4 text-zinc-500 absolute left-4 top-1/2 -translate-y-1/2" /></div></div></div>
               </section>
               <section className="bg-[#1f1f1f] border border-zinc-800/80 rounded-3xl p-6 shadow-xl">
                 <div className="flex items-center gap-3 mb-6"><Briefcase className="w-5 h-5 text-[#ff5351]" /><h3 className="text-lg font-bold text-white">Informações Profissionais</h3></div>
@@ -360,7 +385,7 @@ export default function ClientAccess() {
               { 
                 header: 'Membro', 
                 accessor: (member) => (
-                  <div>
+                  <div className="text-left py-1">
                     <div className="text-white font-bold text-base leading-tight mb-1">{member.name}</div>
                     <div className="text-zinc-500 text-xs flex items-center gap-2"><Mail className="w-3.5 h-3.5" />{member.email}</div>
                   </div>
@@ -378,8 +403,8 @@ export default function ClientAccess() {
             ]}
             actions={(member) => (
               <>
-                <button onClick={() => sendEmailInvite(member.name, member.email)} disabled={sendingEmail === member.email} className="p-2 bg-zinc-800 border border-zinc-700 hover:bg-[#ff5351] hover:border-transparent rounded-xl text-zinc-300 hover:text-white transition-all" title="Reenviar Convite"><Mail className="w-4 h-4" /></button>
-                <button onClick={() => handleDeleteTeamMember(member.id!, member.email)} className="p-2 bg-zinc-800/50 hover:bg-red-500/10 rounded-xl text-zinc-600 hover:text-red-500 transition-all" title="Excluir Membro"><Trash2 className="w-4 h-4" /></button>
+                <button onClick={(e) => { e.stopPropagation(); sendEmailInvite(member.name, member.email); }} disabled={sendingEmail === member.email} className="p-2 bg-zinc-800 border border-zinc-700 hover:bg-[#ff5351] hover:border-transparent rounded-xl text-zinc-300 hover:text-white transition-all" title="Reenviar Convite"><Mail className="w-4 h-4" /></button>
+                <button onClick={(e) => { e.stopPropagation(); handleDeleteTeamMember(member.id!, member.email); }} className="p-2 bg-zinc-800/50 hover:bg-red-500/10 rounded-xl text-zinc-600 hover:text-red-500 transition-all" title="Excluir Membro"><Trash2 className="w-4 h-4" /></button>
               </>
             )}
           />
@@ -387,7 +412,7 @@ export default function ClientAccess() {
       )}
 
       {!isClientFormOpen && !isTeamViewOpen && (
-        <div className="space-y-4">
+        <div className="space-y-4 text-left">
           <div className="relative animate-in fade-in duration-300">
             <Search className="w-5 h-5 text-zinc-500 absolute left-5 top-1/2 -translate-y-1/2" />
             <input type="text" placeholder="Buscar cliente por nome ou e-mail..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full bg-[#1a1a1a] border border-zinc-800 rounded-2xl pl-13 pr-5 py-4 text-white focus:border-[#ff5351] outline-none transition-all placeholder:text-zinc-600 shadow-xl"/>
@@ -396,14 +421,17 @@ export default function ClientAccess() {
           <DataTable 
             data={filteredClients}
             loading={loading}
-            onRowClick={(client) => navigate(`/clients/${client.id}`)}
+            onRowClick={(client) => { if (client.id) navigate(`/clients/${client.id}`); }}
             emptyMessage={searchTerm ? 'Nenhum cliente encontrado na busca.' : 'Nenhum cliente cadastrado.'}
             columns={[
               {
                 header: 'Cliente',
                 accessor: (client) => (
-                  <div>
-                    <div className="text-white font-bold text-base leading-tight mb-1 uppercase italic">{client.name}</div>
+                  <div 
+                    onClick={(e) => { e.stopPropagation(); navigate(`/clients/${client.id}`); }}
+                    className="text-left py-1 cursor-pointer group/name"
+                  >
+                    <div className="text-white font-bold text-base leading-tight mb-1 uppercase italic group-hover/name:text-[#ff5351] transition-colors">{client.name}</div>
                     <div className="text-zinc-500 text-xs flex items-center gap-2 font-medium tracking-tight"><Mail className="w-3.5 h-3.5" />{client.email}</div>
                   </div>
                 )
