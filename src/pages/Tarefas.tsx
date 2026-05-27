@@ -249,11 +249,11 @@ export default function Tarefas() {
   return (
     <div className="animate-in fade-in duration-700 pb-20">
       <style>{`
-        input[type=\"date\"]::-webkit-calendar-picker-indicator {
+        input[type="date"]::-webkit-calendar-picker-indicator {
           filter: invert(0.5) sepia(1) saturate(5) hue-rotate(320deg);
           cursor: pointer;
         }
-        input[type=\"date\"] {
+        input[type="date"] {
           color-scheme: dark;
         }
       `}</style>
@@ -282,7 +282,7 @@ export default function Tarefas() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
               <div className="space-y-2 lg:col-span-2">
                 <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1">Título da Tarefa</label>
-                <input required type="text" value={newTask.nome} onChange={e => setNewTask({...newTask, nome: e.target.value.toUpperCase()})} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-4 text-sm text-white focus:border-[#ff5351] outline-none uppercase" placeholder=\"O QUE PRECISA SER FEITO?\" />
+                <input required type="text" value={newTask.nome} onChange={e => setNewTask({...newTask, nome: e.target.value.toUpperCase()})} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-4 text-sm text-white focus:border-[#ff5351] outline-none uppercase" placeholder="O QUE PRECISA SER FEITO?" />
               </div>
               <div className="space-y-2">
                 <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1">Prioridade</label>
@@ -328,7 +328,7 @@ export default function Tarefas() {
 
               <div className="space-y-2 relative">
                 <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1 flex items-center gap-2">
-                  <UserPlus className=\"w-3 h-3 text-[#ff5351]\" /> Delegar Tarefa (Opcional)
+                  <UserPlus className="w-3 h-3 text-[#ff5351]" /> Delegar Tarefa (Opcional)
                 </label>
                 <div className="relative">
                   <select 
@@ -336,7 +336,7 @@ export default function Tarefas() {
                     onChange={e => setNewTask({...newTask, delegadoPara: e.target.value})}
                     className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-4 text-sm text-white focus:border-[#ff5351] outline-none appearance-none cursor-pointer"
                   >
-                    <option value=\"\">NÃO DELEGAR</option>
+                    <option value="">NÃO DELEGAR</option>
                     {allUsers.filter(u => u.email !== auth.currentUser?.email).map(user => (
                       <option key={user.email} value={user.email}>{user.name.toUpperCase()}</option>
                     ))}
@@ -351,8 +351,8 @@ export default function Tarefas() {
                 <MessageSquare className="w-3 h-3" /> Adicionar Atualização ao Histórico
               </label>
               <div className="relative">
-                <textarea value={newComment} onChange={e => setNewComment(e.target.value.toUpperCase())} rows={3} className="w-full bg-zinc-950 border border-zinc-800 rounded-2xl p-5 text-sm text-white focus:border-[#ff5351] outline-none resize-none placeholder:text-zinc-700 uppercase" placeholder=\"DIGITE AQUI O QUE FOI FEITO...\" />
-                <div className=\"absolute bottom-4 right-4 text-[9px] text-zinc-600 font-bold uppercase tracking-widest\">PRESSIONE SALVAR PARA REGISTRAR</div>
+                <textarea value={newComment} onChange={e => setNewComment(e.target.value.toUpperCase())} rows={3} className="w-full bg-zinc-950 border border-zinc-800 rounded-2xl p-5 text-sm text-white focus:border-[#ff5351] outline-none resize-none placeholder:text-zinc-700 uppercase" placeholder="DIGITE AQUI O QUE FOI FEITO..." />
+                <div className="absolute bottom-4 right-4 text-[9px] text-zinc-600 font-bold uppercase tracking-widest">PRESSIONE SALVAR PARA REGISTRAR</div>
               </div>
             </div>
 
@@ -389,5 +389,71 @@ export default function Tarefas() {
             <button 
               key={tab} 
               onClick={() => { setActiveTab(tab as any); setSelectedTasks(new Set()); }} 
-              className={cn(\"text-[10px] uppercase font-black tracking-widest pb-2 border-b-2 transition-all\", activeTab === tab ? 'text-white border-[#ff5351]' : 'text-zinc-500 border-transparent')}
-            >\n              {tab}\n            </button>\n          ))}\n        </div>\n\n        {activeTab === 'pendentes' && selectedTasks.size > 0 && (\n          <button \n            onClick={handleCompleteSelectedTasks}\n            disabled={saving}\n            className=\"px-6 py-2.5 bg-emerald-500 text-white rounded-xl font-black uppercase tracking-widest text-[10px] hover:bg-emerald-600 transition-all flex items-center gap-2 shadow-lg shadow-emerald-500/20 animate-in zoom-in-95\"\n          >\n            {saving ? <Loader2 className=\"w-4 h-4 animate-spin\" /> : <Check className=\"w-4 h-4\" />}\n            Finalizar Selecionadas ({selectedTasks.size})\n          </button>\n        )}\n      </div>\n\n      <DataTable \n        data={tasks.filter(t => (activeTab === 'pendentes' && t.status === 'pendente') || (activeTab === 'executadas' && t.status === 'executada'))}\n        loading={loading}\n        onRowClick={(task) => handleEditTask(task)}\n        columns={[\n          ...(activeTab === 'pendentes' ? [{\n            header: '',\n            accessor: (task: Task) => (\n              <div className=\"flex justify-center\" onClick={(e) => e.stopPropagation()}>\n                <button \n                  onClick={() => toggleTaskSelection(task.id!)}\n                  className={cn(\n                    \"w-5 h-5 rounded border-2 transition-all flex items-center justify-center\",\n                    selectedTasks.has(task.id!) ? \"bg-[#ff5351] border-[#ff5351]\" : \"border-zinc-700 bg-zinc-900 hover:border-zinc-500\"\n                  )}\n                >\n                  {selectedTasks.has(task.id!) && <Check className=\"w-3 h-3 text-white\" strokeWidth={4} />}\n                </button>\n              </div>\n            ),\n            className: 'w-10'\n          }] : []),\n          {\n            header: 'Atividade',\n            accessor: (task) => (\n              <div className=\"py-1\">\n                <div className=\"font-bold text-sm text-white mb-0.5 uppercase group-hover:text-[#ff5351] transition-colors\">{task.nome}</div>\n                <div className=\"flex items-center gap-2 text-[10px] text-zinc-500 font-bold uppercase tracking-widest\">\n                  <MessageSquare className=\"w-3 h-3\" />\n                  {task.historico?.length || 0} registros no histórico\n                  {task.delegadoNome && <span className=\"text-[#ff5351] ml-2\">• Delegada para: {task.delegadoNome.toUpperCase()}</span>}\n                </div>\n              </div>\n            )\n          },\n          { header: 'Prioridade', accessor: (task) => getPriorityBadge(task.prioridade), align: 'center' },\n          { header: 'Acesso', accessor: (task) => <span className=\"text-[10px] font-black uppercase text-zinc-500 tracking-widest flex items-center gap-1.5\"><Shield className=\"w-3 h-3\" />{task.tipoAcesso}</span> },\n          { header: 'Responsável', accessor: (task) => <span className=\"text-zinc-300 text-xs font-bold uppercase\">{task.responsavelTarefa}</span> }\n        ]}\n        actions={(task) => (\n          <div className=\"flex items-center gap-2\">\n            <button onClick={(e) => { e.stopPropagation(); handleEditTask(task); }} className=\"p-2 bg-zinc-800 border border-zinc-700 hover:bg-zinc-700 rounded-xl text-zinc-400 hover:text-white transition-all\"><Edit className=\"w-4 h-4\" /></button>\n            <button onClick={async (e) => { e.stopPropagation(); if (window.confirm('Excluir esta tarefa permanentemente?')) { await taskService.deleteTask(task.id!); loadTasks(); } }} className=\"p-2 bg-zinc-800/50 hover:bg-red-500/10 rounded-xl text-zinc-600 hover:text-red-500 transition-all\"><Trash2 className=\"w-4 h-4\" /></button>\n          </div>\n        )}\n      />\n    </div>\n  );\n}\n
+              className={cn("text-[10px] uppercase font-black tracking-widest pb-2 border-b-2 transition-all", activeTab === tab ? 'text-white border-[#ff5351]' : 'text-zinc-500 border-transparent')}
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
+
+        {activeTab === 'pendentes' && selectedTasks.size > 0 && (
+          <button 
+            onClick={handleCompleteSelectedTasks}
+            disabled={saving}
+            className="px-6 py-2.5 bg-emerald-500 text-white rounded-xl font-black uppercase tracking-widest text-[10px] hover:bg-emerald-600 transition-all flex items-center gap-2 shadow-lg shadow-emerald-500/20 animate-in zoom-in-95"
+          >
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+            Finalizar Selecionadas ({selectedTasks.size})
+          </button>
+        )}
+      </div>
+
+      <DataTable 
+        data={tasks.filter(t => (activeTab === 'pendentes' && t.status === 'pendente') || (activeTab === 'executadas' && t.status === 'executada'))}
+        loading={loading}
+        onRowClick={(task) => handleEditTask(task)}
+        columns={[
+          ...(activeTab === 'pendentes' ? [{
+            header: '',
+            accessor: (task: Task) => (
+              <div className="flex justify-center" onClick={(e) => e.stopPropagation()}>
+                <button 
+                  onClick={() => toggleTaskSelection(task.id!)}
+                  className={cn(
+                    "w-5 h-5 rounded border-2 transition-all flex items-center justify-center",
+                    selectedTasks.has(task.id!) ? "bg-[#ff5351] border-[#ff5351]" : "border-zinc-700 bg-zinc-900 hover:border-zinc-500"
+                  )}
+                >
+                  {selectedTasks.has(task.id!) && <Check className="w-3 h-3 text-white" strokeWidth={4} />}
+                </button>
+              </div>
+            ),
+            className: 'w-10'
+          }] : []),
+          {
+            header: 'Atividade',
+            accessor: (task) => (
+              <div className="py-1">
+                <div className="font-bold text-sm text-white mb-0.5 uppercase group-hover:text-[#ff5351] transition-colors">{task.nome}</div>
+                <div className="flex items-center gap-2 text-[10px] text-zinc-500 font-bold uppercase tracking-widest">
+                  <MessageSquare className="w-3 h-3" />
+                  {task.historico?.length || 0} registros no histórico
+                  {task.delegadoNome && <span className="text-[#ff5351] ml-2">• Delegada para: {task.delegadoNome.toUpperCase()}</span>}
+                </div>
+              </div>
+            )
+          },
+          { header: 'Prioridade', accessor: (task) => getPriorityBadge(task.prioridade), align: 'center' },
+          { header: 'Acesso', accessor: (task) => <span className="text-[10px] font-black uppercase text-zinc-500 tracking-widest flex items-center gap-1.5"><Shield className="w-3 h-3" />{task.tipoAcesso}</span> },
+          { header: 'Responsável', accessor: (task) => <span className="text-zinc-300 text-xs font-bold uppercase">{task.responsavelTarefa}</span> }
+        ]}
+        actions={(task) => (
+          <div className="flex items-center gap-2">
+            <button onClick={(e) => { e.stopPropagation(); handleEditTask(task); }} className="p-2 bg-zinc-800 border border-zinc-700 hover:bg-zinc-700 rounded-xl text-zinc-400 hover:text-white transition-all"><Edit className="w-4 h-4" /></button>
+            <button onClick={async (e) => { e.stopPropagation(); if (window.confirm('Excluir esta tarefa permanentemente?')) { await taskService.deleteTask(task.id!); loadTasks(); } }} className="p-2 bg-zinc-800/50 hover:bg-red-500/10 rounded-xl text-zinc-600 hover:text-red-500 transition-all"><Trash2 className="w-4 h-4" /></button>
+          </div>
+        )}
+      />
+    </div>
+  );
+}
