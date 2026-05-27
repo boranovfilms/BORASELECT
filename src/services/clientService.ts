@@ -1,4 +1,4 @@
-import { collection, query, where, getDocs, addDoc, serverTimestamp, getDoc, doc, updateDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, addDoc, serverTimestamp, getDoc, doc, updateDoc, setDoc } from 'firebase/firestore';
 import { db, auth } from '../lib/firebase';
 
 export interface Client {
@@ -17,12 +17,18 @@ export const clientService = {
   searchClients: async (nameQuery: string) => {
     if (!auth.currentUser) return [];
     
-    // REMOVIDA a trava de ownerId. Agora ele busca todos os clientes da agência.
-    // Como a própria página já é protegida pelo App.tsx (só entra quem tem permissão),
-    // é seguro trazer a lista de clientes para quem conseguir abrir a tela.
     const q = query(collection(db, 'clients'));
     const snapshot = await getDocs(q);
-    const clients = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Client));
+    
+    // CORREÇÃO: Garante que o ID do documento Firebase sempre seja o ID principal do objeto,
+    // ignorando qualquer campo 'id' vazio que possa existir dentro do documento.
+    const clients = snapshot.docs.map(docSnap => {
+      const data = docSnap.data();
+      return { 
+        ...data, 
+        id: docSnap.id // O ID do documento é a fonte da verdade
+      } as Client;
+    });
     
     if (!nameQuery) return clients;
     return clients.filter(c => c.name.toLowerCase().includes(nameQuery.toLowerCase()));
@@ -49,14 +55,22 @@ export const clientService = {
     const isConfirmed = !clientQuery.empty || !projectQuery.empty;
     const initialStatus = isConfirmed ? 'confirmed' : 'pending';
 
-    return await addDoc(collection(db, 'clients'), {
+    // CORREÇÃO: Criamos a referência primeiro para obter o ID e salvamos ele dentro do documento
+    const clientsRef = collection(db, 'clients');
+    const newDocRef = doc(clientsRef); // Gera um novo ID único
+    
+    const payload = {
       ...data,
+      id: newDocRef.id, // Grava o ID gerado dentro do documento
       email: cleanEmail,
-      ownerId: auth.currentUser.uid, // Registra quem criou
+      ownerId: auth.currentUser.uid,
       createdAt: serverTimestamp(),
       status: initialStatus,
       role: data.role || 'cliente'
-    });
+    };
+
+    await setDoc(newDocRef, payload);
+    return newDocRef;
   },
 
   updateClient: async (id: string, data: Partial<Client>) => {
@@ -106,6 +120,7 @@ export const clientService = {
     const projectUpdates = snapshotProjects.docs.map(projectDoc =>
       updateDoc(projectDoc.ref, { 
         clientStatus: 'confirmed',
+
         updatedAt: serverTimestamp()
       })
     );
