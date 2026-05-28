@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Tv, Play, Pause, RotateCcw, ChevronUp, ChevronDown, Maximize2, FlipHorizontal, Settings2, Trash2 } from 'lucide-react';
+import { Tv, Play, Pause, RotateCcw, ChevronUp, ChevronDown, Maximize2, FlipHorizontal, Settings2, Trash2, Wifi, WifiOff, Loader2 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { toast } from 'react-hot-toast';
 
@@ -10,80 +10,70 @@ export default function Teleprompter() {
   const [fontSize, setFontSize] = useState(48);
   const [isMirrored, setIsMirrored] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
   
   const prompterRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollPos = useRef(0);
   const socketRef = useRef<WebSocket | null>(null);
-  const reconnectTimeoutRef = useRef<any>(null);
 
-  // WebSocket Logic with safety checks for mobile/SSR
-  useEffect(() => {
-    const connect = () => {
-      if (typeof window === 'undefined' || !window.WebSocket) return;
-      if (socketRef.current?.readyState === WebSocket.OPEN) return;
+  // Manual WebSocket Connection
+  const connectToControl = () => {
+    if (typeof window === 'undefined' || !window.WebSocket) {
+      toast.error('Navegador não suporta WebSocket');
+      return;
+    }
 
-      try {
-        console.log('Tentando conectar ao ESP32...');
-        const ws = new WebSocket('ws://10.0.0.113:81');
+    try {
+      setIsConnecting(true);
+      const ws = new WebSocket('ws://10.0.0.113:81');
 
-        ws.onopen = () => {
-          setIsConnected(true);
-          toast.success('Conectado ao ESP32');
-          if (reconnectTimeoutRef.current) {
-            clearTimeout(reconnectTimeoutRef.current);
-            reconnectTimeoutRef.current = null;
-          }
-        };
+      ws.onopen = () => {
+        setIsConnected(true);
+        setIsConnecting(false);
+        toast.success('Conectado ao ESP32');
+      };
 
-        ws.onmessage = (event) => {
-          try {
-            const command = event.data.toString().trim();
-            console.log('Comando ESP32:', command);
-            handleCommand(command);
-          } catch (e) {
-            console.error('Erro ao processar comando:', e);
-          }
-        };
+      ws.onmessage = (event) => {
+        const command = event.data.toString().trim();
+        handleCommand(command);
+      };
 
-        ws.onclose = () => {
-          setIsConnected(false);
-          console.log('Conexão fechada. Tentando reconectar...');
-          reconnectTimeoutRef.current = setTimeout(connect, 3000);
-        };
+      ws.onclose = () => {
+        setIsConnected(false);
+        setIsConnecting(false);
+      };
 
-        ws.onerror = (error) => {
-          console.error('Erro WebSocket:', error);
-          // Don't toast error here to avoid spamming on mobile if local IP is unreachable
-          ws.close();
-        };
+      ws.onerror = () => {
+        setIsConnected(false);
+        setIsConnecting(false);
+        toast.error('Erro na conexão com ESP32');
+        ws.close();
+      };
 
-        socketRef.current = ws;
-      } catch (e) {
-        console.error('Falha ao iniciar WebSocket:', e);
-      }
-    };
+      socketRef.current = ws;
+    } catch (e) {
+      setIsConnecting(false);
+      console.error('Falha ao iniciar WebSocket:', e);
+    }
+  };
 
-    connect();
-
-    return () => {
-      if (socketRef.current) {
-        socketRef.current.onclose = null; // Prevent reconnect on unmount
-        socketRef.current.close();
-      }
-      if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
-    };
-  }, []);
+  const disconnectControl = () => {
+    if (socketRef.current) {
+      socketRef.current.close();
+      socketRef.current = null;
+      setIsConnected(false);
+      toast.success('Controle desconectado');
+    }
+  };
 
   const handleCommand = (command: string) => {
     switch (command) {
       case 'SPEED_UP':
         setSpeed(prev => Math.min(prev + 1, 20));
-        toast.success('Velocidade +', { id: 'speed' });
         break;
       case 'SPEED_DOWN':
         setSpeed(prev => Math.max(prev - 1, 1));
-        toast.success('Velocidade -', { id: 'speed' });
         break;
       case 'PLAY_PAUSE':
         setIsPlaying(prev => !prev);
@@ -100,12 +90,9 @@ export default function Teleprompter() {
     const scroll = () => {
       if (isPlaying && prompterRef.current) {
         scrollPos.current += (speed / 10);
-        
-        // Se chegar no final, para
         if (scrollPos.current >= prompterRef.current.scrollHeight - prompterRef.current.clientHeight + 100) {
           setIsPlaying(false);
         }
-        
         prompterRef.current.scrollTop = scrollPos.current;
       }
       rafId = requestAnimationFrame(scroll);
@@ -125,148 +112,114 @@ export default function Teleprompter() {
     if (!containerRef.current) return;
     try {
       if (!document.fullscreenElement) {
-        containerRef.current.requestFullscreen().catch(err => {
-          console.warn('Erro ao entrar em tela cheia:', err);
-        });
+        containerRef.current.requestFullscreen().catch(() => {});
       } else {
         document.exitFullscreen();
       }
-    } catch (e) {
-      console.error('Fullscreen API não suportada:', e);
-    }
+    } catch (e) {}
   };
 
   return (
     <div className="animate-in fade-in duration-700 h-[calc(100vh-120px)] flex flex-col gap-4 md:gap-6">
       {/* Header / Toolbar */}
-      <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-zinc-900/50 border border-zinc-800 p-4 rounded-3xl shrink-0">
+      <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-zinc-900/50 border border-zinc-800 p-4 md:p-6 rounded-3xl shrink-0">
         <div className="flex items-center gap-4">
-          <div className="w-10 h-10 md:w-12 md:h-12 rounded-2xl bg-[#ff5351]/10 flex items-center justify-center shrink-0">
-            <Tv className="w-5 h-5 md:w-6 md:h-6 text-[#ff5351]" />
+          <div className="w-12 h-12 md:w-14 md:h-14 rounded-2xl bg-[#ff5351]/10 flex items-center justify-center shrink-0">
+            <Tv className="w-6 h-6 md:w-8 md:h-8 text-[#ff5351]" />
           </div>
           <div>
-            <h1 className="text-lg md:text-xl font-black text-white uppercase italic tracking-tight">Teleprompter Master</h1>
-            <div className="flex items-center gap-2">
+            <h1 className="text-lg md:text-2xl font-black text-white uppercase italic tracking-tight leading-none">Teleprompter</h1>
+            <div className="flex items-center gap-2 mt-1">
               <div className={cn("w-2 h-2 rounded-full", isConnected ? "bg-emerald-500 animate-pulse" : "bg-red-500")} />
-              <span className="text-[9px] md:text-[10px] font-black uppercase text-zinc-500 tracking-widest">
-                {isConnected ? '🟢 Conectado ao ESP32' : '🔴 Desconectado'}
+              <span className="text-[10px] font-black uppercase text-zinc-500 tracking-widest">
+                {isConnected ? '🟢 Conectado' : '🔴 Desconectado'}
               </span>
             </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 md:gap-3">
           <button 
-            onClick={() => setIsMirrored(!isMirrored)} 
+            onClick={isConnected ? disconnectControl : connectToControl}
+            disabled={isConnecting}
             className={cn(
-              "flex-1 md:flex-none px-3 md:px-4 py-2 md:py-2.5 rounded-xl border font-black text-[9px] md:text-[10px] uppercase tracking-widest transition-all flex items-center justify-center gap-2",
-              isMirrored ? "bg-[#ff5351] border-[#ff5351] text-white" : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white"
+              "flex-1 md:flex-none px-6 py-3 rounded-xl font-black text-[10px] uppercase tracking-[0.1em] transition-all flex items-center justify-center gap-3 shadow-xl",
+              isConnected 
+                ? "bg-zinc-800 border border-zinc-700 text-zinc-400 hover:bg-red-500/10 hover:text-red-500" 
+                : "bg-[#ff5351] text-white hover:brightness-110 shadow-[#ff5351]/20"
             )}
           >
-            <FlipHorizontal className="w-4 h-4" /> {isMirrored ? 'Espelhado' : 'Normal'}
+            {isConnecting ? <Loader2 className="w-4 h-4 animate-spin" /> : isConnected ? <WifiOff className="w-4 h-4" /> : <Wifi className="w-4 h-4" />}
+            {isConnected ? 'Desconectar' : 'Conectar ao Controle'}
           </button>
-          <button 
-            onClick={toggleFullscreen} 
-            className="flex-1 md:flex-none px-3 md:px-4 py-2 md:py-2.5 bg-zinc-900 border border-zinc-800 rounded-xl font-black text-[9px] md:text-[10px] uppercase tracking-widest text-zinc-400 hover:text-white transition-all flex items-center justify-center gap-2"
-          >
-            <Maximize2 className="w-4 h-4" /> Tela Cheia
-          </button>
+          
+          <div className="flex gap-2 flex-1 md:flex-none">
+            <button onClick={() => setIsMirrored(!isMirrored)} className={cn("flex-1 px-4 py-3 rounded-xl border font-black text-[10px] uppercase tracking-widest transition-all flex items-center justify-center gap-2", isMirrored ? "bg-[#ff5351] border-[#ff5351] text-white" : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white")}><FlipHorizontal className="w-4 h-4" /></button>
+            <button onClick={toggleFullscreen} className="flex-1 px-4 py-3 bg-zinc-900 border border-zinc-800 rounded-xl font-black text-[10px] uppercase tracking-widest text-zinc-400 hover:text-white transition-all flex items-center justify-center gap-2"><Maximize2 className="w-4 h-4" /></button>
+          </div>
         </div>
       </header>
 
-      <div className="flex-1 flex flex-col lg:flex-row gap-4 md:gap-6 min-h-0">
-        {/* Lado Esquerdo: Input e Controles */}
-        <aside className="w-full lg:w-96 flex flex-col gap-4 md:gap-6 shrink-0 h-1/2 lg:h-auto">
-          <section className="flex-1 bg-[#141414] border border-zinc-800 rounded-[24px] md:rounded-[32px] p-4 md:p-6 flex flex-col space-y-4 shadow-2xl overflow-hidden">
+      {/* Guide Steps - Visible in all views */}
+      <div className="flex items-center gap-4 bg-blue-500/5 border border-blue-500/10 px-6 py-3 rounded-2xl">
+        <Info className="w-4 h-4 text-blue-500 shrink-0" />
+        <p className="text-[9px] md:text-[10px] text-blue-400/80 font-black uppercase tracking-widest leading-none">
+          1. Conectar ao ESP32 <span className="mx-2 text-zinc-700">→</span> 2. Colar Roteiro <span className="mx-2 text-zinc-700">→</span> 3. Ajustar Velocidade <span className="mx-2 text-zinc-700">→</span> 4. Play
+        </p>
+      </div>
+
+      <div className="flex-1 flex flex-col lg:flex-row gap-6 min-h-0">
+        <aside className="w-full lg:w-96 flex flex-col gap-6 shrink-0">
+          <section className="flex-1 bg-[#141414] border border-zinc-800 rounded-[32px] p-6 flex flex-col space-y-4 shadow-2xl overflow-hidden min-h-[300px]">
             <div className="flex items-center justify-between border-b border-zinc-800 pb-3 shrink-0">
               <div className="flex items-center gap-2">
                 <Settings2 className="w-4 h-4 text-[#ff5351]" />
-                <h3 className="text-white font-black uppercase tracking-widest text-[9px] md:text-[10px]">Roteiro / Script</h3>
+                <h3 className="text-white font-black uppercase tracking-widest text-[10px]">Roteiro / Script</h3>
               </div>
-              <button onClick={() => setText('')} className="text-zinc-600 hover:text-red-500 transition-colors">
-                <Trash2 className="w-4 h-4" />
-              </button>
+              <button onClick={() => setText('')} className="text-zinc-600 hover:text-red-500 transition-colors"><Trash2 className="w-4 h-4" /></button>
             </div>
-            <textarea 
-              value={text} 
-              onChange={e => setText(e.target.value)}
-              placeholder="COLE SEU TEXTO AQUI..."
-              className="flex-1 bg-black border border-zinc-800 rounded-2xl p-4 text-xs md:text-sm text-white resize-none outline-none focus:border-[#ff5351] font-medium leading-relaxed custom-scrollbar"
-            />
+            <textarea value={text} onChange={e => setText(e.target.value)} placeholder="COLE SEU TEXTO AQUI..." className="flex-1 bg-black border border-zinc-800 rounded-2xl p-4 text-sm text-white resize-none outline-none focus:border-[#ff5351] font-medium leading-relaxed custom-scrollbar" />
           </section>
 
-          <section className="bg-[#141414] border border-zinc-800 rounded-[24px] md:rounded-[32px] p-4 md:p-6 space-y-4 md:space-y-6 shadow-2xl shrink-0">
-             <div className="space-y-3 md:space-y-4">
-                <div className="flex items-center justify-between text-[9px] md:text-[10px] font-black uppercase text-zinc-500">
-                  <span>Velocidade de Rolagem</span>
-                  <span className="text-[#ff5351]">{speed}</span>
-                </div>
+          <section className="bg-[#141414] border border-zinc-800 rounded-[32px] p-6 space-y-6 shadow-2xl shrink-0">
+             <div className="space-y-4">
+                <div className="flex items-center justify-between text-[10px] font-black uppercase text-zinc-500"><span>Velocidade</span><span className="text-[#ff5351]">{speed}</span></div>
                 <input type="range" min="1" max="20" value={speed} onChange={e => setSpeed(Number(e.target.value))} className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-[#ff5351]" />
              </div>
-             <div className="space-y-3 md:space-y-4">
-                <div className="flex items-center justify-between text-[9px] md:text-[10px] font-black uppercase text-zinc-500">
-                  <span>Tamanho da Fonte</span>
-                  <span className="text-[#ff5351]">{fontSize}px</span>
-                </div>
+             <div className="space-y-4">
+                <div className="flex items-center justify-between text-[10px] font-black uppercase text-zinc-500"><span>Fonte</span><span className="text-[#ff5351]">{fontSize}px</span></div>
                 <input type="range" min="20" max="100" value={fontSize} onChange={e => setFontSize(Number(e.target.value))} className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-[#ff5351]" />
              </div>
           </section>
         </aside>
 
-        {/* Lado Direito: O Teleprompter Real */}
-        <main ref={containerRef} className="flex-1 bg-black border border-zinc-800 rounded-[24px] md:rounded-[40px] relative overflow-hidden flex flex-col shadow-inner group">
-          <div 
-            ref={prompterRef} 
-            className={cn(
-              "flex-1 overflow-y-auto px-6 md:px-12 py-[40vh] text-center select-none no-scrollbar",
-              isMirrored && "transform -scale-x-100"
-            )}
-            style={{ scrollBehavior: 'auto' }}
-          >
-            <div 
-              className="max-w-5xl mx-auto font-black leading-tight uppercase italic whitespace-pre-wrap transition-all tracking-tight" 
-              style={{ fontSize: `${fontSize}px`, color: '#fff' }}
-            >
-              {text || 'DIGITE OU COLE SEU TEXTO NO CAMPO AO LADO PARA COMEÇAR...'}
+        <main ref={containerRef} className="flex-1 bg-black border border-zinc-800 rounded-[32px] md:rounded-[40px] relative overflow-hidden flex flex-col shadow-inner min-h-[400px]">
+          <div ref={prompterRef} className={cn("flex-1 overflow-y-auto px-8 md:px-16 py-[45vh] text-center select-none no-scrollbar", isMirrored && "transform -scale-x-100")} style={{ scrollBehavior: 'auto' }}>
+            <div className="max-w-5xl mx-auto font-black leading-tight uppercase italic whitespace-pre-wrap transition-all tracking-tight" style={{ fontSize: `${fontSize}px`, color: '#fff' }}>
+              {text || 'INSIRA O TEXTO NO CAMPO AO LADO PARA COMEÇAR...'}
             </div>
           </div>
 
-          {/* HUD de Controle Flutuante */}
-          <div className="absolute bottom-4 md:bottom-8 left-1/2 -translate-x-1/2 bg-[#141414]/90 backdrop-blur-2xl border border-white/5 rounded-[24px] md:rounded-[32px] p-2 md:p-3 flex items-center gap-2 md:gap-3 shadow-2xl z-20 opacity-90 lg:opacity-40 group-hover:opacity-100 transition-opacity scale-90 md:scale-100">
-            <button onClick={handleReset} className="p-3 md:p-4 text-zinc-400 hover:text-white transition-all hover:bg-zinc-800 rounded-2xl shrink-0" title="Reiniciar"><RotateCcw className="w-5 h-5 md:w-6 md:h-6" /></button>
-            
-            <div className="flex items-center gap-0.5 md:gap-1 bg-black/40 rounded-2xl p-1">
-              <button onClick={() => setSpeed(prev => Math.max(prev - 1, 1))} className="p-3 md:p-4 text-zinc-500 hover:text-[#ff5351] transition-all"><ChevronDown className="w-5 h-5 md:w-6 md:h-6" /></button>
-              <div className="px-2 md:px-4 text-center border-x border-white/5 min-w-[40px] md:min-w-[60px]">
-                <span className="text-[7px] md:text-[8px] font-black text-zinc-600 uppercase block leading-none">Vel.</span>
-                <span className="text-base md:text-xl font-black text-white italic">{speed}</span>
-              </div>
-              <button onClick={() => setSpeed(prev => Math.min(prev + 1, 20))} className="p-3 md:p-4 text-zinc-500 hover:text-[#ff5351] transition-all"><ChevronUp className="w-5 h-5 md:w-6 md:h-6" /></button>
+          <div className="absolute bottom-6 md:bottom-10 left-1/2 -translate-x-1/2 bg-[#141414]/95 backdrop-blur-2xl border border-white/5 rounded-[32px] p-3 flex items-center gap-3 shadow-2xl z-20 scale-90 md:scale-100">
+            <button onClick={handleReset} className="p-4 text-zinc-400 hover:text-white transition-all hover:bg-zinc-800 rounded-2xl shrink-0"><RotateCcw className="w-6 h-6" /></button>
+            <div className="flex items-center gap-1 bg-black/40 rounded-2xl p-1">
+              <button onClick={() => setSpeed(prev => Math.max(prev - 1, 1))} className="p-4 text-zinc-500 hover:text-[#ff5351] transition-all"><ChevronDown className="w-6 h-6" /></button>
+              <div className="px-4 text-center border-x border-white/5 min-w-[60px]"><span className="text-[8px] font-black text-zinc-600 uppercase block">Vel.</span><span className="text-xl font-black text-white italic">{speed}</span></div>
+              <button onClick={() => setSpeed(prev => Math.min(prev + 1, 20))} className="p-4 text-zinc-500 hover:text-[#ff5351] transition-all"><ChevronUp className="w-6 h-6" /></button>
             </div>
-
-            <button 
-              onClick={() => setIsPlaying(!isPlaying)} 
-              className="w-16 h-16 md:w-20 md:h-20 bg-[#ff5351] rounded-[20px] md:rounded-[24px] flex items-center justify-center text-white shadow-xl shadow-[#ff5351]/20 hover:scale-105 active:scale-95 transition-all shrink-0"
-            >
-              {isPlaying ? <Pause className="w-8 h-8 md:w-10 md:h-10 fill-current" /> : <Play className="w-8 h-8 md:w-10 md:h-10 fill-current ml-1" />}
+            <button onClick={() => setIsPlaying(!isPlaying)} className="w-20 h-20 bg-[#ff5351] rounded-[24px] flex items-center justify-center text-white shadow-xl shadow-[#ff5351]/20 hover:scale-105 active:scale-95 transition-all">
+              {isPlaying ? <Pause className="w-10 h-10 fill-current" /> : <Play className="w-10 h-10 fill-current ml-1" />}
             </button>
-
-            <div className="flex items-center gap-0.5 md:gap-1 bg-black/40 rounded-2xl p-1">
-              <button onClick={() => setFontSize(prev => Math.max(prev - 5, 20))} className="p-3 md:p-4 text-zinc-500 hover:text-white transition-all"><RotateCcw className="w-5 h-5 md:w-6 md:h-6 rotate-90" /></button>
-              <div className="px-2 md:px-4 text-center border-x border-white/5 min-w-[40px] md:min-w-[60px]">
-                <span className="text-[7px] md:text-[8px] font-black text-zinc-600 uppercase block leading-none">Fonte</span>
-                <span className="text-base md:text-xl font-black text-white italic">{fontSize}</span>
-              </div>
-              <button onClick={() => setFontSize(prev => Math.min(prev + 5, 100))} className="p-3 md:p-4 text-zinc-500 hover:text-white transition-all"><RotateCcw className="w-5 h-5 md:w-6 md:h-6 -rotate-90" /></button>
+            <div className="flex items-center gap-1 bg-black/40 rounded-2xl p-1">
+              <button onClick={() => setFontSize(prev => Math.max(prev - 5, 20))} className="p-4 text-zinc-500 hover:text-white transition-all font-black">-</button>
+              <div className="px-4 text-center border-x border-white/5 min-w-[60px]"><span className="text-[8px] font-black text-zinc-600 uppercase block">Fonte</span><span className="text-xl font-black text-white italic">{fontSize}</span></div>
+              <button onClick={() => setFontSize(prev => Math.min(prev + 5, 100))} className="p-4 text-zinc-500 hover:text-white transition-all font-black">+</button>
             </div>
           </div>
 
-          {/* Linha de Leitura Central */}
           <div className="absolute top-1/2 left-0 right-0 h-[2px] bg-[#ff5351]/30 pointer-events-none z-10" />
-          <div className="absolute top-1/2 left-2 md:left-4 w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-[#ff5351] -translate-y-1/2 shadow-[0_0_10px_#ff5351] z-10" />
-          <div className="absolute top-1/2 right-2 md:right-4 w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-[#ff5351] -translate-y-1/2 shadow-[0_0_10px_#ff5351] z-10" />
-          
-          {/* Sombra de Vinheta */}
+          <div className="absolute top-1/2 left-4 w-2 h-2 rounded-full bg-[#ff5351] -translate-y-1/2 shadow-[0_0_10px_#ff5351] z-10" />
+          <div className="absolute top-1/2 right-4 w-2 h-2 rounded-full bg-[#ff5351] -translate-y-1/2 shadow-[0_0_10px_#ff5351] z-10" />
           <div className="absolute inset-0 pointer-events-none bg-gradient-to-b from-black via-transparent to-black opacity-60 z-0" />
         </main>
       </div>
