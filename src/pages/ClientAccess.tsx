@@ -11,14 +11,13 @@ import { emailService } from '../services/emailService';
 import { toast } from 'react-hot-toast';
 import { DataTable } from '../components/ui/DataTable';
 import { useNavigate } from 'react-router-dom';
-import { storage } from '../lib/firebase';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 export default function ClientAccess() {
   const [clients, setClients] = useState<Client[]>([]);
   const [allTeamMembers, setAllTeamMembers] = useState<TeamMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [searchingCnpj, setSearchingCnpj] = useState(false);
   const [sendingEmail, setSendingEmail] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const navigate = useNavigate();
@@ -26,21 +25,12 @@ export default function ClientAccess() {
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string>('');
   
-  // Controle de Navegação
-  const [isClientFormOpen, setIsClientFormOpen] = useState(false);
-  const [isTeamViewOpen, setIsTeamViewOpen] = useState(false);
-  const [isEditingClient, setIsEditingClient] = useState(false);
-  const [selectedClient, setSelectedClient] = useState<Client | null>(null);
-  const [isAddingTeamMember, setIsAddingTeamMember] = useState(false);
-
-  // Estado do Formulário de Cliente
   const [clientForm, setClientForm] = useState({
     id: '', name: '', email: '', phone: '', document: '', 
     zipCode: '', address: '', number: '', complement: '', neighborhood: '', city: '', state: '',
     commercialName: '', website: '', responsibleContact: '', logoUrl: '', status: 'pending'
   });
 
-  // Estado do Formulário de Membro da Equipe
   const [memberForm, setMemberForm] = useState({ 
     firstName: '', lastName: '', email: '', phone: '', 
     password: '', jobTitle: '', role: 'equipe', accessLevel: 'validador', photoUrl: '' 
@@ -54,27 +44,52 @@ export default function ClientAccess() {
     try {
       setLoading(true);
       const allData = await clientService.searchClients('');
-      
-      const loadedClients = allData
-        .filter(c => c.role === 'cliente' || !c.role)
-        .map(c => ({
-          ...c,
-          id: c.id || (c as any).uid || (c as any).docId
-        }));
-
+      const loadedClients = allData.filter(c => c.role === 'cliente' || !c.role).map(c => ({
+        ...c,
+        id: c.id || (c as any).uid || (c as any).docId
+      }));
       setClients(loadedClients);
-      
-      const team = allData.filter(m => 
-        (m.role === 'equipe' || (m as any).clienteId) && 
-        (m as any).clienteId !== undefined
-      ) as any;
-      
+      const team = allData.filter(m => (m.role === 'equipe' || (m as any).clienteId) && (m as any).clienteId !== undefined) as any;
       setAllTeamMembers(team);
     } catch (error) {
-      console.error('Erro ao carregar dados:', error);
       toast.error('Erro ao atualizar lista de dados.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleFetchCnpj = async () => {
+    const cnpj = clientForm.document.replace(/\D/g, '');
+    if (cnpj.length !== 14) {
+      toast.error('CNPJ inválido para busca');
+      return;
+    }
+
+    try {
+      setSearchingCnpj(true);
+      const response = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`);
+      if (!response.ok) throw new Error('CNPJ não encontrado');
+      
+      const data = await response.json();
+      
+      setClientForm(prev => ({
+        ...prev,
+        name: (data.nome_fantasia || data.razao_social || '').toUpperCase(),
+        document: data.razao_social.toUpperCase(),
+        zipCode: data.cep || '',
+        address: data.logradouro?.toUpperCase() || '',
+        number: data.numero?.toUpperCase() || '',
+        neighborhood: data.bairro?.toUpperCase() || '',
+        city: data.municipio?.toUpperCase() || '',
+        state: data.uf?.toUpperCase() || '',
+        phone: data.ddd_telefone_1 || prev.phone
+      }));
+      
+      toast.success('Dados importados com sucesso!');
+    } catch (error: any) {
+      toast.error(error.message);
+    } finally {
+      setSearchingCnpj(false);
     }
   };
 
@@ -111,7 +126,7 @@ export default function ClientAccess() {
       status: client.status || 'pending'
     });
     setLogoFile(null);
-    setLogoPreview( (client as any).logoUrl || '' );
+    setLogoPreview((client as any).logoUrl || '');
     setIsEditingClient(true);
     setIsClientFormOpen(true);
   };
@@ -119,35 +134,22 @@ export default function ClientAccess() {
   const handleLogoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
-    if (!file.type.includes('image')) {
-      toast.error('Selecione uma imagem válida (JPG/PNG)');
-      return;
-    }
-
+    if (!file.type.includes('image')) return toast.error('Selecione uma imagem válida');
+    
     setLogoFile(file);
     const reader = new FileReader();
-    reader.onloadend = () => {
-      setLogoPreview(reader.result as string);
-    };
+    reader.onloadend = () => setLogoPreview(reader.result as string);
     reader.readAsDataURL(file);
   };
 
   const handleSaveClient = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!clientForm.name || !clientForm.email) {
-      toast.error('Preencha nome e e-mail');
-      return;
-    }
+    if (!clientForm.name || !clientForm.email) return toast.error('Preencha nome e e-mail');
     
     setSaving(true);
     try {
-      let currentLogoUrl = clientForm.logoUrl;
-
-      // 1. Criar ou Obter ID do Cliente
       let finalClientId = clientForm.id;
       if (!isEditingClient) {
-        // Se for novo, precisamos criar o doc primeiro para ter o ID para o Storage
         const newDocRef = await clientService.createClient({
           ...clientForm,
           name: clientForm.name.toUpperCase(),
@@ -157,29 +159,29 @@ export default function ClientAccess() {
         finalClientId = newDocRef.id;
       }
 
-      // 2. Upload da Logo (se houver novo arquivo)
-      if (logoFile && finalClientId) {
-        const storageRef = ref(storage, `clientes/${finalClientId}/logo`);
-        await uploadBytes(storageRef, logoFile);
-        currentLogoUrl = await getDownloadURL(storageRef);
+      let currentLogoUrl = clientForm.logoUrl;
+      if (logoPreview && logoPreview.startsWith('data:image')) {
+        const upResponse = await fetch('/api/upload-logo', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ image: logoPreview, clientId: finalClientId })
+        });
+        const upResult = await upResponse.json();
+        if (upResponse.ok) currentLogoUrl = upResult.url;
       }
 
-      // 3. Atualizar/Salvar com a URL da Logo final
-      const normalizedClient = {
+      await (clientService as any).updateClient(finalClientId, {
         ...clientForm,
         id: finalClientId,
         logoUrl: currentLogoUrl,
-        email: clientForm.email.toLowerCase().trim(),
-        role: 'cliente'
-      };
-
-      await (clientService as any).updateClient(finalClientId, normalizedClient);
+        name: clientForm.name.toUpperCase(),
+        email: clientForm.email.toLowerCase().trim()
+      });
       
       toast.success(isEditingClient ? 'Cliente atualizado!' : 'Cliente adicionado!');
       setIsClientFormOpen(false);
       loadAllData();
     } catch (error) {
-      console.error(error);
       toast.error('Erro ao salvar cliente');
     } finally {
       setSaving(false);
@@ -187,23 +189,14 @@ export default function ClientAccess() {
   };
 
   const handleDeleteClient = async (id: string, email: string) => {
-    if (window.confirm('Excluir este cliente permanentemente? Isso removerá o acesso dele.')) {
-      try {
-        setLoading(true);
-        try {
-          await clientService.deleteClientAuth(email);
-        } catch (e: any) {
-          if (!e.message?.includes('not found')) toast.error('Apenas o registro local foi removido.');
-        }
-        await clientService.deleteClient(id);
-        toast.success('Cliente removido com sucesso');
-        loadAllData();
-      } catch (error) {
-        toast.error('Erro ao remover cliente');
-      } finally {
-        setLoading(false);
-      }
-    }
+    if (!window.confirm('Excluir este cliente permanentemente?')) return;
+    try {
+      setLoading(true);
+      try { await clientService.deleteClientAuth(email); } catch (e) {}
+      await clientService.deleteClient(id);
+      toast.success('Cliente removido');
+      loadAllData();
+    } catch (error) { toast.error('Erro ao remover'); } finally { setLoading(false); }
   };
 
   const handleOpenTeamView = (client: Client) => {
@@ -214,16 +207,7 @@ export default function ClientAccess() {
 
   const handleSaveTeamMember = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!memberForm.firstName || !memberForm.email || !memberForm.role) {
-      toast.error('Preencha os campos obrigatórios (Nome, E-mail e Função)');
-      return;
-    }
-
-    if (!selectedClient?.id) {
-      toast.error('ID do cliente não encontrado. Tente recarregar a página.');
-      return;
-    }
-
+    if (!memberForm.firstName || !memberForm.email || !memberForm.role) return toast.error('Preencha os campos obrigatórios');
     try {
       setLoading(true);
       const fullName = `${memberForm.firstName} ${memberForm.lastName}`.trim().toUpperCase();
@@ -234,46 +218,27 @@ export default function ClientAccess() {
         role: memberForm.role,
         jobTitle: memberForm.jobTitle.toUpperCase(),
         accessLevel: memberForm.accessLevel,
-        clienteId: selectedClient.id,
+        clienteId: selectedClient?.id,
         status: 'pending'
       };
-      
       await teamService.createTeamMember(normalizedMember as any);
       await emailService.sendInvite(normalizedMember.email, normalizedMember.name, `${window.location.origin}/register?email=${encodeURIComponent(normalizedMember.email)}`);
-
-      toast.success('Membro adicionado e convite enviado!');
-      setMemberForm({ 
-        firstName: '', lastName: '', email: '', phone: '', 
-        password: '', jobTitle: '', role: 'equipe', accessLevel: 'validador', photoUrl: '' 
-      });
+      toast.success('Membro adicionado!');
+      setMemberForm({ firstName: '', lastName: '', email: '', phone: '', password: '', jobTitle: '', role: 'equipe', accessLevel: 'validador', photoUrl: '' });
       setIsAddingTeamMember(false);
       await loadAllData();
-    } catch (error) {
-      console.error('Erro ao cadastrar membro da equipe:', error);
-      toast.error('Erro ao adicionar membro da equipe.');
-    } finally {
-      setLoading(false);
-    }
+    } catch (error) { toast.error('Erro ao adicionar membro'); } finally { setLoading(false); }
   };
 
   const handleDeleteTeamMember = async (id: string, email: string) => {
-    if (window.confirm('Excluir este membro da equipe permanentemente?')) {
-      try {
-        setLoading(true);
-        try {
-          await teamService.deleteTeamMemberAuth(email);
-        } catch (e: any) {
-          if (!e.message?.includes('not found')) toast.error('Apenas registro local removido.');
-        }
-        await teamService.deleteTeamMember(id);
-        toast.success('Membro removido com sucesso');
-        loadAllData();
-      } catch (error) {
-        toast.error('Erro ao remover membro');
-      } finally {
-        setLoading(false);
-      }
-    }
+    if (!window.confirm('Excluir este membro permanentemente?')) return;
+    try {
+      setLoading(true);
+      try { await teamService.deleteTeamMemberAuth(email); } catch (e) {}
+      await teamService.deleteTeamMember(id);
+      toast.success('Membro removido');
+      loadAllData();
+    } catch (error) { toast.error('Erro ao remover'); } finally { setLoading(false); }
   };
 
   const sendEmailInvite = async (name: string, email: string) => {
@@ -281,23 +246,11 @@ export default function ClientAccess() {
       setSendingEmail(email);
       await emailService.sendInvite(email, name, `${window.location.origin}/register?email=${encodeURIComponent(email)}`);
       toast.success('Convite enviado!');
-    } catch (error) {} finally {
-      setSendingEmail(null);
-    }
+    } catch (error) {} finally { setSendingEmail(null); }
   };
 
-  const getClientTeamCount = (clientId: string) => {
-    return allTeamMembers.filter(m => (m as any).clienteId === clientId).length;
-  };
-  
-  const clientTeamMembers = selectedClient 
-    ? allTeamMembers.filter(m => (m as any).clienteId === selectedClient.id) 
-    : [];
-
-  const filteredClients = clients.filter(c => 
-    c.name?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    c.email?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const getClientTeamCount = (clientId: string) => allTeamMembers.filter(m => (m as any).clienteId === clientId).length;
+  const filteredClients = clients.filter(c => c.name?.toLowerCase().includes(searchTerm.toLowerCase()) || c.email?.toLowerCase().includes(searchTerm.toLowerCase()));
 
   return (
     <div className="space-y-12 pb-20 text-left">
@@ -307,120 +260,51 @@ export default function ClientAccess() {
             <h1 className="text-5xl font-bold tracking-tight text-white mb-2 uppercase italic font-black">Gestão de Clientes</h1>
             <p className="text-zinc-500 text-lg">Gerencie o cadastro e os planejamentos dos seus clientes.</p>
           </div>
-          <div className="flex gap-4">
-            <button onClick={handleOpenAddClient} className="flex items-center gap-2 px-8 py-3.5 rounded-xl bg-[#ff5351] text-white font-bold uppercase tracking-widest hover:opacity-90 transition-all shadow-lg text-xs">
-              <UserPlus className="w-5 h-5" /> Adicionar Cliente
-            </button>
-          </div>
+          <button onClick={handleOpenAddClient} className="flex items-center gap-2 px-8 py-3.5 rounded-xl bg-[#ff5351] text-white font-bold uppercase tracking-widest hover:opacity-90 transition-all shadow-lg text-xs">
+            <UserPlus className="w-5 h-5" /> Adicionar Cliente
+          </button>
         </header>
       )}
 
       {isClientFormOpen && (
-        <form autoComplete="off" onSubmit={handleSaveClient} className="animate-in slide-in-from-right-8 duration-500">
-          <header className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8">
-            <div className="text-left">
-              <button type="button" onClick={() => setIsClientFormOpen(false)} className="text-[#ff5351] hover:text-white transition-colors text-sm font-bold flex items-center gap-2 mb-4 uppercase tracking-widest">
-                <ChevronDown className="w-4 h-4 rotate-90" /> Voltar para Clientes
-              </button>
-              <h1 className="text-4xl font-bold tracking-tight text-white flex items-center gap-4">
-                {isEditingClient ? <Edit2 className="w-8 h-8 text-[#ff5351]" /> : <Building className="w-8 h-8 text-[#ff5351]" />}
-                {isEditingClient ? 'Editar Cliente' : 'Novo Cliente'}
-              </h1>
+        <form onSubmit={handleSaveClient} className="animate-in slide-in-from-right-8 duration-500">
+          <header className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8 text-left">
+            <div>
+              <button type="button" onClick={() => setIsClientFormOpen(false)} className="text-[#ff5351] hover:text-white transition-colors text-sm font-bold flex items-center gap-2 mb-4 uppercase tracking-widest"><ChevronDown className="w-4 h-4 rotate-90" /> Voltar</button>
+              <h1 className="text-4xl font-bold tracking-tight text-white flex items-center gap-4">{isEditingClient ? <Edit2 className="w-8 h-8 text-[#ff5351]" /> : <Building className="w-8 h-8 text-[#ff5351]" />}{isEditingClient ? 'Editar Cliente' : 'Novo Cliente'}</h1>
             </div>
             <div className="flex gap-4">
               <button type="button" onClick={() => setIsClientFormOpen(false)} className="px-8 py-3 rounded-xl bg-zinc-900 border border-zinc-800 text-white font-bold hover:bg-zinc-800 transition-all text-xs uppercase tracking-widest">Cancelar</button>
-              <button type="submit" disabled={saving} className="px-8 py-3 rounded-xl bg-[#ff5351] text-white font-bold hover:opacity-90 transition-all text-xs uppercase tracking-widest shadow-xl shadow-[#ff5351]/20 disabled:opacity-50">
-                {saving ? 'Salvando...' : 'Salvar Cadastro'}
-              </button>
+              <button type="submit" disabled={saving} className="px-8 py-3 rounded-xl bg-[#ff5351] text-white font-bold hover:opacity-90 transition-all text-xs uppercase tracking-widest shadow-xl shadow-[#ff5351]/20 disabled:opacity-50">{saving ? 'Salvando...' : 'Salvar Cadastro'}</button>
             </div>
           </header>
 
           <div className="space-y-6">
             <section className="bg-[#1f1f1f] border border-zinc-800/80 rounded-3xl p-6 shadow-xl">
               <h3 className="text-lg font-bold text-white mb-8 flex items-center gap-2"><User className="w-5 h-5 text-[#ff5351]"/> Informações Principais</h3>
-              
               <div className="flex flex-col md:flex-row gap-8">
-                {/* Área da Logo */}
                 <div className="space-y-2">
                   <label className="text-[10px] uppercase font-black tracking-widest text-zinc-500 block ml-1">Logo do Cliente</label>
-                  <button 
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="w-[150px] h-[150px] rounded-2xl border-2 border-dashed border-zinc-800 bg-zinc-900/50 hover:bg-zinc-900 hover:border-[#ff5351]/50 transition-all flex flex-col items-center justify-center gap-2 group overflow-hidden relative"
-                  >
-                    {logoPreview ? (
-                      <>
-                        <img src={logoPreview} alt="Logo" className="w-full h-full object-cover" />
-                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                          <ImageIcon className="w-6 h-6 text-white" />
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        <Upload className="w-6 h-6 text-zinc-600 group-hover:text-[#ff5351] transition-colors" />
-                        <span className="text-[9px] font-black uppercase text-zinc-500 tracking-tighter">300x300px</span>
-                      </>
-                    )}
+                  <button type="button" onClick={() => fileInputRef.current?.click()} className="w-[150px] h-[150px] rounded-2xl border-2 border-dashed border-zinc-800 bg-zinc-900/50 hover:bg-zinc-900 transition-all flex flex-col items-center justify-center gap-2 group overflow-hidden relative">
+                    {logoPreview ? <img src={logoPreview} alt="Logo" className="w-full h-full object-cover" /> : <><Upload className="w-6 h-6 text-zinc-600 group-hover:text-[#ff5351]" /><span className="text-[9px] font-black uppercase text-zinc-500">300x300px</span></>}
                   </button>
-                  <input 
-                    type="file" 
-                    ref={fileInputRef} 
-                    className="hidden" 
-                    accept="image/*" 
-                    onChange={handleLogoSelect} 
-                  />
+                  <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleLogoSelect} />
                 </div>
 
-                {/* Campos de Texto */}
                 <div className="flex-1 space-y-5">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                    <div className="space-y-2">
-                      <label className="text-[10px] uppercase font-black tracking-widest text-zinc-500">Nome da Empresa</label>
-                      <input 
-                        type="text" 
-                        value={clientForm.name} 
-                        onChange={e => setClientForm({...clientForm, name: e.target.value.toUpperCase()})} 
-                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-4 text-white focus:border-[#ff5351] outline-none text-sm"
-                        placeholder="NOME COMERCIAL"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-[10px] uppercase font-black tracking-widest text-zinc-500">E-MAIL PRINCIPAL</label>
-                      <input 
-                        type="email" 
-                        value={clientForm.email} 
-                        onChange={e => setClientForm({...clientForm, email: e.target.value.toLowerCase().trim()})} 
-                        disabled={isEditingClient} 
-                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-4 text-white focus:border-[#ff5351] outline-none text-sm disabled:opacity-50"
-                        placeholder="contato@empresa.com"
-                      />
-                    </div>
+                    <div className="space-y-2"><label className="text-[10px] uppercase font-black tracking-widest text-zinc-500">Nome da Empresa</label><input type="text" value={clientForm.name} onChange={e => setClientForm({...clientForm, name: e.target.value.toUpperCase()})} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-4 text-white focus:border-[#ff5351] outline-none text-sm" placeholder="NOME COMERCIAL"/></div>
+                    <div className="space-y-2"><label className="text-[10px] uppercase font-black tracking-widest text-zinc-500">E-MAIL PRINCIPAL</label><input type="email" value={clientForm.email} onChange={e => setClientForm({...clientForm, email: e.target.value.toLowerCase().trim()})} disabled={isEditingClient} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-4 text-white focus:border-[#ff5351] outline-none text-sm disabled:opacity-50" placeholder="contato@empresa.com"/></div>
                   </div>
-
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                     <div className="space-y-2">
                       <label className="text-[10px] uppercase font-black tracking-widest text-zinc-500">Razão Social / CNPJ</label>
-                      <input 
-                        type="text" 
-                        value={clientForm.document} 
-                        onChange={e => setClientForm({...clientForm, document: e.target.value.toUpperCase()})} 
-                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-4 text-white focus:border-[#ff5351] outline-none text-sm"
-                        placeholder="NOME LEGAL OU CNPJ"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-[10px] uppercase font-black tracking-widest text-zinc-500">Site / Link</label>
                       <div className="relative">
-                        <input 
-                          type="text" 
-                          value={clientForm.website} 
-                          onChange={e => setClientForm({...clientForm, website: e.target.value.toLowerCase().trim()})} 
-                          className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-4 pl-11 text-white focus:border-[#ff5351] outline-none text-sm"
-                          placeholder="www.empresa.com.br"
-                        />
-                        <Globe className="w-4 h-4 text-zinc-700 absolute left-4 top-1/2 -translate-y-1/2" />
+                        <input type="text" value={clientForm.document} onBlur={handleFetchCnpj} onChange={e => setClientForm({...clientForm, document: e.target.value.toUpperCase()})} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-4 pr-12 text-white focus:border-[#ff5351] outline-none text-sm" placeholder="NOME LEGAL OU CNPJ"/>
+                        <button type="button" onClick={handleFetchCnpj} className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-[#ff5351] transition-colors">{searchingCnpj ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}</button>
                       </div>
                     </div>
+                    <div className="space-y-2"><label className="text-[10px] uppercase font-black tracking-widest text-zinc-500">Site / Link</label><div className="relative"><input type="text" value={clientForm.website} onChange={e => setClientForm({...clientForm, website: e.target.value.toLowerCase().trim()})} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-4 pl-11 text-white focus:border-[#ff5351] outline-none text-sm" placeholder="www.empresa.com.br"/><Globe className="w-4 h-4 text-zinc-700 absolute left-4 top-1/2 -translate-y-1/2" /></div></div>
                   </div>
                 </div>
               </div>
@@ -453,83 +337,21 @@ export default function ClientAccess() {
 
       {isTeamViewOpen && selectedClient && (
         <div className="animate-in slide-in-from-bottom-8 duration-500">
-          <header className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8 border-b border-zinc-800 pb-6">
-            <div className="text-left">
-              <button onClick={() => setIsTeamViewOpen(false)} className="text-[#ff5351] hover:text-white transition-colors text-sm font-bold flex items-center gap-2 mb-4 uppercase tracking-widest">
-                <ChevronDown className="w-4 h-4 rotate-90" /> Voltar
-              </button>
+          <header className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8 border-b border-zinc-800 pb-6 text-left">
+            <div>
+              <button onClick={() => setIsTeamViewOpen(false)} className="text-[#ff5351] hover:text-white transition-colors text-sm font-bold flex items-center gap-2 mb-4 uppercase tracking-widest"><ChevronDown className="w-4 h-4 rotate-90" /> Voltar</button>
               <h1 className="text-4xl font-bold tracking-tight text-white mb-2 uppercase italic font-black">Equipe: {selectedClient.name}</h1>
             </div>
-            <div className="flex gap-4">
-              <button onClick={() => setIsAddingTeamMember(!isAddingTeamMember)} className="flex items-center gap-2 px-8 py-3 rounded-xl bg-[#ff5351] text-white font-bold hover:opacity-90 transition-all text-xs uppercase tracking-widest shadow-xl shadow-[#ff5351]/20">
-                {isAddingTeamMember ? <X className="w-5 h-5" /> : <UserPlus className="w-5 h-5" />} {isAddingTeamMember ? 'Cancelar' : 'Adicionar Membro'}
-              </button>
-            </div>
+            <button onClick={() => setIsAddingTeamMember(!isAddingTeamMember)} className="flex items-center gap-2 px-8 py-3 rounded-xl bg-[#ff5351] text-white font-bold hover:opacity-90 transition-all text-xs uppercase tracking-widest shadow-xl shadow-[#ff5351]/20">{isAddingTeamMember ? <X className="w-5 h-5" /> : <UserPlus className="w-5 h-5" />} {isAddingTeamMember ? 'Cancelar' : 'Adicionar Membro'}</button>
           </header>
 
-          {isAddingTeamMember && (
-            <form autoComplete="off" onSubmit={handleSaveTeamMember} className="space-y-6 mb-12 animate-in fade-in duration-300 text-left">
-              <section className="bg-[#1f1f1f] border border-zinc-800/80 rounded-3xl p-6 shadow-xl text-left">
-                <div className="flex items-center gap-3 mb-6"><Camera className="w-5 h-5 text-[#ff5351]" /><h3 className="text-lg font-bold text-white">Foto de Perfil</h3></div>
-                <div className="flex items-center gap-6 p-4 bg-zinc-900/50 border border-zinc-800/50 rounded-2xl">
-                  <div className="w-24 h-24 rounded-2xl bg-zinc-800 border border-zinc-700 flex flex-col items-center justify-center text-zinc-500 relative group overflow-hidden"><User className="w-8 h-8 mb-1 group-hover:scale-110 transition-transform" /><div className="absolute bottom-2 right-2 w-6 h-6 bg-[#ff5351] rounded-full flex items-center justify-center shadow-lg"><Upload className="w-3 h-3 text-white" /></div></div>
-                  <div><p className="text-sm font-bold text-white mb-1">Carregar uma foto</p><p className="text-xs text-zinc-500 mb-4">Recomendado: JPG, PNG ou WebP (Máx. 2MB)</p><button type="button" className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold uppercase tracking-wider rounded-lg transition-all border border-zinc-700">Selecionar Arquivo</button></div>
-                </div>
-              </section>
-              <section className="bg-[#1f1f1f] border border-zinc-800/80 rounded-3xl p-6 shadow-xl">
-                <div className="flex items-center gap-3 mb-6"><User className="w-5 h-5 text-[#ff5351]" /><h3 className="text-lg font-bold text-white">Informações Pessoais</h3></div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5">
-                  <div className="space-y-2"><label className="text-[10px] uppercase font-black tracking-widest text-zinc-500">NOME</label><input type="text" value={memberForm.firstName} onChange={e => setMemberForm({...memberForm, firstName: e.target.value.toUpperCase()})} placeholder="Ex: JOÃO" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3.5 text-white focus:border-[#ff5351] outline-none text-sm"/></div>
-                  <div className="space-y-2"><label className="text-[10px] uppercase font-black tracking-widest text-zinc-500">SOBRENOME</label><input type="text" value={memberForm.lastName} onChange={e => setMemberForm({...memberForm, lastName: e.target.value.toUpperCase()})} placeholder="Ex: SILVA" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3.5 text-white focus:border-[#ff5351] outline-none text-sm"/></div>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5">
-                  <div className="space-y-2"><label className="text-[10px] uppercase font-black tracking-widest text-zinc-500">E-MAIL</label><div className="relative"><input type="email" value={memberForm.email} onChange={e => setMemberForm({...memberForm, email: e.target.value.toLowerCase().trim()})} placeholder="joao.silva@empresa.com" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3.5 pl-11 text-white focus:border-[#ff5351] outline-none text-sm"/><Mail className="w-4 h-4 text-zinc-500 absolute left-4 top-1/2 -translate-y-1/2" /></div></div>
-                  <div className="space-y-2"><label className="text-[10px] uppercase font-black tracking-widest text-zinc-500">TELEFONE</label><div className="relative"><input type="text" value={memberForm.phone} onChange={e => setMemberForm({...memberForm, phone: e.target.value})} placeholder="(00) 00000-0000" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3.5 pl-11 text-white focus:border-[#ff5351] outline-none text-sm"/><Phone className="w-4 h-4 text-zinc-700 absolute left-4 top-1/2 -translate-y-1/2" /></div></div>
-                </div>
-              </section>
-              <section className="bg-[#1f1f1f] border border-zinc-800/80 rounded-3xl p-6 shadow-xl">
-                <div className="flex items-center gap-3 mb-6"><Briefcase className="w-5 h-5 text-[#ff5351]" /><h3 className="text-lg font-bold text-white">Informações Profissionais</h3></div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-6">
-                  <div className="space-y-2"><label className="text-[10px] uppercase font-black tracking-widest text-zinc-500">CARGO</label><input type="text" value={memberForm.jobTitle} onChange={e => setMemberForm({...memberForm, jobTitle: e.target.value.toUpperCase()})} placeholder="Ex: DESENVOLVEDOR SENIOR" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3.5 text-white focus:border-[#ff5351] outline-none text-sm"/></div>
-                  <div className="space-y-2"><label className="text-[10px] uppercase font-black tracking-widest text-zinc-500">FUNÇÃO</label><div className="relative"><select value={memberForm.role} onChange={e => setMemberForm({...memberForm, role: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3.5 text-white focus:border-[#ff5351] outline-none text-sm appearance-none cursor-pointer"><option value="" disabled>Selecione uma função</option><option value="equipe">Equipe Cliente</option></select><ChevronDown className="w-4 h-4 text-zinc-700 absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none" /></div></div>
-                </div>
-                <div className="space-y-3"><label className="text-[10px] uppercase font-black tracking-widest text-zinc-500">NÍVEL DE ACESSO</label><div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    {[
-                      { id: 'aprovador', label: 'Aprovador Principal', desc: 'Aprovação final do conteúdo' },
-                      { id: 'validador', label: 'Validador', desc: 'Sugere correções no conteúdo' },
-                      { id: 'visualizador', label: 'Visualizador', desc: 'Apenas acompanha o projeto' }
-                    ].map(level => (
-                      <label key={level.id} className={cn("cursor-pointer border rounded-2xl p-4 flex items-start gap-3 transition-all", memberForm.accessLevel === level.id ? "bg-[#ff5351]/10 border-[#ff5351]" : "bg-zinc-900 border-zinc-800 hover:border-zinc-300")}><div className="pt-0.5"><div className={cn("w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all", memberForm.accessLevel === level.id ? "border-[#ff5351]" : "border-zinc-600")}>{memberForm.accessLevel === level.id && <div className="w-2 h-2 rounded-full bg-[#ff5351]" />}</div></div><div><input type="radio" name="accessLevel" value={level.id} checked={memberForm.accessLevel === level.id} onChange={e => setMemberForm({...memberForm, accessLevel: e.target.value})} className="hidden" /><p className="text-white font-bold text-sm">{level.label}</p><p className="text-zinc-500 text-xs mt-0.5">{level.desc}</p></div></label>
-                    ))}
-                  </div></div>
-              </section>
-              <div className="flex justify-end pt-2"><button type="submit" disabled={loading} className="px-10 py-4 bg-white text-black font-black uppercase tracking-widest text-xs rounded-xl hover:bg-[#ff5351] hover:text-white transition-all shadow-xl disabled:opacity-50 flex items-center gap-2"><UserPlus className="w-4 h-4" />{loading ? 'Aguarde...' : 'Salvar Novo Membro'}</button></div>
-            </form>
-          )}
-
           <DataTable 
-            data={clientTeamMembers}
+            data={allTeamMembers.filter(m => (m as any).clienteId === selectedClient.id)}
             loading={loading}
-            emptyMessage="Nenhum membro vinculado a este cliente."
+            emptyMessage="Nenhum membro vinculado."
             columns={[
-              { 
-                header: 'Membro', 
-                accessor: (member) => (
-                  <div className="text-left py-1">
-                    <div className="text-white font-bold text-base leading-tight mb-1">{member.name}</div>
-                    <div className="text-zinc-500 text-xs flex items-center gap-2"><Mail className="w-3.5 h-3.5" />{member.email}</div>
-                  </div>
-                )
-              },
-              {
-                header: 'Status',
-                accessor: (member) => (
-                  <span className={cn("inline-flex items-center gap-2 px-3 py-1 border rounded-full text-[10px] font-black uppercase tracking-widest", member.status === 'confirmed' ? "text-emerald-400 border-emerald-500/30 bg-emerald-500/10" : "text-amber-400 border-amber-500/30 bg-amber-500/10")}>
-                    <div className={cn("w-1.5 h-1.5 rounded-full shadow-[0_0_8px_rgba(var(--color),0.5)]", member.status === 'confirmed' ? "bg-emerald-500" : "bg-amber-500")} />
-                    {member.status === 'confirmed' ? '✓ OK, SENHA CRIADA' : '⏳ AGUARDANDO SENHA'}
-                  </span>
-                )
-              }
+              { header: 'Membro', accessor: (member) => <div className="text-left py-1"><div className="text-white font-bold text-base leading-tight mb-1">{member.name}</div><div className="text-zinc-500 text-xs flex items-center gap-2"><Mail className="w-3.5 h-3.5" />{member.email}</div></div> },
+              { header: 'Status', accessor: (member) => <span className={cn("inline-flex items-center gap-2 px-3 py-1 border rounded-full text-[10px] font-black uppercase tracking-widest", member.status === 'confirmed' ? "text-emerald-400 border-emerald-500/30 bg-emerald-500/10" : "text-amber-400 border-amber-500/30 bg-amber-500/10")}><div className={cn("w-1.5 h-1.5 rounded-full shadow-[0_0_8px_rgba(var(--color),0.5)]", member.status === 'confirmed' ? "bg-emerald-500" : "bg-amber-500")} />{member.status === 'confirmed' ? '✓ OK, SENHA CRIADA' : '⏳ AGUARDANDO SENHA'}</span> }
             ]}
             actions={(member) => (
               <>
@@ -552,21 +374,14 @@ export default function ClientAccess() {
             data={filteredClients}
             loading={loading}
             onRowClick={(client) => { if (client.id) navigate(`/clients/${client.id}`); }}
-            emptyMessage={searchTerm ? 'Nenhum cliente encontrado na busca.' : 'Nenhum cliente cadastrado.'}
+            emptyMessage={searchTerm ? 'Nenhum cliente encontrado.' : 'Nenhum cliente cadastrado.'}
             columns={[
               {
                 header: 'Cliente',
                 accessor: (client) => (
-                  <div 
-                    onClick={(e) => { e.stopPropagation(); if(client.id) navigate(`/clients/${client.id}`); }}
-                    className="text-left py-1 cursor-pointer group/name flex items-center gap-3"
-                  >
+                  <div onClick={(e) => { e.stopPropagation(); if(client.id) navigate(`/clients/${client.id}`); }} className="text-left py-1 cursor-pointer group/name flex items-center gap-3">
                     <div className="w-8 h-8 rounded-lg bg-zinc-900 overflow-hidden border border-zinc-700 shrink-0 flex items-center justify-center">
-                      {client.logoUrl ? (
-                        <img src={client.logoUrl} alt="" className="w-full h-full object-cover" />
-                      ) : (
-                        <Building className="w-4 h-4 text-zinc-600" />
-                      )}
+                      {client.logoUrl ? <img src={client.logoUrl} alt="" className="w-full h-full object-cover" /> : <Building className="w-4 h-4 text-zinc-600" />}
                     </div>
                     <div>
                       <div className="text-white font-bold text-base leading-tight mb-1 uppercase italic group-hover/name:text-[#ff5351] transition-colors">{client.name}</div>
@@ -575,36 +390,15 @@ export default function ClientAccess() {
                   </div>
                 )
               },
-              {
-                header: 'Status',
-                accessor: (client) => (
-                  <span className={cn("inline-flex items-center gap-2 px-3 py-1 border rounded-full text-[10px] font-black uppercase tracking-widest", client.status === 'confirmed' ? "text-emerald-400 border-emerald-500/30 bg-emerald-500/10" : "text-amber-400 border-amber-500/30 bg-amber-500/10")}>
-                    <div className={cn("w-1.5 h-1.5 rounded-full shadow-[0_0_8px_rgba(var(--color),0.5)]", client.status === 'confirmed' ? "bg-emerald-500" : "bg-amber-500")} />
-                    {client.status === 'confirmed' ? '✓ OK, SENHA CRIADA' : '⏳ AGUARDANDO SENHA'}
-                  </span>
-                )
-              },
-              {
-                header: 'Membros',
-                align: 'center',
-                accessor: (client) => {
-                  const count = getClientTeamCount(client.id!);
-                  return count > 0 ? (
-                    <div className="w-7 h-7 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center text-white text-[10px] font-bold shadow-lg">{count}</div>
-                  ) : <span className="text-zinc-700 text-xs font-medium">-</span>;
-                }
-              }
+              { header: 'Status', accessor: (client) => <span className={cn("inline-flex items-center gap-2 px-3 py-1 border rounded-full text-[10px] font-black uppercase tracking-widest", client.status === 'confirmed' ? "text-emerald-400 border-emerald-500/30 bg-emerald-500/10" : "text-amber-400 border-amber-500/30 bg-amber-500/10")}><div className={cn("w-1.5 h-1.5 rounded-full shadow-[0_0_8px_rgba(var(--color),0.5)]", client.status === 'confirmed' ? "bg-emerald-500" : "bg-amber-500")} />{client.status === 'confirmed' ? '✓ OK, SENHA CRIADA' : '⏳ AGUARDANDO SENHA'}</span> },
+              { header: 'Membros', align: 'center', accessor: (client) => { const count = getClientTeamCount(client.id!); return count > 0 ? <div className="w-7 h-7 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center text-white text-[10px] font-bold shadow-lg">{count}</div> : <span className="text-zinc-700 text-xs font-medium">-</span>; } }
             ]}
             actions={(client) => (
               <>
-                <button onClick={(e) => { e.stopPropagation(); handleOpenTeamView(client); }} className="flex items-center gap-2 px-3 py-2 bg-zinc-800 border border-zinc-700 hover:bg-zinc-700 hover:border-transparent rounded-xl text-zinc-300 hover:text-white transition-all text-[10px] font-black uppercase tracking-widest" title="Gerenciar Equipe do Cliente"><Users className="w-4 h-4 text-[#ff5351]" />Equipe</button>
-                <button onClick={(e) => { e.stopPropagation(); handleOpenEditClient(client); }} className="p-2 bg-zinc-800 border border-zinc-700 hover:bg-zinc-700 rounded-xl text-zinc-400 hover:text-white transition-all" title="Editar Cadastro"><Edit2 className="w-4 h-4" /></button>
+                <button onClick={(e) => { e.stopPropagation(); handleOpenTeamView(client); }} className="flex items-center gap-2 px-3 py-2 bg-zinc-800 border border-zinc-700 hover:bg-zinc-700 hover:border-transparent rounded-xl text-zinc-300 hover:text-white transition-all text-[10px] font-black uppercase tracking-widest"><Users className="w-4 h-4 text-[#ff5351]" />Equipe</button>
+                <button onClick={(e) => { e.stopPropagation(); handleOpenEditClient(client); }} className="p-2 bg-zinc-800 border border-zinc-700 hover:bg-zinc-700 rounded-xl text-zinc-400 hover:text-white transition-all"><Edit2 className="w-4 h-4" /></button>
                 <button onClick={(e) => { e.stopPropagation(); sendEmailInvite(client.name, client.email); }} disabled={sendingEmail === client.email} className="p-2 bg-zinc-800 border border-zinc-700 hover:bg-[#ff5351] hover:border-transparent rounded-xl text-zinc-300 hover:text-white transition-all disabled:opacity-50"><Mail className="w-4 h-4" /></button>
-                <button onClick={(e) => { e.stopPropagation(); 
-                  const inviteLink = `${window.location.origin}/register?email=${encodeURIComponent(client.email)}`;
-                  navigator.clipboard.writeText(`Seu conteúdo foi selecionado!\nAcesse pelo link abaixo e crie sua senha:\n\n${inviteLink}`);
-                  toast.success('Mensagem de convite copiada!');
-                }} className="p-2 bg-zinc-800 border border-zinc-700 hover:bg-[#25D366] hover:border-transparent rounded-xl text-zinc-300 hover:text-white transition-all"><ExternalLink className="w-4 h-4" /></button>
+                <button onClick={(e) => { e.stopPropagation(); const inviteLink = `${window.location.origin}/register?email=${encodeURIComponent(client.email)}`; navigator.clipboard.writeText(`Seu conteúdo foi selecionado!\n\nAcesse pelo link abaixo e crie sua senha:\n\n${inviteLink}`); toast.success('Mensagem de convite copiada!'); }} className="p-2 bg-zinc-800 border border-zinc-700 hover:bg-[#25D366] hover:border-transparent rounded-xl text-zinc-300 hover:text-white transition-all"><ExternalLink className="w-4 h-4" /></button>
                 <button onClick={(e) => { e.stopPropagation(); handleDeleteClient(client.id!, client.email); }} className="p-2 bg-zinc-800/50 hover:bg-red-500/10 rounded-xl text-zinc-600 hover:text-red-500 transition-all"><Trash2 className="w-4 h-4" /></button>
               </>
             )}
