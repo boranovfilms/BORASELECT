@@ -104,7 +104,6 @@ export default function Tarefas() {
               played = true;
             }
             notifiedTasks.push(t.id);
-            // Marcar como visto no banco opcionalmente aqui, mas o header já cuida disso no clique
           }
         });
         sessionStorage.setItem(sessionKey, JSON.stringify(notifiedTasks));
@@ -255,15 +254,16 @@ export default function Tarefas() {
               const isNew = !task.vistoPeloDelegado && task.delegadoPara?.toLowerCase().trim() === auth.currentUser?.email?.toLowerCase().trim();
               return (
                 <div className={cn(
-                  "py-1 px-3 -ml-6 border-l-[3px] transition-all",
-                  isNew ? "border-[#ff5351] bg-[#ff5351]/5" : "border-transparent"
+                  "py-1 px-3 -ml-6 transition-all",
+                  isNew ? "bg-[#ff5351]/5" : ""
                 )}>
-                  <div className="font-bold text-sm text-white mb-0.5 uppercase group-hover:text-[#ff5351] transition-colors">{task.nome}</div>
+                  <div className="flex items-center gap-2 mb-0.5">
+                    {isNew && <span className="px-1.5 py-0.5 bg-[#ff5351] text-white text-[7px] font-black rounded animate-pulse shrink-0">NOVA</span>}
+                    <div className="font-bold text-sm text-white uppercase group-hover:text-[#ff5351] transition-colors truncate">{task.nome}</div>
+                  </div>
                   <div className="flex items-center gap-2 text-[10px] text-zinc-500 font-bold uppercase tracking-widest">
                     <MessageSquare className="w-3 h-3" />
                     {task.historico?.length || 0} registros no histórico
-                    {task.delegadoNome && <span className="text-[#ff5351] ml-2">• Delegada para: {task.delegadoNome.toUpperCase()}</span>}
-                    {isNew && <span className="ml-2 px-1.5 py-0.5 bg-[#ff5351] text-white text-[7px] font-black rounded animate-pulse">NOVA</span>}
                   </div>
                 </div>
               );
