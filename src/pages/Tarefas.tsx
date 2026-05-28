@@ -192,21 +192,12 @@ export default function Tarefas() {
       <style>{`
         input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.5) sepia(1) saturate(5) hue-rotate(320deg); cursor: pointer; }
         input[type="date"] { color-scheme: dark; }
-        @keyframes pulse-dot {
+        @keyframes pulse-badge {
           0%, 100% { opacity: 1; transform: scale(1); }
-          50% { opacity: 0.4; transform: scale(1.4); }
+          50% { opacity: 0.7; transform: scale(1.05); }
         }
-        .pulse-notification {
-          width: 10px;
-          height: 10px;
-          border-radius: 50%;
-          background: #ff5351;
-          animation: pulse-dot 1.5s infinite;
-          flex-shrink: 0;
-        }
-        .pulse-placeholder {
-          width: 10px;
-          flex-shrink: 0;
+        .animate-pulse-badge {
+          animation: pulse-badge 1.5s infinite ease-in-out;
         }
       `}</style>
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8">
@@ -265,36 +256,29 @@ export default function Tarefas() {
         columns={[
           ...(activeTab === 'pendentes' ? [{ 
             header: '', 
-            accessor: (task: Task) => {
-              const isNew = !task.vistoPeloDelegado && task.delegadoPara?.toLowerCase().trim() === auth.currentUser?.email?.toLowerCase().trim();
-              return (
-                <div className="flex items-center gap-4 px-2" onClick={(e) => e.stopPropagation()}>
-                  {isNew ? <div className="pulse-notification" /> : <div className="pulse-placeholder" />}
-                  <button 
-                    onClick={() => toggleTaskSelection(task.id!)} 
-                    className={cn(
-                      "w-5 h-5 rounded border-2 transition-all flex items-center justify-center shrink-0", 
-                      selectedTasks.has(task.id!) ? "bg-[#ff5351] border-[#ff5351]" : "border-zinc-700 bg-zinc-900 hover:border-zinc-500"
-                    )}
-                  >
-                    {selectedTasks.has(task.id!) && <Check className="w-3 h-3 text-white" strokeWidth={4} />}
-                  </button>
-                </div>
-              );
-            },
-            className: 'w-20' 
+            accessor: (task: Task) => (
+              <div className="flex justify-center" onClick={(e) => e.stopPropagation()}>
+                <button 
+                  onClick={() => toggleTaskSelection(task.id!)} 
+                  className={cn(
+                    "w-5 h-5 rounded border-2 transition-all flex items-center justify-center shrink-0", 
+                    selectedTasks.has(task.id!) ? "bg-[#ff5351] border-[#ff5351]" : "border-zinc-700 bg-zinc-900 hover:border-zinc-500"
+                  )}
+                >
+                  {selectedTasks.has(task.id!) && <Check className="w-3 h-3 text-white" strokeWidth={4} />}
+                </button>
+              </div>
+            ),
+            className: 'w-10' 
           }] : []),
           { 
             header: 'Atividade', 
             accessor: (task) => {
               const isNew = !task.vistoPeloDelegado && task.delegadoPara?.toLowerCase().trim() === auth.currentUser?.email?.toLowerCase().trim();
               return (
-                <div className={cn(
-                  "py-1 px-3 -ml-6 transition-all",
-                  isNew ? "bg-[#ff5351]/5" : ""
-                )}>
+                <div className="py-1 px-3 -ml-6 transition-all">
                   <div className="flex items-center gap-2 mb-0.5">
-                    {isNew && <span className="px-1.5 py-0.5 bg-[#ff5351] text-white text-[7px] font-black rounded animate-pulse shrink-0">NOVA</span>}
+                    {isNew && <span className="px-1.5 py-0.5 bg-[#ff5351] text-white text-[7px] font-black rounded animate-pulse-badge shrink-0">NOVA</span>}
                     <div className="font-bold text-sm text-white uppercase group-hover:text-[#ff5351] transition-colors truncate">{task.nome}</div>
                   </div>
                   <div className="flex items-center gap-2 text-[10px] text-zinc-500 font-bold uppercase tracking-widest">
