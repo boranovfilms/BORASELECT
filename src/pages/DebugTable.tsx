@@ -82,11 +82,13 @@ export default function DebugTable() {
     if (!cfToken) return toast.error('Insira o API Token do Cloudflare');
     setLoading(true);
     try {
-      const response = await fetch('https://api.cloudflare.com/client/v4/accounts/c1af34330acb010777256097e2133614/stream?limit=1000', {
-        headers: { 'Authorization': `Bearer ${cfToken}` }
+      const response = await fetch('/api/cloudflare-stream', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: cfToken, action: 'list' })
       });
       const result = await response.json();
-      if (!response.ok) throw new Error(result.errors?.[0]?.message || 'Erro na API do Cloudflare');
+      if (!response.ok) throw new Error(result.error || 'Erro na API do Cloudflare');
       
       setCfVideos(result.result || []);
       setSelectedVideos(new Set());
@@ -112,9 +114,10 @@ export default function DebugTable() {
     for (let i = 0; i < idsToDelete.length; i++) {
       const videoId = idsToDelete[i];
       try {
-        const response = await fetch(`https://api.cloudflare.com/client/v4/accounts/c1af34330acb010777256097e2133614/stream/${videoId}`, {
-          method: 'DELETE',
-          headers: { 'Authorization': `Bearer ${cfToken}` }
+        const response = await fetch('/api/cloudflare-stream', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: cfToken, action: 'delete', videoId })
         });
         if (response.ok) successCount++;
       } catch (error) {}
