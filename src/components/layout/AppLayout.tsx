@@ -1,7 +1,7 @@
 import React from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {
-  LayoutDashboard, Library, Users, Package, LayoutTemplate, CreditCard, Settings, Shield, HelpCircle, LogOut, Bell, X, Loader2, Image as ImageControl, Trash2, Save, CheckSquare, UsersRound, FileText, Database, ChevronRight
+  LayoutDashboard, Library, Users, Package, LayoutTemplate, CreditCard, Settings, Shield, HelpCircle, LogOut, Bell, X, Loader2, Image as ImageControl, Trash2, Save, CheckSquare, UsersRound, FileText, Database, ChevronRight, ArrowRight
 } from 'lucide-react';
 import { auth, db } from '@/src/lib/firebase';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
@@ -32,6 +32,9 @@ export default function AppLayout({ children, userRole = 'cliente', permissions 
   const [showNotificationDropdown, setShowNotificationDropdown] = React.useState(false);
   const audioContext = React.useRef<AudioContext | null>(null);
   const dropdownRef = React.useRef<HTMLDivElement>(null);
+
+  const firstName = user?.displayName?.split(' ')[0] || 'Bora Select';
+  const initials = user?.displayName?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || 'BS';
 
   React.useEffect(() => { 
     loadSettings();
@@ -122,19 +125,7 @@ export default function AppLayout({ children, userRole = 'cliente', permissions 
     navigate('/login');
   };
 
-  const ALL_MODULES = [
-    { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard', path: '/' },
-    { id: 'projetos', icon: Library, label: 'Projeto Seleção', path: '/projetos' },
-    { id: 'planejamentos', icon: FileText, label: 'Planejamentos', path: '/meus-planejamentos' },
-    { id: 'clientes', icon: Users, label: 'Clientes', path: '/clients' },
-    { id: 'equipe', icon: UsersRound, label: 'Equipe', path: '/equipe' },
-    { id: 'pacotes', icon: Package, label: 'Serviços', path: '/packages' },
-    { id: 'modelos', icon: LayoutTemplate, label: 'Modelos', path: '/modelos' },
-    { id: 'creditos', icon: CreditCard, label: 'Créditos', path: '/credits' },
-    { id: 'tarefas', icon: CheckSquare, label: 'Tarefas Diárias', path: '/tarefas' },
-    { id: 'painel_master', icon: Shield, label: 'Painel Master', path: '/painel-master' },
-    { id: 'diagnostico', icon: Database, label: 'Teste Tabela', path: '/diagnostico' }
-  ];
+  const ALL_MODULES = [\n    { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard', path: '/' },\n    { id: 'projetos', icon: Library, label: 'Projeto Seleção', path: '/projetos' },\n    { id: 'planejamentos', icon: FileText, label: 'Planejamentos', path: '/meus-planejamentos' },\n    { id: 'clientes', icon: Users, label: 'Clientes', path: '/clients' },\n    { id: 'equipe', icon: UsersRound, label: 'Equipe', path: '/equipe' },\n    { id: 'pacotes', icon: Package, label: 'Serviços', path: '/packages' },\n    { id: 'modelos', icon: LayoutTemplate, label: 'Modelos', path: '/modelos' },\n    { id: 'creditos', icon: CreditCard, label: 'Créditos', path: '/credits' },\n    { id: 'tarefas', icon: CheckSquare, label: 'Tarefas Diárias', path: '/tarefas' },\n    { id: 'painel_master', icon: Shield, label: 'Painel Master', path: '/painel-master' },\n    { id: 'diagnostico', icon: Database, label: 'Teste Tabela', path: '/diagnostico' }\n  ];
 
   const navItems = ALL_MODULES.filter(mod => {
     if (mod.id === 'planejamentos' && userRole === 'cliente') return true;
@@ -153,7 +144,7 @@ export default function AppLayout({ children, userRole = 'cliente', permissions 
         <div className="flex items-center gap-12">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-[#ff5351] animate-pulse" />
-            <span className="text-xl font-black tracking-tighter uppercase text-white">BORA SELECT</span>
+            <span className="text-xl font-black tracking-tighter uppercase text-white">{firstName}</span>
           </div>
         </div>
 
@@ -204,14 +195,7 @@ export default function AppLayout({ children, userRole = 'cliente', permissions 
                       key={task.id}
                       onClick={() => handleNotificationClick(task)}
                       className="w-full p-4 text-left border-b border-zinc-800/50 hover:bg-[#ff5351]/5 transition-all flex items-start gap-3 group/item"
-                    >
-                      <div className="w-2 h-2 rounded-full bg-[#ff5351] mt-1.5 shadow-[0_0_8px_rgba(255,83,81,0.4)]" />
-                      <div className="flex-1 overflow-hidden">
-                        <p className="text-xs font-bold text-white uppercase truncate group-hover/item:text-[#ff5351] transition-colors">{task.nome}</p>
-                        <p className="text-[9px] text-zinc-500 font-black uppercase tracking-widest mt-1">Nova tarefa delegada</p>
-                      </div>
-                      <ChevronRight className="w-4 h-4 text-zinc-700 group-hover/item:text-[#ff5351] transition-colors" />
-                    </button>
+                    >\n                      <div className="w-2 h-2 rounded-full bg-[#ff5351] mt-1.5 shadow-[0_0_8px_rgba(255,83,81,0.4)]" />\n                      <div className="flex-1 overflow-hidden">\n                        <p className="text-xs font-bold text-white uppercase truncate group-hover/item:text-[#ff5351] transition-colors">{task.nome}</p>\n                        <p className="text-[9px] text-zinc-500 font-black uppercase tracking-widest mt-1">Nova tarefa delegada</p>\n                      </div>\n                      <ChevronRight className="w-4 h-4 text-zinc-700 group-hover/item:text-[#ff5351] transition-colors" />\n                    </button>
                   ))
                 )}
               </div>
@@ -231,11 +215,15 @@ export default function AppLayout({ children, userRole = 'cliente', permissions 
         <aside className="hidden lg:flex flex-col w-64 fixed left-0 top-16 bottom-0 bg-[#0e0e0e] border-r border-zinc-800 p-4">
           <div className="mb-8 px-2 flex items-center gap-4">
             <div className="w-12 h-12 rounded-full overflow-hidden border border-zinc-700 bg-zinc-800">
-              {user?.photoURL ? <img src={user.photoURL} alt="Avatar" className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-zinc-500"><Users className="w-6 h-6" /></div>}
+              {user?.photoURL ? (
+                <img src={user.photoURL} alt="Avatar" className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-[#ff5351] font-black text-sm">{initials}</div>
+              )}
             </div>
             <div>
-              <div className="text-sm font-bold text-white truncate max-w-[140px]">{user?.displayName || 'Bora Select'}</div>
-              <div className="text-[10px] uppercase tracking-widest text-zinc-500 font-black italic">Role: {userRole}</div>
+              <div className="text-sm font-bold text-white truncate max-w-[140px]">{firstName}</div>
+              <div className="text-[10px] uppercase tracking-widest text-[#ff5351] font-black italic">{userRole}</div>
             </div>
           </div>
 
@@ -243,20 +231,4 @@ export default function AppLayout({ children, userRole = 'cliente', permissions 
             {navItems.map((item) => (
               <NavLink key={item.id} to={item.path} className={({ isActive }) => cn('flex items-center gap-3 px-4 py-3 rounded-lg transition-all text-sm font-medium', isActive ? 'bg-zinc-800/50 text-[#ff5351] border-l-2 border-[#ff5351]' : 'text-zinc-400 hover:text-white hover:bg-zinc-800')}>
                 <item.icon className="w-4 h-4" />{item.label}
-              </NavLink>
-            ))}
-          </nav>
-
-          <div className="mt-auto pt-4 border-t border-zinc-800 space-y-1">
-            <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-3 text-zinc-400 hover:text-[#ff5351] transition-all text-sm font-medium"><LogOut className="w-4 h-4" />Logout</button>
-          </div>
-        </aside>
-
-        <main className="flex-1 lg:ml-64 p-8">
-          <div className="max-w-7xl mx-auto">{children}</div>
-        </main>
-      </div>
-    </div>
-  );
-}
-import { ArrowRight } from 'lucide-react';
+              </NavLink>\n            ))}\n          </nav>\n\n          <div className=\"mt-auto pt-4 border-t border-zinc-800 space-y-1\">\n            <button onClick={handleLogout} className=\"w-full flex items-center gap-3 px-4 py-3 text-zinc-400 hover:text-[#ff5351] transition-all text-sm font-medium\"><LogOut className=\"w-4 h-4\" />Logout</button>\n          </div>\n        </aside>\n\n        <main className=\"flex-1 lg:ml-64 p-8\">\n          <div className=\"max-w-7xl mx-auto\">{children}</div>\n        </main>\n      </div>\n    </div>\n  );\n}\n",path:

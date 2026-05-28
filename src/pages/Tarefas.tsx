@@ -123,9 +123,20 @@ export default function Tarefas() {
     setSaving(true);
     try {
       const currentUser = auth.currentUser;
-      const responsavel = newTask.tipoAcesso === 'particular' ? (currentUser?.displayName || 'Você') : (newTask.equipeSelecionada || 'Todos');
+      const responsavel = (currentUser?.displayName || 'Você');
       const delegadoObj = allUsers.find(u => u.email === newTask.delegadoPara);
-      const taskData = { ...newTask, nome: newTask.nome?.toUpperCase(), responsavelTarefa: responsavel, delegadoNome: delegadoObj?.name || '' };
+      
+      // Visibilidade automática: se delegou = compartilhada, senão = particular
+      const visibilidadeAutomatica = newTask.delegadoPara ? 'compartilhada' : 'particular';
+      
+      const taskData = { 
+        ...newTask, 
+        nome: newTask.nome?.toUpperCase(), 
+        responsavelTarefa: responsavel, 
+        delegadoNome: delegadoObj?.name || '',
+        tipoAcesso: visibilidadeAutomatica
+      };
+
       if (editingTaskId) {
         await taskService.updateTask(editingTaskId, taskData, newComment);
         toast.success('Tarefa atualizada!');
@@ -239,12 +250,8 @@ export default function Tarefas() {
               <div className="space-y-2"><label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1">Prioridade</label><select value={newTask.prioridade} onChange={e => setNewTask({...newTask, prioridade: e.target.value as any})} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-4 text-sm text-white focus:border-[#ff5351] outline-none appearance-none cursor-pointer"><option value="alta">ALTA</option><option value="media">MÉDIA</option><option value="baixa">BAIXA</option></select></div>
               <div className="space-y-2"><label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1">Data Limite</label><input type="date" value={newTask.dataLimite} onChange={e => setNewTask({...newTask, dataLimite: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-4 text-sm text-white focus:border-[#ff5351] outline-none bg-[#1f1f1f]" /></div>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-               <div className="space-y-2"><label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1">Visibilidade</label><select value={newTask.tipoAcesso} onChange={e => { const val = e.target.value as any; setNewTask({...newTask, tipoAcesso: val, equipeSelecionada: val === 'equipe' ? 'Todos' : ''}); }} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-4 text-sm text-white focus:border-[#ff5351] outline-none appearance-none cursor-pointer"><option value="particular">PARTICULAR (SÓ EU VEJO)</option><option value="equipe">EQUIPE BORANOV</option></select></div>
-              {newTask.tipoAcesso === 'equipe' && (
-                <div className="space-y-2 animate-in fade-in"><label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1">Equipe Responsável</label><div className="relative"><select value={newTask.equipeSelecionada} onChange={e => setNewTask({...newTask, equipeSelecionada: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-4 text-sm text-white focus:border-[#ff5351] outline-none appearance-none cursor-pointer"><option value="Todos">TODA A EQUIPE (TODOS)</option>{allUsers.filter(u => u.email !== auth.currentUser?.email).map(user => (<option key={user.email} value={user.name}>{user.name.toUpperCase()}</option>))}</select><ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600 pointer-events-none" /></div></div>
-              )}
-              <div className="space-y-2 relative"><label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1 flex items-center gap-2"><UserPlus className="w-3 h-3 text-[#ff5351]" /> Delegar Tarefa (Opcional)</label><div className="relative"><select value={newTask.delegadoPara} onChange={e => setNewTask({...newTask, delegadoPara: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-4 text-sm text-white focus:border-[#ff5351] outline-none appearance-none cursor-pointer"><option value="">NÃO DELEGAR</option>{allUsers.filter(u => u.email !== auth.currentUser?.email).map(user => (<option key={user.email} value={user.email}>{user.name.toUpperCase()}</option>))}</select><ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600 pointer-events-none" /></div></div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6 mb-8">
+              <div className="space-y-2 relative"><label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1 flex items-center gap-2"><UserPlus className="w-3 h-3 text-[#ff5351]" /> Delegar Tarefa (Opcional)</label><div className="relative"><select value={newTask.delegadoPara} onChange={e => setNewTask({...newTask, delegadoPara: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-4 text-sm text-white focus:border-[#ff5351] outline-none appearance-none cursor-pointer"><option value="">NÃO DELEGAR (PARTICULAR)</option>{allUsers.filter(u => u.email !== auth.currentUser?.email).map(user => (<option key={user.email} value={user.email}>{user.name.toUpperCase()}</option>))}</select><ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600 pointer-events-none" /></div></div>
             </div>
             <div className="space-y-2 mb-8"><label className="text-[10px] font-black uppercase tracking-widest text-[#ff5351] ml-1 flex items-center gap-2"><MessageSquare className="w-3 h-3" /> Adicionar Atualização ao Histórico</label><div className="relative"><textarea value={newComment} onChange={e => setNewComment(e.target.value.toUpperCase())} rows={3} className="w-full bg-zinc-950 border border-zinc-800 rounded-2xl p-5 text-sm text-white focus:border-[#ff5351] outline-none resize-none placeholder:text-zinc-700 uppercase" placeholder="DIGITE AQUI O QUE FOI FEITO..." /><div className="absolute bottom-4 right-4 text-[9px] text-zinc-600 font-bold uppercase tracking-widest">PRESSIONE SALVAR PARA REGISTRAR</div></div></div>
             {editingTaskId && currentEditingTask?.historico && currentEditingTask.historico.length > 0 && (
@@ -306,7 +313,15 @@ export default function Tarefas() {
             }
           },
           { header: 'Prioridade', accessor: (task) => getPriorityBadge(task.prioridade), align: 'center' },
-          { header: 'Acesso', accessor: (task) => <span className="text-[10px] font-black uppercase text-zinc-500 tracking-widest flex items-center gap-1.5"><Shield className="w-3 h-3" />{task.tipoAcesso}</span> },
+          { 
+            header: 'Acesso', 
+            accessor: (task) => (
+              <span className="text-[10px] font-black uppercase text-zinc-500 tracking-widest flex items-center gap-1.5">
+                <Shield className="w-3 h-3" />
+                {task.delegadoPara ? 'COMPARTILHADA' : 'PARTICULAR'}
+              </span>
+            ) 
+          },
           { header: 'Responsável', accessor: (task) => <span className="text-zinc-300 text-xs font-bold uppercase">{task.responsavelTarefa}</span> }
         ]}
         actions={(task) => (
