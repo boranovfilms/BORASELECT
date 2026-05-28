@@ -137,8 +137,25 @@ export default function Tarefas() {
     } catch (error) { toast.error('Erro ao salvar.'); } finally { setSaving(false); }
   };
 
-  const handleEditTask = (task: Task) => {
-    setNewTask({ nome: task.nome, prioridade: task.prioridade, dataLimite: task.dataLimite || '', tipoAcesso: task.tipoAcesso, equipeSelecionada: task.equipeSelecionada || 'Todos', delegadoPara: task.delegadoPara || '' });
+  const handleEditTask = async (task: Task) => {
+    // Se for uma tarefa nova delegada para o usuário logado, marca como vista automaticamente
+    const userEmail = (auth.currentUser?.email || '').toLowerCase().trim();
+    if (!task.vistoPeloDelegado && task.delegadoPara?.toLowerCase().trim() === userEmail) {
+      try {
+        await taskService.markAsSeen(task.id!);
+      } catch (error) {
+        console.warn('Erro ao marcar tarefa como vista:', error);
+      }
+    }
+
+    setNewTask({ 
+      nome: task.nome, 
+      prioridade: task.prioridade, 
+      dataLimite: task.dataLimite || '', 
+      tipoAcesso: task.tipoAcesso, 
+      equipeSelecionada: task.equipeSelecionada || 'Todos', 
+      delegadoPara: task.delegadoPara || '' 
+    });
     setEditingTaskId(task.id!);
     setNewComment('');
     setIsAdding(true);
@@ -226,28 +243,28 @@ export default function Tarefas() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
                <div className="space-y-2"><label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1">Visibilidade</label><select value={newTask.tipoAcesso} onChange={e => { const val = e.target.value as any; setNewTask({...newTask, tipoAcesso: val, equipeSelecionada: val === 'equipe' ? 'Todos' : ''}); }} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-4 text-sm text-white focus:border-[#ff5351] outline-none appearance-none cursor-pointer"><option value="particular">PARTICULAR (SÓ EU VEJO)</option><option value="equipe">EQUIPE BORANOV</option></select></div>
               {newTask.tipoAcesso === 'equipe' && (
-                <div className="space-y-2 animate-in fade-in"><label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1">Equipe Responsável</label><div className="relative"><select value={newTask.equipeSelecionada} onChange={e => setNewTask({...newTask, equipeSelecionada: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-4 text-sm text-white focus:border-[#ff5351] outline-none appearance-none cursor-pointer"><option value="Todos">TODA A EQUIPE (TODOS)</option>{allUsers.filter(u => u.email !== auth.currentUser?.email).map(user => (<option key={user.email} value={user.name}>{user.name.toUpperCase()}</option>))}</select><ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600 pointer-events-none" /></div></div>
+                <div className="space-y-2 animate-in fade-in"><label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1">Equipe Responsável</label><div className="relative"><select value={newTask.equipeSelecionada} onChange={e => setNewTask({...newTask, equipeSelecionada: e.target.value})} className=\"w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-4 text-sm text-white focus:border-[#ff5351] outline-none appearance-none cursor-pointer\"><option value=\"Todos\">TODA A EQUIPE (TODOS)</option>{allUsers.filter(u => u.email !== auth.currentUser?.email).map(user => (<option key={user.email} value={user.name}>{user.name.toUpperCase()}</option>))}</select><ChevronDown className=\"absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600 pointer-events-none\" /></div></div>
               )}
-              <div className="space-y-2 relative"><label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1 flex items-center gap-2"><UserPlus className="w-3 h-3 text-[#ff5351]" /> Delegar Tarefa (Opcional)</label><div className="relative"><select value={newTask.delegadoPara} onChange={e => setNewTask({...newTask, delegadoPara: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-4 text-sm text-white focus:border-[#ff5351] outline-none appearance-none cursor-pointer"><option value="">NÃO DELEGAR</option>{allUsers.filter(u => u.email !== auth.currentUser?.email).map(user => (<option key={user.email} value={user.email}>{user.name.toUpperCase()}</option>))}</select><ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600 pointer-events-none" /></div></div>
+              <div className=\"space-y-2 relative\"><label className=\"text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1 flex items-center gap-2\"><UserPlus className=\"w-3 h-3 text-[#ff5351]\" /> Delegar Tarefa (Opcional)</label><div className=\"relative\"><select value={newTask.delegadoPara} onChange={e => setNewTask({...newTask, delegadoPara: e.target.value})} className=\"w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-4 text-sm text-white focus:border-[#ff5351] outline-none appearance-none cursor-pointer\"><option value=\"\">NÃO DELEGAR</option>{allUsers.filter(u => u.email !== auth.currentUser?.email).map(user => (<option key={user.email} value={user.email}>{user.name.toUpperCase()}</option>))}</select><ChevronDown className=\"absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600 pointer-events-none\" /></div></div>
             </div>
-            <div className="space-y-2 mb-8"><label className="text-[10px] font-black uppercase tracking-widest text-[#ff5351] ml-1 flex items-center gap-2"><MessageSquare className="w-3 h-3" /> Adicionar Atualização ao Histórico</label><div className="relative"><textarea value={newComment} onChange={e => setNewComment(e.target.value.toUpperCase())} rows={3} className="w-full bg-zinc-950 border border-zinc-800 rounded-2xl p-5 text-sm text-white focus:border-[#ff5351] outline-none resize-none placeholder:text-zinc-700 uppercase" placeholder="DIGITE AQUI O QUE FOI FEITO..." /><div className="absolute bottom-4 right-4 text-[9px] text-zinc-600 font-bold uppercase tracking-widest">PRESSIONE SALVAR PARA REGISTRAR</div></div></div>
+            <div className=\"space-y-2 mb-8\"><label className=\"text-[10px] font-black uppercase tracking-widest text-[#ff5351] ml-1 flex items-center gap-2\"><MessageSquare className=\"w-3 h-3\" /> Adicionar Atualização ao Histórico</label><div className=\"relative\"><textarea value={newComment} onChange={e => setNewComment(e.target.value.toUpperCase())} rows={3} className=\"w-full bg-zinc-950 border border-zinc-800 rounded-2xl p-5 text-sm text-white focus:border-[#ff5351] outline-none resize-none placeholder:text-zinc-700 uppercase\" placeholder=\"DIGITE AQUI O QUE FOI FEITO...\" /><div className=\"absolute bottom-4 right-4 text-[9px] text-zinc-600 font-bold uppercase tracking-widest\">PRESSIONE SALVAR PARA REGISTRAR</div></div></div>
             {editingTaskId && currentEditingTask?.historico && currentEditingTask.historico.length > 0 && (
-              <div className="space-y-4 pt-6 border-t border-zinc-800">
-                <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1 italic">Linha do Tempo de Atualizações</label>
-                <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+              <div className=\"space-y-4 pt-6 border-t border-zinc-800\">
+                <label className=\"text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1 italic\">Linha do Tempo de Atualizações</label>
+                <div className=\"space-y-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar\">
                   {[...currentEditingTask.historico].reverse().map((item, idx) => (
-                    <div key={idx} className="bg-zinc-900/50 border border-zinc-800/50 rounded-2xl p-4"><div className="flex items-center justify-between mb-2"><span className="text-[10px] font-black text-[#ff5351] uppercase tracking-widest">{item.autor || 'Usuário Desconhecido'}</span><span className="text-[9px] font-mono text-zinc-600 uppercase font-black">{formatFullDate(item.date)}</span></div><p className="text-zinc-300 text-sm leading-relaxed uppercase">{item.texto}</p></div>
+                    <div key={idx} className=\"bg-zinc-900/50 border border-zinc-800/50 rounded-2xl p-4\"><div className=\"flex items-center justify-between mb-2\"><span className=\"text-[10px] font-black text-[#ff5351] uppercase tracking-widest\">{item.autor || 'Usuário Desconhecido'}</span><span className=\"text-[9px] font-mono text-zinc-600 uppercase font-black\">{formatFullDate(item.date)}</span></div><p className=\"text-zinc-300 text-sm leading-relaxed uppercase\">{item.texto}</p></div>
                   ))}
                 </div>
               </div>
             )}
-            <div className="flex justify-end pt-8 border-t border-zinc-800 mt-8"><button type="submit" disabled={saving} className="h-14 px-10 bg-white text-black rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-[#ff5351] hover:text-white transition-all flex items-center gap-3 shadow-2xl">{saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}{editingTaskId ? 'Salvar Planejamento' : 'Salvar Planejamento'}</button></div>
+            <div className=\"flex justify-end pt-8 border-t border-zinc-800 mt-8\"><button type=\"submit\" disabled={saving} className=\"h-14 px-10 bg-white text-black rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-[#ff5351] hover:text-white transition-all flex items-center gap-3 shadow-2xl\">{saving ? <Loader2 className=\"w-4 h-4 animate-spin\" /> : <Save className=\"w-4 h-4\" />}{editingTaskId ? 'Salvar Planejamento' : 'Salvar Planejamento'}</button></div>
           </div>
         </form>
       )}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 border-b border-zinc-800 mb-6 pb-4">
-        <div className="flex gap-6">{['pendentes', 'executadas'].map((tab) => (<button key={tab} onClick={() => { setActiveTab(tab as any); setSelectedTasks(new Set()); }} className={cn("text-[10px] uppercase font-black tracking-widest pb-2 border-b-2 transition-all", activeTab === tab ? 'text-white border-[#ff5351]' : 'text-zinc-500 border-transparent')}>{tab}</button>))}</div>
-        {activeTab === 'pendentes' && selectedTasks.size > 0 && (<button onClick={handleCompleteSelectedTasks} disabled={saving} className="px-6 py-2.5 bg-emerald-500 text-white rounded-xl font-black uppercase tracking-widest text-[10px] hover:bg-emerald-600 transition-all flex items-center gap-2 shadow-lg shadow-emerald-500/20 animate-in zoom-in-95">{saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />} Finalizar Selecionadas ({selectedTasks.size})</button>)}
+      <div className=\"flex flex-col md:flex-row md:items-center justify-between gap-6 border-b border-zinc-800 mb-6 pb-4\">
+        <div className=\"flex gap-6\">{['pendentes', 'executadas'].map((tab) => (<button key={tab} onClick={() => { setActiveTab(tab as any); setSelectedTasks(new Set()); }} className={cn(\"text-[10px] uppercase font-black tracking-widest pb-2 border-b-2 transition-all\", activeTab === tab ? 'text-white border-[#ff5351]' : 'text-zinc-500 border-transparent')}>{tab}</button>))}</div>
+        {activeTab === 'pendentes' && selectedTasks.size > 0 && (<button onClick={handleCompleteSelectedTasks} disabled={saving} className=\"px-6 py-2.5 bg-emerald-500 text-white rounded-xl font-black uppercase tracking-widest text-[10px] hover:bg-emerald-600 transition-all flex items-center gap-2 shadow-lg shadow-emerald-500/20 animate-in zoom-in-95\">{saving ? <Loader2 className=\"w-4 h-4 animate-spin\" /> : <Check className=\"w-4 h-4\" />} Finalizar Selecionadas ({selectedTasks.size})</button>)}
       </div>
       <DataTable 
         data={tasks.filter(t => (activeTab === 'pendentes' && t.status === 'pendente') || (activeTab === 'executadas' && t.status === 'executada'))}
@@ -257,49 +274,17 @@ export default function Tarefas() {
           ...(activeTab === 'pendentes' ? [{ 
             header: '', 
             accessor: (task: Task) => (
-              <div className="flex justify-center" onClick={(e) => e.stopPropagation()}>
+              <div className=\"flex justify-center\" onClick={(e) => e.stopPropagation()}>
                 <button 
                   onClick={() => toggleTaskSelection(task.id!)} 
                   className={cn(
-                    "w-5 h-5 rounded border-2 transition-all flex items-center justify-center shrink-0", 
-                    selectedTasks.has(task.id!) ? "bg-[#ff5351] border-[#ff5351]" : "border-zinc-700 bg-zinc-900 hover:border-zinc-500"
+                    \"w-5 h-5 rounded border-2 transition-all flex items-center justify-center shrink-0\", 
+                    selectedTasks.has(task.id!) ? \"bg-[#ff5351] border-[#ff5351]\" : \"border-zinc-700 bg-zinc-900 hover:border-zinc-500\"
                   )}
                 >
-                  {selectedTasks.has(task.id!) && <Check className="w-3 h-3 text-white" strokeWidth={4} />}
+                  {selectedTasks.has(task.id!) && <Check className=\"w-3 h-3 text-white\" strokeWidth={4} />}
                 </button>
               </div>
             ),
             className: 'w-10' 
-          }] : []),
-          { 
-            header: 'Atividade', 
-            accessor: (task) => {
-              const isNew = !task.vistoPeloDelegado && task.delegadoPara?.toLowerCase().trim() === auth.currentUser?.email?.toLowerCase().trim();
-              return (
-                <div className="py-1 px-3 -ml-6 transition-all">
-                  <div className="flex items-center gap-2 mb-0.5">
-                    {isNew && <span className="px-1.5 py-0.5 bg-[#ff5351] text-white text-[7px] font-black rounded animate-pulse-badge shrink-0">NOVA</span>}
-                    <div className="font-bold text-sm text-white uppercase group-hover:text-[#ff5351] transition-colors truncate">{task.nome}</div>
-                  </div>
-                  <div className="flex items-center gap-2 text-[10px] text-zinc-500 font-bold uppercase tracking-widest">
-                    <MessageSquare className="w-3 h-3" />
-                    {task.historico?.length || 0} registros no histórico
-                  </div>
-                </div>
-              );
-            }
-          },
-          { header: 'Prioridade', accessor: (task) => getPriorityBadge(task.prioridade), align: 'center' },
-          { header: 'Acesso', accessor: (task) => <span className="text-[10px] font-black uppercase text-zinc-500 tracking-widest flex items-center gap-1.5"><Shield className="w-3 h-3" />{task.tipoAcesso}</span> },
-          { header: 'Responsável', accessor: (task) => <span className="text-zinc-300 text-xs font-bold uppercase">{task.responsavelTarefa}</span> }
-        ]}
-        actions={(task) => (
-          <div className="flex items-center gap-2">
-            <button onClick={(e) => { e.stopPropagation(); handleEditTask(task); }} className="p-2 bg-zinc-800 border border-zinc-700 hover:bg-zinc-700 rounded-xl text-zinc-400 hover:text-white transition-all"><Edit className="w-4 h-4" /></button>
-            <button onClick={async (e) => { e.stopPropagation(); if (window.confirm('Excluir esta tarefa permanentemente?')) { await taskService.deleteTask(task.id!); } }} className="p-2 bg-zinc-800/50 hover:bg-red-500/10 rounded-xl text-zinc-600 hover:text-red-500 transition-all"><Trash2 className="w-4 h-4" /></button>
-          </div>
-        )}
-      />
-    </div>
-  );
-}
+          }] : []),\n          { \n            header: 'Atividade', \n            accessor: (task) => {\n              const isNew = !task.vistoPeloDelegado && task.delegadoPara?.toLowerCase().trim() === auth.currentUser?.email?.toLowerCase().trim();\n              return (\n                <div className=\"py-1 px-3 -ml-6 transition-all\">\n                  <div className=\"flex items-center gap-2 mb-0.5\">\n                    {isNew && <span className=\"px-1.5 py-0.5 bg-[#ff5351] text-white text-[7px] font-black rounded animate-pulse-badge shrink-0\">NOVA</span>}\n                    <div className=\"font-bold text-sm text-white uppercase group-hover:text-[#ff5351] transition-colors truncate\">{task.nome}</div>\n                  </div>\n                  <div className=\"flex items-center gap-2 text-[10px] text-zinc-500 font-bold uppercase tracking-widest\">\n                    <MessageSquare className=\"w-3 h-3\" />\n                    {task.historico?.length || 0} registros no histórico\n                  </div>\n                </div>\n              );\n            }\n          },\n          { header: 'Prioridade', accessor: (task) => getPriorityBadge(task.prioridade), align: 'center' },\n          { header: 'Acesso', accessor: (task) => <span className=\"text-[10px] font-black uppercase text-zinc-500 tracking-widest flex items-center gap-1.5\"><Shield className=\"w-3 h-3\" />{task.tipoAcesso}</span> },\n          { header: 'Responsável', accessor: (task) => <span className=\"text-zinc-300 text-xs font-bold uppercase\">{task.responsavelTarefa}</span> }\n        ]}\n        actions={(task) => (\n          <div className=\"flex items-center gap-2\">\n            <button onClick={(e) => { e.stopPropagation(); handleEditTask(task); }} className=\"p-2 bg-zinc-800 border border-zinc-700 hover:bg-zinc-700 rounded-xl text-zinc-400 hover:text-white transition-all\"><Edit className=\"w-4 h-4\" /></button>\n            <button onClick={async (e) => { e.stopPropagation(); if (window.confirm('Excluir esta tarefa permanentemente?')) { await taskService.deleteTask(task.id!); } }} className=\"p-2 bg-zinc-800/50 hover:bg-red-500/10 rounded-xl text-zinc-600 hover:text-red-500 transition-all\"><Trash2 className=\"w-4 h-4\" /></button>\n          </div>\n        )}\n      />\n    </div>\n  );\n}\n",path:
