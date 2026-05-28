@@ -17,15 +17,26 @@ export default function Teleprompter() {
   const scrollPos = useRef(0);
   const socketRef = useRef<WebSocket | null>(null);
 
-  // Manual WebSocket Connection
+  // Manual WebSocket Connection with safety checks
   const connectToControl = () => {
-    if (typeof window === 'undefined' || !window.WebSocket) {
-      toast.error('Navegador não suporta WebSocket');
-      return;
-    }
-
+    if (typeof window === 'undefined') return;
+    
+    // Check for Secure Context Mixed Content restriction
+    // If site is HTTPS and try to connect to ws:// (not wss://), it will likely fail.
+    // We wrap everything in try/catch to prevent the component from crashing.
     try {
+      if (!window.WebSocket) {
+        toast.error('Navegador não suporta WebSocket');
+        return;
+      }
+
+      if (window.location.protocol === 'https:') {
+        toast.error('Aviso: Conexão não-segura (ws://) pode ser bloqueada em sites HTTPS.');
+      }
+
       setIsConnecting(true);
+      
+      // Attempt connection to the local ESP32 IP
       const ws = new WebSocket('ws://10.0.0.113:81');
 
       ws.onopen = () => {
@@ -35,32 +46,44 @@ export default function Teleprompter() {
       };
 
       ws.onmessage = (event) => {
-        const command = event.data.toString().trim();
-        handleCommand(command);
+        try {
+          const command = event.data.toString().trim();
+          handleCommand(command);
+        } catch (msgErr) {
+          console.error('Erro ao processar mensagem do socket:', msgErr);
+        }
       };
 
-      ws.onclose = () => {
+      ws.onclose = (event) => {
         setIsConnected(false);
         setIsConnecting(false);
+        // If it closed with an error code related to mixed content or security
+        if (!event.wasClean) {
+          console.warn('Conexão WebSocket fechada de forma inesperada.');
+        }
       };
 
-      ws.onerror = () => {
+      ws.onerror = (error) => {
         setIsConnected(false);
         setIsConnecting(false);
-        toast.error('Erro na conexão com ESP32');
+        console.error('Erro WebSocket:', error);
+        toast.error('Erro na conexão com ESP32. Verifique se o IP está acessível.');
         ws.close();
       };
 
       socketRef.current = ws;
-    } catch (e) {
+    } catch (e: any) {
       setIsConnecting(false);
-      console.error('Falha ao iniciar WebSocket:', e);
+      console.error('Erro crítico ao iniciar WebSocket:', e);
+      toast.error('Erro ao abrir conexão: ' + (e.message || 'Erro desconhecido'));
     }
   };
 
   const disconnectControl = () => {
     if (socketRef.current) {
-      socketRef.current.close();
+      try {
+        socketRef.current.close();
+      } catch (e) {}
       socketRef.current = null;
       setIsConnected(false);
       toast.success('Controle desconectado');
@@ -119,9 +142,18 @@ export default function Teleprompter() {
     } catch (e) {}
   };
 
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (socketRef.current) {
+        socketRef.current.onclose = null;
+        socketRef.current.close();
+      }
+    };
+  }, []);
+
   return (
     <div className="animate-in fade-in duration-700 h-[calc(100vh-120px)] flex flex-col gap-4 md:gap-6">
-      {/* Header / Toolbar */}
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-zinc-900/50 border border-zinc-800 p-4 md:p-6 rounded-3xl shrink-0">
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 md:w-14 md:h-14 rounded-2xl bg-[#ff5351]/10 flex items-center justify-center shrink-0">
@@ -155,21 +187,13 @@ export default function Teleprompter() {
           
           <div className="flex gap-2 flex-1 md:flex-none">
             <button onClick={() => setIsMirrored(!isMirrored)} className={cn("flex-1 px-4 py-3 rounded-xl border font-black text-[10px] uppercase tracking-widest transition-all flex items-center justify-center gap-2", isMirrored ? "bg-[#ff5351] border-[#ff5351] text-white" : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white")}><FlipHorizontal className="w-4 h-4" /></button>
-            <button onClick={toggleFullscreen} className="flex-1 px-4 py-3 bg-zinc-900 border border-zinc-800 rounded-xl font-black text-[10px] uppercase tracking-widest text-zinc-400 hover:text-white transition-all flex items-center justify-center gap-2"><Maximize2 className="w-4 h-4" /></button>
+            <button onClick={toggleFullscreen} className={cn("flex-1 px-4 py-3 bg-zinc-900 border border-zinc-800 rounded-xl font-black text-[10px] uppercase tracking-widest text-zinc-400 hover:text-white transition-all flex items-center justify-center gap-2", !document.fullscreenEnabled && "hidden")}><Maximize2 className="w-4 h-4" /></button>
           </div>
         </div>
       </header>
 
-      {/* Guide Steps - Visible in all views */}
-      <div className="flex items-center gap-4 bg-blue-500/5 border border-blue-500/10 px-6 py-3 rounded-2xl">
-        <Info className="w-4 h-4 text-blue-500 shrink-0" />
-        <p className="text-[9px] md:text-[10px] text-blue-400/80 font-black uppercase tracking-widest leading-none">
-          1. Conectar ao ESP32 <span className="mx-2 text-zinc-700">→</span> 2. Colar Roteiro <span className="mx-2 text-zinc-700">→</span> 3. Ajustar Velocidade <span className="mx-2 text-zinc-700">→</span> 4. Play
-        </p>
-      </div>
-
       <div className="flex-1 flex flex-col lg:flex-row gap-6 min-h-0">
-        <aside className="w-full lg:w-96 flex flex-col gap-6 shrink-0">
+        <aside className="w-full lg:w-96 flex flex-col gap-6 shrink-0 h-1/2 lg:h-auto">
           <section className="flex-1 bg-[#141414] border border-zinc-800 rounded-[32px] p-6 flex flex-col space-y-4 shadow-2xl overflow-hidden min-h-[300px]">
             <div className="flex items-center justify-between border-b border-zinc-800 pb-3 shrink-0">
               <div className="flex items-center gap-2">
