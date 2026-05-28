@@ -10,7 +10,9 @@ const ROLES = [
   { id: 'designer', label: 'Designer' },
   { id: 'redator', label: 'Redator' },
   { id: 'midia_social', label: 'Mídia Social' },
-  { id: 'admin', label: 'Administrativo' }
+  { id: 'admin', label: 'Administrativo' },
+  { id: 'cliente', label: 'Cliente' },
+  { id: 'equipe', label: 'Equipe Cliente' }
 ];
 
 const MODULES = [
@@ -71,7 +73,7 @@ export default function PainelMaster() {
 
       <div className="bg-[#141414] border border-zinc-800 rounded-3xl overflow-hidden shadow-2xl">
         <div className="overflow-x-auto p-4 md:p-6">
-          <table className="w-full text-left border-collapse min-w-[700px]">
+          <table className="w-full text-left border-collapse min-w-[900px]">
             <thead>
               <tr className="border-b border-zinc-800/60">
                 <th className="pb-4 pt-2 w-[180px] sticky left-0 bg-[#141414] z-20"></th>
