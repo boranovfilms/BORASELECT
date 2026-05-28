@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Tv, Play, Pause, RotateCcw, ChevronUp, ChevronDown, Maximize2, FlipHorizontal, Settings2, Trash2, 
-  Smartphone, Laptop, MoveHorizontal, Type, Activity
+  Smartphone, Laptop, MoveHorizontal, Type, Activity, Upload, FileText
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { toast } from 'react-hot-toast';
@@ -9,6 +9,7 @@ import { rtdb } from '../lib/firebase';
 import { ref, onValue, set, update } from 'firebase/database';
 
 interface TeleprompterState {
+  texto: string;
   playing: boolean;
   velocidade: number;
   margem: number;
@@ -18,6 +19,7 @@ interface TeleprompterState {
 }
 
 const DEFAULT_STATE: TeleprompterState = {
+  texto: '',
   playing: false,
   velocidade: 3,
   margem: 10,
@@ -27,26 +29,21 @@ const DEFAULT_STATE: TeleprompterState = {
 };
 
 export default function Teleprompter() {
-  const [text, setText] = useState('');
   const [state, setState] = useState<TeleprompterState>(DEFAULT_STATE);
   const [isMobile, setIsMobile] = useState(false);
-  const [viewMode, setViewMode] = useState<'prompter' | 'remote'>('prompter');
+  const [showControls, setShowGlobalControls] = useState(true);
   
   const prompterRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollPos = useRef(0);
   const dbRef = ref(rtdb, 'teleprompter');
 
-  // Detect mobile and load saved text
+  // Detect device and sync with RTDB
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 1024);
     checkMobile();
     window.addEventListener('resize', checkMobile);
 
-    const savedText = localStorage.getItem('tp_text');
-    if (savedText) setText(savedText);
-
-    // Sync with Firebase RTDB
     const unsubscribe = onValue(dbRef, (snapshot) => {
       const data = snapshot.val();
       if (data) {
@@ -56,7 +53,6 @@ export default function Teleprompter() {
           update(dbRef, { voltarInicio: false });
         }
       } else {
-        // Initialize DB if empty
         set(dbRef, DEFAULT_STATE);
       }
     });
@@ -67,7 +63,6 @@ export default function Teleprompter() {
     };
   }, []);
 
-  // Remote Control Sync Actions
   const updateDB = (updates: Partial<TeleprompterState>) => {
     update(dbRef, updates);
   };
@@ -97,77 +92,95 @@ export default function Teleprompter() {
   const toggleFullscreen = () => {
     if (!containerRef.current) return;
     try {
-      if (!document.fullscreenElement) containerRef.current.requestFullscreen();
-      else document.exitFullscreen();
+      if (!document.fullscreenElement) {
+        containerRef.current.requestFullscreen();
+        setShowGlobalControls(false);
+      } else {
+        document.exitFullscreen();
+        setShowGlobalControls(true);
+      }
     } catch (e) {}
   };
 
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const content = ev.target?.result as string;
+      updateDB({ texto: content });
+      toast.success('Roteiro sincronizado!');
+    };
+    reader.readAsText(file);
+  };
+
   // REMOTE CONTROL INTERFACE (MOBILE)
-  if (isMobile || viewMode === 'remote') {
+  if (isMobile) {
     return (
       <div className="animate-in fade-in duration-700 min-h-[85vh] flex flex-col gap-6 max-w-lg mx-auto">
-        <header className="flex items-center justify-between bg-zinc-900/50 border border-zinc-800 p-5 rounded-[32px] shrink-0">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-2xl bg-[#ff5351]/10 flex items-center justify-center shrink-0">
+        <header className="bg-[#141414] border border-zinc-800 p-6 rounded-[32px] shadow-2xl">
+          <div className="flex items-center gap-4 mb-6">
+            <div className="w-12 h-12 rounded-2xl bg-[#ff5351]/10 flex items-center justify-center">
               <Smartphone className="w-6 h-6 text-[#ff5351]" />
             </div>
             <div>
-              <h1 className="text-lg font-black text-white uppercase italic tracking-tight">Controle</h1>
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span className="text-[10px] font-black uppercase text-zinc-500 tracking-widest text-emerald-500">Online</span>
-              </div>
+              <h1 className="text-xl font-black text-white uppercase italic tracking-tight">Controle Remoto</h1>
+              <span className="text-[10px] font-black uppercase text-emerald-500 animate-pulse tracking-widest">Sincronizado</span>
             </div>
           </div>
-          <button onClick={() => setViewMode('prompter')} className="px-5 py-3 bg-white text-black rounded-xl font-black text-[10px] uppercase flex items-center gap-2 shadow-xl hover:bg-[#ff5351] hover:text-white transition-all"><Laptop className="w-4 h-4" /> Teleprompter</button>
+          
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-[10px] font-black uppercase text-zinc-500 block ml-1">Enviar Novo Roteiro</label>
+              <div className="flex gap-2">
+                <textarea 
+                  value={state.texto} 
+                  onChange={e => updateDB({ texto: e.target.value })}
+                  placeholder="COLE O TEXTO AQUI..."
+                  className="flex-1 bg-black border border-zinc-800 rounded-2xl p-4 text-xs text-white resize-none h-24 outline-none focus:border-[#ff5351]"
+                />
+                <label className="w-12 h-24 bg-zinc-900 border border-zinc-800 rounded-2xl flex flex-col items-center justify-center gap-1 cursor-pointer hover:bg-zinc-800 transition-all text-zinc-500">
+                  <Upload className="w-4 h-4" />
+                  <span className="text-[7px] font-black uppercase">TXT</span>
+                  <input type="file" accept=".txt" onChange={handleFileUpload} className="hidden" />
+                </label>
+              </div>
+            </div>
+          </div>Header
         </header>
 
         <div className="flex-1 grid grid-cols-2 gap-4 pb-10">
-          <button 
-            onClick={() => updateDB({ playing: !state.playing })} 
-            className={cn(
-              "col-span-2 h-32 rounded-[40px] flex flex-col items-center justify-center gap-2 shadow-2xl active:scale-95 transition-all text-white",
-              state.playing ? "bg-zinc-800 border-2 border-[#ff5351]/50" : "bg-[#ff5351]"
-            )}
-          >
+          <button onClick={() => updateDB({ playing: !state.playing })} className={cn("col-span-2 h-32 rounded-[40px] flex flex-col items-center justify-center gap-2 shadow-2xl active:scale-95 transition-all text-white", state.playing ? "bg-zinc-800 border-2 border-[#ff5351]/50" : "bg-[#ff5351]")}>
             {state.playing ? <Pause className="w-12 h-12 fill-current" /> : <Play className="w-12 h-12 fill-current ml-1" />}
             <span className="font-black uppercase tracking-[0.2em] text-xs">{state.playing ? 'Pausar' : 'Iniciar'}</span>
           </button>
           
           <button onClick={() => updateDB({ velocidade: Math.max(state.velocidade - 1, 1) })} className="h-28 bg-zinc-900 border border-zinc-800 rounded-[32px] flex flex-col items-center justify-center gap-2 active:bg-zinc-800 transition-all text-zinc-400">
-            <ChevronDown className="w-8 h-8" />
-            <span className="font-black uppercase tracking-widest text-[9px]">Devagar</span>
+            <ChevronDown className="w-8 h-8" /><span className="font-black uppercase tracking-widest text-[9px]">Velocidade -</span>
           </button>
           <button onClick={() => updateDB({ velocidade: Math.min(state.velocidade + 1, 20) })} className="h-28 bg-zinc-900 border border-zinc-800 rounded-[32px] flex flex-col items-center justify-center gap-2 active:bg-zinc-800 transition-all text-zinc-400">
-            <ChevronUp className="w-8 h-8" />
-            <span className="font-black uppercase tracking-widest text-[9px]">Rápido</span>
+            <ChevronUp className="w-8 h-8" /><span className="font-black uppercase tracking-widest text-[9px]">Velocidade +</span>
           </button>
 
           <button onClick={() => updateDB({ margem: Math.max(state.margem - 2, 0) })} className="h-28 bg-zinc-900 border border-zinc-800 rounded-[32px] flex flex-col items-center justify-center gap-2 active:bg-zinc-800 transition-all text-zinc-400">
-            <MoveHorizontal className="w-8 h-8 rotate-90" />
-            <span className="font-black uppercase tracking-widest text-[9px]">Margem -</span>
+            <MoveHorizontal className="w-8 h-8 rotate-90" /><span className="font-black uppercase tracking-widest text-[9px]">Margem -</span>
           </button>
           <button onClick={() => updateDB({ margem: Math.min(state.margem + 2, 40) })} className="h-28 bg-zinc-900 border border-zinc-800 rounded-[32px] flex flex-col items-center justify-center gap-2 active:bg-zinc-800 transition-all text-zinc-400">
-            <MoveHorizontal className="w-8 h-8" />
-            <span className="font-black uppercase tracking-widest text-[9px]">Margem +</span>
+            <MoveHorizontal className="w-8 h-8" /><span className="font-black uppercase tracking-widest text-[9px]">Margem +</span>
           </button>
 
           <button onClick={() => updateDB({ fonte: Math.max(state.fonte - 2, 20) })} className="h-28 bg-zinc-900 border border-zinc-800 rounded-[32px] flex flex-col items-center justify-center gap-2 active:bg-zinc-800 transition-all text-zinc-400">
-            <Type className="w-8 h-8 scale-75" />
-            <span className="font-black uppercase tracking-widest text-[9px]">Fonte -</span>
+            <Type className="w-8 h-8 scale-75" /><span className="font-black uppercase tracking-widest text-[9px]">Fonte -</span>
           </button>
-          <button onClick={() => updateDB({ fonte: Math.min(state.fonte + 2, 80) })} className="h-28 bg-zinc-900 border border-zinc-800 rounded-[32px] flex flex-col items-center justify-center gap-2 active:bg-zinc-800 transition-all text-zinc-400">
-            <Type className="w-8 h-8" />
-            <span className="font-black uppercase tracking-widest text-[9px]">Fonte +</span>
+          <button onClick={() => updateDB({ fonte: Math.min(state.fonte + 2, 72) })} className="h-28 bg-zinc-900 border border-zinc-800 rounded-[32px] flex flex-col items-center justify-center gap-2 active:bg-zinc-800 transition-all text-zinc-400">
+            <Type className="w-8 h-8" /><span className="font-black uppercase tracking-widest text-[9px]">Fonte +</span>
           </button>
 
           <button onClick={() => updateDB({ espelhado: !state.espelhado })} className={cn("h-24 rounded-[32px] flex flex-col items-center justify-center gap-2 transition-all", state.espelhado ? "bg-[#ff5351] text-white" : "bg-zinc-800 text-zinc-400")}>
-            <FlipHorizontal className="w-6 h-6" />
-            <span className="font-black uppercase tracking-widest text-[9px]">Espelhar</span>
+            <FlipHorizontal className="w-6 h-6" /><span className="font-black uppercase tracking-widest text-[9px]">Espelhar</span>
           </button>
           <button onClick={() => updateDB({ voltarInicio: true })} className="h-24 bg-zinc-800 border border-zinc-700 rounded-[32px] flex flex-col items-center justify-center gap-2 active:bg-zinc-700 transition-all text-zinc-300">
-            <RotateCcw className="w-6 h-6" />
-            <span className="font-black uppercase tracking-widest text-[9px]">Reiniciar</span>
+            <RotateCcw className="w-6 h-6" /><span className="font-black uppercase tracking-widest text-[9px]">Reiniciar</span>
           </button>
         </div>
       </div>
@@ -176,104 +189,47 @@ export default function Teleprompter() {
 
   // TABLET / DESKTOP INTERFACE (TELEPROMPTER)
   return (
-    <div className="animate-in fade-in duration-700 h-[calc(100vh-120px)] flex flex-col gap-6">
-      <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-zinc-900/50 border border-zinc-800 p-4 md:p-6 rounded-[32px] shrink-0 shadow-2xl">
-        <div className="flex items-center gap-4">
-          <div className="w-12 h-12 md:w-14 md:h-14 rounded-2xl bg-[#ff5351]/10 flex items-center justify-center shrink-0">
-            <Tv className="w-6 h-6 md:w-8 md:h-8 text-[#ff5351]" />
-          </div>
-          <div>
-            <h1 className="text-lg md:text-2xl font-black text-white uppercase italic tracking-tight leading-none">Teleprompter</h1>
-            <div className="flex items-center gap-2 mt-1">
-              <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span className="text-[10px] font-black uppercase text-zinc-500 tracking-widest">Sincronizado via Nuvem</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <button onClick={() => setViewMode('remote')} className="hidden lg:flex px-5 py-3 bg-zinc-800 border border-zinc-700 rounded-xl font-black text-[10px] uppercase tracking-widest text-zinc-400 hover:text-white transition-all items-center gap-2 shadow-lg"><Smartphone className="w-4 h-4" /> Modo Controle</button>
-          <button onClick={toggleFullscreen} className="px-5 py-3 bg-zinc-800 border border-zinc-700 rounded-xl font-black text-[10px] uppercase tracking-widest text-zinc-400 hover:text-white transition-all flex items-center justify-center gap-2 shadow-lg"><Maximize2 className="w-4 h-4" /> Tela Cheia</button>
-        </div>
+    <div ref={containerRef} className="animate-in fade-in duration-700 h-[calc(100vh-120px)] flex flex-col bg-black overflow-hidden relative" onClick={() => !isMobile && setShowGlobalControls(true)}>
+      {/* Menu Superior Compacto */}
+      <header className={cn(
+        "fixed top-20 left-1/2 -translate-x-1/2 z-[300] flex items-center gap-2 p-2 bg-zinc-900/90 backdrop-blur-xl border border-white/5 rounded-2xl shadow-2xl transition-all duration-500",
+        !showControls && "opacity-0 -translate-y-20 pointer-events-none"
+      )}>
+        <button onClick={() => updateDB({ playing: !state.playing })} className={cn("w-12 h-12 rounded-xl flex items-center justify-center transition-all", state.playing ? "bg-zinc-800 text-[#ff5351]" : "bg-[#ff5351] text-white")}>
+          {state.playing ? <Pause className="w-5 h-5 fill-current" /> : <Play className="w-5 h-5 fill-current ml-0.5" />}
+        </button>
+        <div className="h-8 w-px bg-white/10 mx-1" />
+        <button onClick={() => updateDB({ velocidade: Math.max(state.velocidade - 1, 1) })} className="w-10 h-10 rounded-lg bg-zinc-800 text-zinc-400 hover:text-white flex items-center justify-center transition-colors">🐢</button>
+        <div className="px-2 text-center min-w-[30px]"><span className="text-[14px] font-black text-white italic leading-none">{state.velocidade}</span></div>
+        <button onClick={() => updateDB({ velocidade: Math.min(state.velocidade + 1, 20) })} className="w-10 h-10 rounded-lg bg-zinc-800 text-zinc-400 hover:text-white flex items-center justify-center transition-colors">🐇</button>
+        <div className="h-8 w-px bg-white/10 mx-1" />
+        <button onClick={() => updateDB({ margem: Math.max(state.margem - 2, 0) })} className="w-10 h-10 rounded-lg bg-zinc-800 text-zinc-400 hover:text-white flex items-center justify-center transition-colors"><MoveHorizontal className="w-4 h-4 rotate-90" /></button>
+        <button onClick={() => updateDB({ margem: Math.min(state.margem + 2, 40) })} className="w-10 h-10 rounded-lg bg-zinc-800 text-zinc-400 hover:text-white flex items-center justify-center transition-colors"><MoveHorizontal className="w-4 h-4" /></button>
+        <div className="h-8 w-px bg-white/10 mx-1" />
+        <button onClick={() => updateDB({ fonte: Math.max(state.fonte - 2, 20) })} className="w-10 h-10 rounded-lg bg-zinc-900 text-zinc-400 flex items-center justify-center transition-colors font-black">A-</button>
+        <button onClick={() => updateDB({ fonte: Math.min(state.fonte + 2, 72) })} className="w-10 h-10 rounded-lg bg-zinc-900 text-zinc-400 flex items-center justify-center transition-colors font-black">A+</button>
+        <div className="h-8 w-px bg-white/10 mx-1" />
+        <button onClick={() => updateDB({ espelhado: !state.espelhado })} className={cn("w-10 h-10 rounded-lg flex items-center justify-center transition-all", state.espelhado ? "bg-[#ff5351] text-white" : "bg-zinc-800 text-zinc-400")}><FlipHorizontal className="w-4 h-4" /></button>
+        <button onClick={toggleFullscreen} className="w-10 h-10 rounded-lg bg-zinc-800 text-zinc-400 flex items-center justify-center transition-colors"><Maximize2 className="w-4 h-4" /></button>
+        <button onClick={() => setShowGlobalControls(false)} className="w-8 h-8 rounded-lg bg-black/20 text-zinc-600 flex items-center justify-center hover:text-white ml-2">×</button>
       </header>
 
-      <div className="flex-1 flex flex-col lg:flex-row gap-6 min-h-0">
-        <aside className="w-full lg:w-96 flex flex-col gap-6 shrink-0 h-1/2 lg:h-auto">
-          <section className="flex-1 bg-[#141414] border border-zinc-800 rounded-[40px] p-8 flex flex-col space-y-4 shadow-2xl overflow-hidden min-h-[300px]">
-            <div className="flex items-center justify-between border-b border-zinc-800 pb-4 shrink-0">
-              <div className="flex items-center gap-2">
-                <Settings2 className="w-4 h-4 text-[#ff5351]" />
-                <h3 className="text-white font-black uppercase tracking-widest text-[10px]">Roteiro / Script</h3>
-              </div>
-              <button onClick={() => { setText(''); localStorage.removeItem('tp_text'); }} className="text-zinc-600 hover:text-red-500 transition-colors"><Trash2 className="w-4 h-4" /></button>
-            </div>
-            <textarea 
-              value={text} 
-              onChange={e => { setText(e.target.value); localStorage.setItem('tp_text', e.target.value); }} 
-              placeholder="COLE SEU TEXTO AQUI..." 
-              className="flex-1 bg-black border border-zinc-800 rounded-2xl p-5 text-sm text-white resize-none outline-none focus:border-[#ff5351] font-medium leading-relaxed custom-scrollbar" 
-            />
-          </section>
-
-          <section className="bg-[#141414] border border-zinc-800 rounded-[32px] p-6 space-y-6 shadow-2xl shrink-0">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="p-4 bg-black/40 rounded-2xl border border-zinc-800/50 text-center">
-                <span className="text-[8px] font-black text-zinc-600 uppercase block mb-1">Velocidade</span>
-                <span className="text-2xl font-black text-white italic">{state.velocidade}</span>
-              </div>
-              <div className="p-4 bg-black/40 rounded-2xl border border-zinc-800/50 text-center">
-                <span className="text-[8px] font-black text-zinc-600 uppercase block mb-1">Margem</span>
-                <span className="text-2xl font-black text-white italic">{state.margem}%</span>
-              </div>
-            </div>
-          </section>
-        </aside>
-
-        <main ref={containerRef} className="flex-1 bg-black border border-zinc-800 rounded-[40px] relative overflow-hidden flex flex-col shadow-inner min-h-[400px]">
-          <div 
-            ref={prompterRef} 
-            className={cn(
-              "flex-1 overflow-y-auto py-[45vh] text-center select-none no-scrollbar transition-transform duration-700", 
-              state.espelhado && "scale-x-[-1]"
-            )} 
-            style={{ scrollBehavior: 'auto' }}
-          >
-            <div 
-              className="max-w-5xl mx-auto font-black leading-tight uppercase italic whitespace-pre-wrap transition-all tracking-tight" 
-              style={{ 
-                fontSize: `${state.fonte}px`, 
-                color: '#fff', 
-                paddingLeft: `${state.margem}%`, 
-                paddingRight: `${state.margem}%` 
-              }}
-            >
-              {text || 'INSIRA O TEXTO NO CAMPO AO LADO PARA COMEÇAR...'}
-            </div>
+      {/* Área do Teleprompter */}
+      <main className="flex-1 relative overflow-hidden flex flex-col">
+        <div ref={prompterRef} className={cn("flex-1 overflow-y-auto py-[45vh] text-center select-none no-scrollbar transition-transform duration-700", state.espelhado && "scale-x-[-1]")} style={{ scrollBehavior: 'auto' }}>
+          <div className="font-black leading-tight uppercase italic whitespace-pre-wrap transition-all tracking-tight mx-auto" style={{ fontSize: `${state.fonte}px`, color: '#fff', paddingLeft: `${state.margem}%`, paddingRight: `${state.margem}%` }}>
+            {state.texto || 'O ROTEIRO APARECERÁ AQUI... SINCRONIZE PELO CELULAR.'}
           </div>
+        </div>
 
-          {/* Local HUD Controls */}
-          <div className="absolute bottom-10 left-1/2 -translate-x-1/2 bg-[#141414]/95 backdrop-blur-2xl border border-white/5 rounded-[32px] p-3 flex items-center gap-4 shadow-2xl z-20 scale-90 md:scale-100">
-            <button onClick={() => updateDB({ voltarInicio: true })} className="p-4 text-zinc-400 hover:text-white transition-all hover:bg-zinc-800 rounded-2xl shrink-0"><RotateCcw className="w-6 h-6" /></button>
-            <button 
-              onClick={() => updateDB({ playing: !state.playing })} 
-              className="w-20 h-20 bg-[#ff5351] rounded-[28px] flex items-center justify-center text-white shadow-xl shadow-[#ff5351]/20 hover:scale-105 active:scale-95 transition-all"
-            >
-              {state.playing ? <Pause className="w-10 h-10 fill-current" /> : <Play className="w-10 h-10 fill-current ml-1" />}
-            </button>
-            <div className="px-6 flex items-center gap-3 border-l border-white/5">
-               <div className="text-center">
-                  <span className="text-[8px] font-black text-zinc-600 uppercase block">Fonte</span>
-                  <span className="text-xl font-black text-white italic">{state.fonte}</span>
-               </div>
-            </div>
-          </div>
-
-          <div className="absolute top-1/2 left-0 right-0 h-[2px] bg-[#ff5351]/30 pointer-events-none z-10" />
-          <div className="absolute top-1/2 left-6 w-2.5 h-2.5 rounded-full bg-[#ff5351] -translate-y-1/2 shadow-[0_0_15px_#ff5351] z-10" />
-          <div className="absolute top-1/2 right-6 w-2.5 h-2.5 rounded-full bg-[#ff5351] -translate-y-1/2 shadow-[0_0_15px_#ff5351] z-10" />
-          <div className="absolute inset-0 pointer-events-none bg-gradient-to-b from-black via-transparent to-black opacity-80 z-0" />
-        </main>
-      </div>
+        {/* Linha de Leitura Central */}
+        <div className="absolute top-1/2 left-0 right-0 h-[2px] bg-[#ff5351]/40 pointer-events-none z-10" />
+        <div className="absolute top-1/2 left-8 w-3 h-3 rounded-full bg-[#ff5351] -translate-y-1/2 shadow-[0_0_20px_#ff5351] z-10" />
+        <div className="absolute top-1/2 right-8 w-3 h-3 rounded-full bg-[#ff5351] -translate-y-1/2 shadow-[0_0_20px_#ff5351] z-10" />
+        
+        {/* Sombra de Vinheta */}
+        <div className="absolute inset-0 pointer-events-none bg-gradient-to-b from-black via-transparent to-black opacity-90 z-0" />
+      </main>
     </div>
   );
 }
