@@ -18,10 +18,13 @@ export default function ClientAccess() {
   const [clients, setClients] = useState<Client[]>([]);
   const [allTeamMembers, setAllTeamMembers] = useState<TeamMember[]>([]);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [sendingEmail, setSendingEmail] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string>('');
   
   // Controle de Navegação
   const [isClientFormOpen, setIsClientFormOpen] = useState(false);
@@ -81,6 +84,8 @@ export default function ClientAccess() {
       zipCode: '', address: '', number: '', complement: '', neighborhood: '', city: '', state: '',
       commercialName: '', website: '', responsibleContact: '', logoUrl: '', status: 'pending'
     });
+    setLogoFile(null);
+    setLogoPreview('');
     setIsEditingClient(false);
     setIsClientFormOpen(true);
   };
@@ -105,11 +110,13 @@ export default function ClientAccess() {
       logoUrl: (client as any).logoUrl || '',
       status: client.status || 'pending'
     });
+    setLogoFile(null);
+    setLogoPreview( (client as any).logoUrl || '' );
     setIsEditingClient(true);
     setIsClientFormOpen(true);
   };
 
-  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleLogoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -118,21 +125,12 @@ export default function ClientAccess() {
       return;
     }
 
-    try {
-      setLoading(true);
-      const uploadId = clientForm.id || `temp_${Date.now()}`;
-      const storageRef = ref(storage, `clientes/${uploadId}/logo`);
-      
-      await uploadBytes(storageRef, file);
-      const url = await getDownloadURL(storageRef);
-      
-      setClientForm(prev => ({ ...prev, logoUrl: url }));
-      toast.success('Logo carregada!');
-    } catch (error) {
-      toast.error('Erro ao fazer upload da logo');
-    } finally {
-      setLoading(false);
-    }
+    setLogoFile(file);
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setLogoPreview(reader.result as string);
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleSaveClient = async (e: React.FormEvent) => {
@@ -141,27 +139,50 @@ export default function ClientAccess() {
       toast.error('Preencha nome e e-mail');
       return;
     }
+    
+    setSaving(true);
     try {
-      setLoading(true);
+      let currentLogoUrl = clientForm.logoUrl;
+
+      // 1. Criar ou Obter ID do Cliente
+      let finalClientId = clientForm.id;
+      if (!isEditingClient) {
+        // Se for novo, precisamos criar o doc primeiro para ter o ID para o Storage
+        const newDocRef = await clientService.createClient({
+          ...clientForm,
+          name: clientForm.name.toUpperCase(),
+          email: clientForm.email.toLowerCase().trim(),
+          role: 'cliente'
+        });
+        finalClientId = newDocRef.id;
+      }
+
+      // 2. Upload da Logo (se houver novo arquivo)
+      if (logoFile && finalClientId) {
+        const storageRef = ref(storage, `clientes/${finalClientId}/logo`);
+        await uploadBytes(storageRef, logoFile);
+        currentLogoUrl = await getDownloadURL(storageRef);
+      }
+
+      // 3. Atualizar/Salvar com a URL da Logo final
       const normalizedClient = {
         ...clientForm,
+        id: finalClientId,
+        logoUrl: currentLogoUrl,
         email: clientForm.email.toLowerCase().trim(),
         role: 'cliente'
       };
 
-      if (isEditingClient && clientForm.id) {
-        await (clientService as any).updateClient(clientForm.id, normalizedClient);
-        toast.success('Cliente atualizado com sucesso!');
-      } else {
-        await clientService.createClient(normalizedClient);
-        toast.success('Cliente adicionado com sucesso!');
-      }
+      await (clientService as any).updateClient(finalClientId, normalizedClient);
+      
+      toast.success(isEditingClient ? 'Cliente atualizado!' : 'Cliente adicionado!');
       setIsClientFormOpen(false);
       loadAllData();
     } catch (error) {
+      console.error(error);
       toast.error('Erro ao salvar cliente');
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   };
 
@@ -308,8 +329,8 @@ export default function ClientAccess() {
             </div>
             <div className="flex gap-4">
               <button type="button" onClick={() => setIsClientFormOpen(false)} className="px-8 py-3 rounded-xl bg-zinc-900 border border-zinc-800 text-white font-bold hover:bg-zinc-800 transition-all text-xs uppercase tracking-widest">Cancelar</button>
-              <button type="submit" disabled={loading} className="px-8 py-3 rounded-xl bg-[#ff5351] text-white font-bold hover:opacity-90 transition-all text-xs uppercase tracking-widest shadow-xl shadow-[#ff5351]/20 disabled:opacity-50">
-                {loading ? 'Salvando...' : 'Salvar Cadastro'}
+              <button type="submit" disabled={saving} className="px-8 py-3 rounded-xl bg-[#ff5351] text-white font-bold hover:opacity-90 transition-all text-xs uppercase tracking-widest shadow-xl shadow-[#ff5351]/20 disabled:opacity-50">
+                {saving ? 'Salvando...' : 'Salvar Cadastro'}
               </button>
             </div>
           </header>
@@ -327,9 +348,9 @@ export default function ClientAccess() {
                     onClick={() => fileInputRef.current?.click()}
                     className="w-[150px] h-[150px] rounded-2xl border-2 border-dashed border-zinc-800 bg-zinc-900/50 hover:bg-zinc-900 hover:border-[#ff5351]/50 transition-all flex flex-col items-center justify-center gap-2 group overflow-hidden relative"
                   >
-                    {clientForm.logoUrl ? (
+                    {logoPreview ? (
                       <>
-                        <img src={clientForm.logoUrl} alt="Logo" className="w-full h-full object-cover" />
+                        <img src={logoPreview} alt="Logo" className="w-full h-full object-cover" />
                         <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                           <ImageIcon className="w-6 h-6 text-white" />
                         </div>
@@ -346,7 +367,7 @@ export default function ClientAccess() {
                     ref={fileInputRef} 
                     className="hidden" 
                     accept="image/*" 
-                    onChange={handleLogoUpload} 
+                    onChange={handleLogoSelect} 
                   />
                 </div>
 
@@ -463,7 +484,7 @@ export default function ClientAccess() {
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5">
                   <div className="space-y-2"><label className="text-[10px] uppercase font-black tracking-widest text-zinc-500">E-MAIL</label><div className="relative"><input type="email" value={memberForm.email} onChange={e => setMemberForm({...memberForm, email: e.target.value.toLowerCase().trim()})} placeholder="joao.silva@empresa.com" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3.5 pl-11 text-white focus:border-[#ff5351] outline-none text-sm"/><Mail className="w-4 h-4 text-zinc-500 absolute left-4 top-1/2 -translate-y-1/2" /></div></div>
-                  <div className="space-y-2"><label className="text-[10px] uppercase font-black tracking-widest text-zinc-500">TELEFONE</label><div className="relative"><input type="text" value={memberForm.phone} onChange={e => setMemberForm({...memberForm, phone: e.target.value})} placeholder="(00) 00000-0000" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3.5 pl-11 text-white focus:border-[#ff5351] outline-none text-sm"/><Phone className="w-4 h-4 text-zinc-500 absolute left-4 top-1/2 -translate-y-1/2" /></div></div>
+                  <div className="space-y-2"><label className="text-[10px] uppercase font-black tracking-widest text-zinc-500">TELEFONE</label><div className="relative"><input type="text" value={memberForm.phone} onChange={e => setMemberForm({...memberForm, phone: e.target.value})} placeholder="(00) 00000-0000" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3.5 pl-11 text-white focus:border-[#ff5351] outline-none text-sm"/><Phone className="w-4 h-4 text-zinc-700 absolute left-4 top-1/2 -translate-y-1/2" /></div></div>
                 </div>
               </section>
               <section className="bg-[#1f1f1f] border border-zinc-800/80 rounded-3xl p-6 shadow-xl">
@@ -478,7 +499,7 @@ export default function ClientAccess() {
                       { id: 'validador', label: 'Validador', desc: 'Sugere correções no conteúdo' },
                       { id: 'visualizador', label: 'Visualizador', desc: 'Apenas acompanha o projeto' }
                     ].map(level => (
-                      <label key={level.id} className={cn("cursor-pointer border rounded-2xl p-4 flex items-start gap-3 transition-all", memberForm.accessLevel === level.id ? "bg-[#ff5351]/10 border-[#ff5351]" : "bg-zinc-900 border-zinc-800 hover:border-zinc-600")}><div className="pt-0.5"><div className={cn("w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all", memberForm.accessLevel === level.id ? "border-[#ff5351]" : "border-zinc-600")}>{memberForm.accessLevel === level.id && <div className="w-2 h-2 rounded-full bg-[#ff5351]" />}</div></div><div><input type="radio" name="accessLevel" value={level.id} checked={memberForm.accessLevel === level.id} onChange={e => setMemberForm({...memberForm, accessLevel: e.target.value})} className="hidden" /><p className="text-white font-bold text-sm">{level.label}</p><p className="text-zinc-500 text-xs mt-0.5">{level.desc}</p></div></label>
+                      <label key={level.id} className={cn("cursor-pointer border rounded-2xl p-4 flex items-start gap-3 transition-all", memberForm.accessLevel === level.id ? "bg-[#ff5351]/10 border-[#ff5351]" : "bg-zinc-900 border-zinc-800 hover:border-zinc-300")}><div className="pt-0.5"><div className={cn("w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all", memberForm.accessLevel === level.id ? "border-[#ff5351]" : "border-zinc-600")}>{memberForm.accessLevel === level.id && <div className="w-2 h-2 rounded-full bg-[#ff5351]" />}</div></div><div><input type="radio" name="accessLevel" value={level.id} checked={memberForm.accessLevel === level.id} onChange={e => setMemberForm({...memberForm, accessLevel: e.target.value})} className="hidden" /><p className="text-white font-bold text-sm">{level.label}</p><p className="text-zinc-500 text-xs mt-0.5">{level.desc}</p></div></label>
                     ))}
                   </div></div>
               </section>
