@@ -1,8 +1,8 @@
 export const dynamic = 'force-dynamic';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   X, Copy, UserPlus, Mail, Trash2, ExternalLink, Edit2, Shield, Users, 
-  Camera, User, Briefcase, Lock, Phone, Upload, MapPin, Building, ChevronDown, Search
+  Camera, User, Briefcase, Lock, Phone, Upload, MapPin, Building, ChevronDown, Search, Globe, Image as ImageIcon
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { clientService, Client } from '../services/clientService';
@@ -11,6 +11,8 @@ import { emailService } from '../services/emailService';
 import { toast } from 'react-hot-toast';
 import { DataTable } from '../components/ui/DataTable';
 import { useNavigate } from 'react-router-dom';
+import { storage } from '../lib/firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 export default function ClientAccess() {
   const [clients, setClients] = useState<Client[]>([]);
@@ -19,6 +21,7 @@ export default function ClientAccess() {
   const [sendingEmail, setSendingEmail] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const navigate = useNavigate();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   // Controle de Navegação
   const [isClientFormOpen, setIsClientFormOpen] = useState(false);
@@ -31,7 +34,7 @@ export default function ClientAccess() {
   const [clientForm, setClientForm] = useState({
     id: '', name: '', email: '', phone: '', document: '', 
     zipCode: '', address: '', number: '', complement: '', neighborhood: '', city: '', state: '',
-    commercialName: '', plan: 'Básico', status: 'pending'
+    commercialName: '', website: '', responsibleContact: '', logoUrl: '', status: 'pending'
   });
 
   // Estado do Formulário de Membro da Equipe
@@ -49,429 +52,19 @@ export default function ClientAccess() {
       setLoading(true);
       const allData = await clientService.searchClients('');
       
-      // Filtra clientes reais e garante que o ID esteja mapeado corretamente para a navegação e vínculo
       const loadedClients = allData
         .filter(c => c.role === 'cliente' || !c.role)
         .map(c => ({
           ...c,
-          id: c.id || (c as any).uid || (c as any).docId // Garante a captura do ID único
+          id: c.id || (c as any).uid || (c as any).docId
         }));
 
       setClients(loadedClients);
       
-      // Diagnóstico para o console
-      console.log('Filtro de Clientes (ID Check):', loadedClients.map(c => ({ name: c.name, id: c.id })));
-      
-      // Filtra todos os membros da equipe vinculados
       const team = allData.filter(m => 
         (m.role === 'equipe' || (m as any).clienteId) && 
         (m as any).clienteId !== undefined
       ) as any;
       
       setAllTeamMembers(team);
-    } catch (error) {
-      console.error('Erro ao carregar dados:', error);
-      toast.error('Erro ao atualizar lista de dados.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleOpenAddClient = () => {
-    setClientForm({
-      id: '', name: '', email: '', phone: '', document: '', 
-      zipCode: '', address: '', number: '', complement: '', neighborhood: '', city: '', state: '',
-      commercialName: '', plan: 'Básico', status: 'pending'
-    });
-    setIsEditingClient(false);
-    setIsClientFormOpen(true);
-  };
-
-  const handleOpenEditClient = (client: Client) => {
-    setClientForm({
-      id: client.id || '',
-      name: client.name || '',
-      email: client.email || '',
-      phone: client.phone || '',
-      document: (client as any).document || '',
-      zipCode: (client as any).zipCode || '',
-      address: (client as any).address || '',
-      number: (client as any).number || '',
-      complement: (client as any).complement || '',
-      neighborhood: (client as any).neighborhood || '',
-      city: (client as any).city || '',
-      state: (client as any).state || '',
-      commercialName: (client as any).commercialName || '',
-      plan: (client as any).plan || 'Básico',
-      status: client.status || 'pending'
-    });
-    setIsEditingClient(true);
-    setIsClientFormOpen(true);
-  };
-
-  const handleSaveClient = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!clientForm.name || !clientForm.email) {
-      toast.error('Preencha nome e e-mail');
-      return;
-    }
-    try {
-      setLoading(true);
-      const normalizedClient = {
-        ...clientForm,
-        email: clientForm.email.toLowerCase().trim(),
-        role: 'cliente'
-      };
-
-      if (isEditingClient && clientForm.id) {
-        await (clientService as any).updateClient(clientForm.id, normalizedClient);
-        toast.success('Cliente atualizado com sucesso!');
-      } else {
-        await clientService.createClient(normalizedClient);
-        toast.success('Cliente adicionado com sucesso!');
-      }
-      setIsClientFormOpen(false);
-      loadAllData();
-    } catch (error) {
-      toast.error('Erro ao salvar cliente');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDeleteClient = async (id: string, email: string) => {
-    if (window.confirm('Excluir este cliente permanentemente? Isso removerá o acesso dele.')) {
-      try {
-        setLoading(true);
-        try {
-          await clientService.deleteClientAuth(email);
-        } catch (e: any) {
-          if (!e.message?.includes('not found')) toast.error('Apenas o registro local foi removido.');
-        }
-        await clientService.deleteClient(id);
-        toast.success('Cliente removido com sucesso');
-        loadAllData();
-      } catch (error) {
-        toast.error('Erro ao remover cliente');
-      } finally {
-        setLoading(false);
-      }
-    }
-  };
-
-  const handleOpenTeamView = (client: Client) => {
-    setSelectedClient(client);
-    setIsAddingTeamMember(false);
-    setIsTeamViewOpen(true);
-  };
-
-  const handleSaveTeamMember = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!memberForm.firstName || !memberForm.email || !memberForm.role) {
-      toast.error('Preencha os campos obrigatórios (Nome, E-mail e Função)');
-      return;
-    }
-
-    if (!selectedClient?.id) {
-      toast.error('ID do cliente não encontrado. Tente recarregar a página.');
-      return;
-    }
-
-    try {
-      setLoading(true);
-      const fullName = `${memberForm.firstName} ${memberForm.lastName}`.trim();
-      const normalizedMember = {
-        name: fullName,
-        email: memberForm.email.toLowerCase().trim(),
-        phone: memberForm.phone,
-        role: memberForm.role,
-        jobTitle: memberForm.jobTitle,
-        accessLevel: memberForm.accessLevel,
-        clienteId: selectedClient.id,
-        status: 'pending'
-      };
-      
-      await teamService.createTeamMember(normalizedMember as any);
-      await emailService.sendInvite(normalizedMember.email, normalizedMember.name, `${window.location.origin}/register?email=${encodeURIComponent(normalizedMember.email)}`);
-
-      toast.success('Membro adicionado e convite enviado!');
-      setMemberForm({ 
-        firstName: '', lastName: '', email: '', phone: '', 
-        password: '', jobTitle: '', role: 'equipe', accessLevel: 'validador', photoUrl: '' 
-      });
-      setIsAddingTeamMember(false);
-      await loadAllData();
-    } catch (error) {
-      console.error('Erro ao cadastrar membro da equipe:', error);
-      toast.error('Erro ao adicionar membro da equipe.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDeleteTeamMember = async (id: string, email: string) => {
-    if (window.confirm('Excluir este membro da equipe permanentemente?')) {
-      try {
-        setLoading(true);
-        try {
-          await teamService.deleteTeamMemberAuth(email);
-        } catch (e: any) {
-          if (!e.message?.includes('not found')) toast.error('Apenas registro local removido.');
-        }
-        await teamService.deleteTeamMember(id);
-        toast.success('Membro removido com sucesso');
-        loadAllData();
-      } catch (error) {
-        toast.error('Erro ao remover membro');
-      } finally {
-        setLoading(false);
-      }
-    }
-  };
-
-  const sendEmailInvite = async (name: string, email: string) => {
-    try {
-      setSendingEmail(email);
-      await emailService.sendInvite(email, name, `${window.location.origin}/register?email=${encodeURIComponent(email)}`);
-      toast.success('Convite enviado!');
-    } catch (error) {} finally {
-      setSendingEmail(null);
-    }
-  };
-
-  const getClientTeamCount = (clientId: string) => {
-    return allTeamMembers.filter(m => (m as any).clienteId === clientId).length;
-  };
-  
-  const clientTeamMembers = selectedClient 
-    ? allTeamMembers.filter(m => (m as any).clienteId === selectedClient.id) 
-    : [];
-
-  const filteredClients = clients.filter(c => 
-    c.name?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    c.email?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  return (
-    <div className="space-y-12 pb-20 text-left">
-      {!isClientFormOpen && !isTeamViewOpen && (
-        <header className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-          <div className="text-left">
-            <h1 className="text-5xl font-bold tracking-tight text-white mb-2 uppercase italic font-black">Gestão de Clientes</h1>
-            <p className="text-zinc-500 text-lg">Gerencie o cadastro e os planejamentos dos seus clientes.</p>
-          </div>
-          <div className="flex gap-4">
-            <button onClick={handleOpenAddClient} className="flex items-center gap-2 px-8 py-3.5 rounded-xl bg-[#ff5351] text-white font-bold uppercase tracking-widest hover:opacity-90 transition-all shadow-lg text-xs">
-              <UserPlus className="w-5 h-5" /> Adicionar Cliente
-            </button>
-          </div>
-        </header>
-      )}
-
-      {isClientFormOpen && (
-        <form autoComplete="off" onSubmit={handleSaveClient} className="animate-in slide-in-from-right-8 duration-500">
-          <header className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8">
-            <div className="text-left">
-              <button type="button" onClick={() => setIsClientFormOpen(false)} className="text-[#ff5351] hover:text-white transition-colors text-sm font-bold flex items-center gap-2 mb-4 uppercase tracking-widest">
-                <ChevronDown className="w-4 h-4 rotate-90" /> Voltar para Clientes
-              </button>
-              <h1 className="text-4xl font-bold tracking-tight text-white flex items-center gap-4">
-                {isEditingClient ? <Edit2 className="w-8 h-8 text-[#ff5351]" /> : <Building className="w-8 h-8 text-[#ff5351]" />}
-                {isEditingClient ? 'Editar Cliente' : 'Novo Cliente'}
-              </h1>
-            </div>
-            <div className="flex gap-4">
-              <button type="button" onClick={() => setIsClientFormOpen(false)} className="px-8 py-3 rounded-xl bg-zinc-900 border border-zinc-800 text-white font-bold hover:bg-zinc-800 transition-all text-xs uppercase tracking-widest">Cancelar</button>
-              <button type="submit" disabled={loading} className="px-8 py-3 rounded-xl bg-[#ff5351] text-white font-bold hover:opacity-90 transition-all text-xs uppercase tracking-widest shadow-xl shadow-[#ff5351]/20 disabled:opacity-50">
-                {loading ? 'Salvando...' : 'Salvar Cadastro'}
-              </button>
-            </div>
-          </header>
-
-          <div className="space-y-6">
-            <section className="bg-[#1f1f1f] border border-zinc-800/80 rounded-3xl p-6 shadow-xl">
-              <h3 className="text-lg font-bold text-white mb-5 flex items-center gap-2"><User className="w-5 h-5 text-[#ff5351]"/> Informações Principais</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                <div className="space-y-2"><label className="text-[10px] uppercase font-black tracking-widest text-zinc-500">Nome/Razão Social</label><input type="text" value={clientForm.name} onChange={e => setClientForm({...clientForm, name: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-white focus:border-[#ff5351] outline-none text-sm" placeholder="Nome Completo ou Empresa"/></div>
-                <div className="space-y-2"><label className="text-[10px] uppercase font-black tracking-widest text-zinc-500">E-MAIL PRINCIPAL</label><input type="email" value={clientForm.email} onChange={e => setClientForm({...clientForm, email: e.target.value})} disabled={isEditingClient} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-white focus:border-[#ff5351] outline-none text-sm disabled:opacity-50" placeholder="contato@empresa.com"/></div>
-                <div className="space-y-2"><label className="text-[10px] uppercase font-black tracking-widest text-zinc-500">CPF / CNPJ</label><input type="text" value={clientForm.document} onChange={e => setClientForm({...clientForm, document: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-white focus:border-[#ff5351] outline-none text-sm" placeholder="000.000.000-00"/></div>
-              </div>
-            </section>
-            <section className="bg-[#1f1f1f] border border-zinc-800/80 rounded-3xl p-6 shadow-xl">
-              <h3 className="text-lg font-bold text-white mb-5 flex items-center gap-2"><MapPin className="w-5 h-5 text-[#ff5351]"/> Endereço</h3>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-5 mb-4">
-                <div className="space-y-2"><label className="text-[10px] uppercase font-black tracking-widest text-zinc-500">CEP</label><input type="text" value={clientForm.zipCode} onChange={e => setClientForm({...clientForm, zipCode: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-white focus:border-[#ff5351] outline-none text-sm" placeholder="00000-000"/></div>
-                <div className="space-y-2 md:col-span-3"><label className="text-[10px] uppercase font-black tracking-widest text-zinc-500">Rua / Logradouro</label><input type="text" value={clientForm.address} onChange={e => setClientForm({...clientForm, address: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-white focus:border-[#ff5351] outline-none text-sm" placeholder="Av. Principal"/></div>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
-                <div className="space-y-2"><label className="text-[10px] uppercase font-black tracking-widest text-zinc-500">Número</label><input type="text" value={clientForm.number} onChange={e => setClientForm({...clientForm, number: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-white focus:border-[#ff5351] outline-none text-sm" placeholder="123"/></div>
-                <div className="space-y-2"><label className="text-[10px] uppercase font-black tracking-widest text-zinc-500">Bairro</label><input type="text" value={clientForm.neighborhood} onChange={e => setClientForm({...clientForm, neighborhood: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-white focus:border-[#ff5351] outline-none text-sm" placeholder="Centro"/></div>
-                <div className="space-y-2"><label className="text-[10px] uppercase font-black tracking-widest text-zinc-500">Cidade</label><input type="text" value={clientForm.city} onChange={e => setClientForm({...clientForm, city: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-white focus:border-[#ff5351] outline-none text-sm" placeholder="São Paulo"/></div>
-                <div className="space-y-2"><label className="text-[10px] uppercase font-black tracking-widest text-zinc-500">Estado</label><input type="text" value={clientForm.state} onChange={e => setClientForm({...clientForm, state: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-white focus:border-[#ff5351] outline-none text-sm" placeholder="SP"/></div>
-              </div>
-            </section>
-            <section className="bg-[#1f1f1f] border border-zinc-800/80 rounded-3xl p-6 shadow-xl mb-10">
-              <h3 className="text-lg font-bold text-white mb-5 flex items-center gap-2"><Briefcase className="w-5 h-5 text-[#ff5351]"/> Dados Comerciais</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                <div className="space-y-2"><label className="text-[10px] uppercase font-black tracking-widest text-zinc-500">Telefone / WhatsApp</label><input type="text" value={clientForm.phone} onChange={e => setClientForm({...clientForm, phone: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-white focus:border-[#ff5351] outline-none text-sm" placeholder="(00) 00000-0000"/></div>
-                <div className="space-y-2"><label className="text-[10px] uppercase font-black tracking-widest text-zinc-500">Plano Atual</label><div className="relative"><select value={clientForm.plan} onChange={e => setClientForm({...clientForm, plan: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-white focus:border-[#ff5351] outline-none text-sm appearance-none"><option value="Básico">Básico</option><option value="Pro">Pro</option><option value="Premium">Premium</option></select><ChevronDown className="w-4 h-4 text-zinc-500 absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none" /></div></div>
-              </div>
-            </section>
-          </div>
-        </form>
-      )}
-
-      {isTeamViewOpen && selectedClient && (
-        <div className="animate-in slide-in-from-bottom-8 duration-500">
-          <header className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8 border-b border-zinc-800 pb-6">
-            <div className="text-left">
-              <button onClick={() => setIsTeamViewOpen(false)} className="text-[#ff5351] hover:text-white transition-colors text-sm font-bold flex items-center gap-2 mb-4 uppercase tracking-widest">
-                <ChevronDown className="w-4 h-4 rotate-90" /> Voltar
-              </button>
-              <h1 className="text-4xl font-bold tracking-tight text-white mb-2 uppercase italic font-black">Equipe: {selectedClient.name}</h1>
-            </div>
-            <div className="flex gap-4">
-              <button onClick={() => setIsAddingTeamMember(!isAddingTeamMember)} className="flex items-center gap-2 px-8 py-3 rounded-xl bg-[#ff5351] text-white font-bold hover:opacity-90 transition-all text-xs uppercase tracking-widest shadow-xl shadow-[#ff5351]/20">
-                {isAddingTeamMember ? <X className="w-5 h-5" /> : <UserPlus className="w-5 h-5" />} {isAddingTeamMember ? 'Cancelar' : 'Adicionar Membro'}
-              </button>
-            </div>
-          </header>
-
-          {isAddingTeamMember && (
-            <form autoComplete="off" onSubmit={handleSaveTeamMember} className="space-y-6 mb-12 animate-in fade-in duration-300 text-left">
-              <section className="bg-[#1f1f1f] border border-zinc-800/80 rounded-3xl p-6 shadow-xl text-left">
-                <div className="flex items-center gap-3 mb-6"><Camera className="w-5 h-5 text-[#ff5351]" /><h3 className="text-lg font-bold text-white">Foto de Perfil</h3></div>
-                <div className="flex items-center gap-6 p-4 bg-zinc-900/50 border border-zinc-800/50 rounded-2xl">
-                  <div className="w-24 h-24 rounded-2xl bg-zinc-800 border border-zinc-700 flex flex-col items-center justify-center text-zinc-500 relative group overflow-hidden"><User className="w-8 h-8 mb-1 group-hover:scale-110 transition-transform" /><div className="absolute bottom-2 right-2 w-6 h-6 bg-[#ff5351] rounded-full flex items-center justify-center shadow-lg"><Upload className="w-3 h-3 text-white" /></div></div>
-                  <div><p className="text-sm font-bold text-white mb-1">Carregar uma foto</p><p className="text-xs text-zinc-500 mb-4">Recomendado: JPG, PNG ou WebP (Máx. 2MB)</p><button type="button" className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold uppercase tracking-wider rounded-lg transition-all border border-zinc-700">Selecionar Arquivo</button></div>
-                </div>
-              </section>
-              <section className="bg-[#1f1f1f] border border-zinc-800/80 rounded-3xl p-6 shadow-xl">
-                <div className="flex items-center gap-3 mb-6"><User className="w-5 h-5 text-[#ff5351]" /><h3 className="text-lg font-bold text-white">Informações Pessoais</h3></div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5">
-                  <div className="space-y-2"><label className="text-[10px] uppercase font-black tracking-widest text-zinc-500">NOME</label><input type="text" value={memberForm.firstName} onChange={e => setMemberForm({...memberForm, firstName: e.target.value})} placeholder="Ex: João" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3.5 text-white focus:border-[#ff5351] outline-none text-sm"/></div>
-                  <div className="space-y-2"><label className="text-[10px] uppercase font-black tracking-widest text-zinc-500">SOBRENOME</label><input type="text" value={memberForm.lastName} onChange={e => setMemberForm({...memberForm, lastName: e.target.value})} placeholder="Ex: Silva" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3.5 text-white focus:border-[#ff5351] outline-none text-sm"/></div>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5">
-                  <div className="space-y-2"><label className="text-[10px] uppercase font-black tracking-widest text-zinc-500">E-MAIL</label><div className="relative"><input type="email" value={memberForm.email} onChange={e => setMemberForm({...memberForm, email: e.target.value})} placeholder="joao.silva@empresa.com" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3.5 pl-11 text-white focus:border-[#ff5351] outline-none text-sm"/><Mail className="w-4 h-4 text-zinc-500 absolute left-4 top-1/2 -translate-y-1/2" /></div></div>
-                  <div className="space-y-2"><label className="text-[10px] uppercase font-black tracking-widest text-zinc-500">TELEFONE</label><div className="relative"><input type="text" value={memberForm.phone} onChange={e => setMemberForm({...memberForm, phone: e.target.value})} placeholder="(00) 00000-0000" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3.5 pl-11 text-white focus:border-[#ff5351] outline-none text-sm"/><Phone className="w-4 h-4 text-zinc-500 absolute left-4 top-1/2 -translate-y-1/2" /></div></div>
-                </div>
-              </section>
-              <section className="bg-[#1f1f1f] border border-zinc-800/80 rounded-3xl p-6 shadow-xl">
-                <div className="flex items-center gap-3 mb-6"><Briefcase className="w-5 h-5 text-[#ff5351]" /><h3 className="text-lg font-bold text-white">Informações Profissionais</h3></div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-6">
-                  <div className="space-y-2"><label className="text-[10px] uppercase font-black tracking-widest text-zinc-500">CARGO</label><input type="text" value={memberForm.jobTitle} onChange={e => setMemberForm({...memberForm, jobTitle: e.target.value})} placeholder="Ex: Desenvolvedor Senior" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3.5 text-white focus:border-[#ff5351] outline-none text-sm"/></div>
-                  <div className="space-y-2"><label className="text-[10px] uppercase font-black tracking-widest text-zinc-500">FUNÇÃO</label><div className="relative"><select value={memberForm.role} onChange={e => setMemberForm({...memberForm, role: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3.5 text-white focus:border-[#ff5351] outline-none text-sm appearance-none cursor-pointer"><option value="" disabled>Selecione uma função</option><option value="equipe">Equipe Cliente</option></select><ChevronDown className="w-4 h-4 text-zinc-500 absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none" /></div></div>
-                </div>
-                <div className="space-y-3"><label className="text-[10px] uppercase font-black tracking-widest text-zinc-500">NÍVEL DE ACESSO</label><div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    {[
-                      { id: 'aprovador', label: 'Aprovador Principal', desc: 'Aprovação final do conteúdo' },
-                      { id: 'validador', label: 'Validador', desc: 'Sugere correções no conteúdo' },
-                      { id: 'visualizador', label: 'Visualizador', desc: 'Apenas acompanha o projeto' }
-                    ].map(level => (
-                      <label key={level.id} className={cn("cursor-pointer border rounded-2xl p-4 flex items-start gap-3 transition-all", memberForm.accessLevel === level.id ? "bg-[#ff5351]/10 border-[#ff5351]" : "bg-zinc-900 border-zinc-800 hover:border-zinc-600")}><div className="pt-0.5"><div className={cn("w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all", memberForm.accessLevel === level.id ? "border-[#ff5351]" : "border-zinc-600")}>{memberForm.accessLevel === level.id && <div className="w-2 h-2 rounded-full bg-[#ff5351]" />}</div></div><div><input type="radio" name="accessLevel" value={level.id} checked={memberForm.accessLevel === level.id} onChange={e => setMemberForm({...memberForm, accessLevel: e.target.value})} className="hidden" /><p className="text-white font-bold text-sm">{level.label}</p><p className="text-zinc-500 text-xs mt-0.5">{level.desc}</p></div></label>
-                    ))}
-                  </div></div>
-              </section>
-              <div className="flex justify-end pt-2"><button type="submit" disabled={loading} className="px-10 py-4 bg-white text-black font-black uppercase tracking-widest text-xs rounded-xl hover:bg-[#ff5351] hover:text-white transition-all shadow-xl disabled:opacity-50 flex items-center gap-2"><UserPlus className="w-4 h-4" />{loading ? 'Aguarde...' : 'Salvar Novo Membro'}</button></div>
-            </form>
-          )}
-
-          <DataTable 
-            data={clientTeamMembers}
-            loading={loading}
-            emptyMessage="Nenhum membro vinculado a este cliente."
-            columns={[
-              { 
-                header: 'Membro', 
-                accessor: (member) => (
-                  <div className="text-left py-1">
-                    <div className="text-white font-bold text-base leading-tight mb-1">{member.name}</div>
-                    <div className="text-zinc-500 text-xs flex items-center gap-2"><Mail className="w-3.5 h-3.5" />{member.email}</div>
-                  </div>
-                )
-              },
-              {
-                header: 'Status',
-                accessor: (member) => (
-                  <span className={cn("inline-flex items-center gap-2 px-3 py-1 border rounded-full text-[10px] font-black uppercase tracking-widest", member.status === 'confirmed' ? "text-emerald-400 border-emerald-500/30 bg-emerald-500/10" : "text-amber-400 border-amber-500/30 bg-amber-500/10")}>
-                    <div className={cn("w-1.5 h-1.5 rounded-full shadow-[0_0_8px_rgba(var(--color),0.5)]", member.status === 'confirmed' ? "bg-emerald-500" : "bg-amber-500")} />
-                    {member.status === 'confirmed' ? '✓ OK, SENHA CRIADA' : '⏳ AGUARDANDO SENHA'}
-                  </span>
-                )
-              }
-            ]}
-            actions={(member) => (
-              <>
-                <button onClick={(e) => { e.stopPropagation(); sendEmailInvite(member.name, member.email); }} disabled={sendingEmail === member.email} className="p-2 bg-zinc-800 border border-zinc-700 hover:bg-[#ff5351] hover:border-transparent rounded-xl text-zinc-300 hover:text-white transition-all" title="Reenviar Convite"><Mail className="w-4 h-4" /></button>
-                <button onClick={(e) => { e.stopPropagation(); handleDeleteTeamMember(member.id!, member.email); }} className="p-2 bg-zinc-800/50 hover:bg-red-500/10 rounded-xl text-zinc-600 hover:text-red-500 transition-all" title="Excluir Membro"><Trash2 className="w-4 h-4" /></button>
-              </>
-            )}
-          />
-        </div>
-      )}
-
-      {!isClientFormOpen && !isTeamViewOpen && (
-        <div className="space-y-4 text-left">
-          <div className="relative animate-in fade-in duration-300">
-            <Search className="w-5 h-5 text-zinc-500 absolute left-5 top-1/2 -translate-y-1/2" />
-            <input type="text" placeholder="Buscar cliente por nome ou e-mail..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full bg-[#1a1a1a] border border-zinc-800 rounded-2xl pl-13 pr-5 py-4 text-white focus:border-[#ff5351] outline-none transition-all placeholder:text-zinc-600 shadow-xl"/>
-          </div>
-
-          <DataTable 
-            data={filteredClients}
-            loading={loading}
-            onRowClick={(client) => { if (client.id) navigate(`/clients/${client.id}`); }}
-            emptyMessage={searchTerm ? 'Nenhum cliente encontrado na busca.' : 'Nenhum cliente cadastrado.'}
-            columns={[
-              {
-                header: 'Cliente',
-                accessor: (client) => (
-                  <div 
-                    onClick={(e) => { e.stopPropagation(); navigate(`/clients/${client.id}`); }}
-                    className="text-left py-1 cursor-pointer group/name"
-                  >
-                    <div className="text-white font-bold text-base leading-tight mb-1 uppercase italic group-hover/name:text-[#ff5351] transition-colors">{client.name}</div>
-                    <div className="text-zinc-500 text-xs flex items-center gap-2 font-medium tracking-tight"><Mail className="w-3.5 h-3.5" />{client.email}</div>
-                  </div>
-                )
-              },
-              {
-                header: 'Status',
-                accessor: (client) => (
-                  <span className={cn("inline-flex items-center gap-2 px-3 py-1 border rounded-full text-[10px] font-black uppercase tracking-widest", client.status === 'confirmed' ? "text-emerald-400 border-emerald-500/30 bg-emerald-500/10" : "text-amber-400 border-amber-500/30 bg-amber-500/10")}>
-                    <div className={cn("w-1.5 h-1.5 rounded-full shadow-[0_0_8px_rgba(var(--color),0.5)]", client.status === 'confirmed' ? "bg-emerald-500" : "bg-amber-500")} />
-                    {client.status === 'confirmed' ? '✓ OK, SENHA CRIADA' : '⏳ AGUARDANDO SENHA'}
-                  </span>
-                )
-              },
-              {
-                header: 'Membros',
-                align: 'center',
-                accessor: (client) => {
-                  const count = getClientTeamCount(client.id!);
-                  return count > 0 ? (
-                    <div className="w-7 h-7 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center text-white text-[10px] font-bold shadow-lg">{count}</div>
-                  ) : <span className="text-zinc-700 text-xs font-medium">-</span>;
-                }
-              }
-            ]}
-            actions={(client) => (
-              <>
-                <button onClick={(e) => { e.stopPropagation(); handleOpenTeamView(client); }} className="flex items-center gap-2 px-3 py-2 bg-zinc-800 border border-zinc-700 hover:bg-zinc-700 hover:border-transparent rounded-xl text-zinc-300 hover:text-white transition-all text-[10px] font-black uppercase tracking-widest" title="Gerenciar Equipe do Cliente"><Users className="w-4 h-4 text-[#ff5351]" />Equipe</button>
-                <button onClick={(e) => { e.stopPropagation(); handleOpenEditClient(client); }} className="p-2 bg-zinc-800 border border-zinc-700 hover:bg-zinc-700 rounded-xl text-zinc-400 hover:text-white transition-all" title="Editar Cadastro"><Edit2 className="w-4 h-4" /></button>
-                <button onClick={(e) => { e.stopPropagation(); sendEmailInvite(client.name, client.email); }} disabled={sendingEmail === client.email} className="p-2 bg-zinc-800 border border-zinc-700 hover:bg-[#ff5351] hover:border-transparent rounded-xl text-zinc-300 hover:text-white transition-all disabled:opacity-50"><Mail className="w-4 h-4" /></button>
-                <button onClick={(e) => { e.stopPropagation(); 
-                  const inviteLink = `${window.location.origin}/register?email=${encodeURIComponent(client.email)}`;
-                  navigator.clipboard.writeText(`Seu conteúdo foi selecionado!\nAcesse pelo link abaixo e crie sua senha:\n\n${inviteLink}`);
-                  toast.success('Mensagem de convite copiada!');
-                }} className="p-2 bg-zinc-800 border border-zinc-700 hover:bg-[#25D366] hover:border-transparent rounded-xl text-zinc-300 hover:text-white transition-all"><ExternalLink className="w-4 h-4" /></button>
-                <button onClick={(e) => { e.stopPropagation(); handleDeleteClient(client.id!, client.email); }} className="p-2 bg-zinc-800/50 hover:bg-red-500/10 rounded-xl text-zinc-600 hover:text-red-500 transition-all"><Trash2 className="w-4 h-4" /></button>
-              </>
-            )}
-          />
-        </div>
-      )}
-    </div>
-  );
-}
+    } catch (error) {\n      console.error('Erro ao carregar dados:', error);\n      toast.error('Erro ao atualizar lista de dados.');\n    } finally {\n      setLoading(false);\n    }\n  };\n\n  const handleOpenAddClient = () => {\n    setClientForm({\n      id: '', name: '', email: '', phone: '', document: '', \n      zipCode: '', address: '', number: '', complement: '', neighborhood: '', city: '', state: '',\n      commercialName: '', website: '', responsibleContact: '', logoUrl: '', status: 'pending'\n    });\n    setIsEditingClient(false);\n    setIsClientFormOpen(true);\n  };\n\n  const handleOpenEditClient = (client: Client) => {\n    setClientForm({\n      id: client.id || '',\n      name: client.name || '',\n      email: client.email || '',\n      phone: client.phone || '',\n      document: (client as any).document || '',\n      zipCode: (client as any).zipCode || '',\n      address: (client as any).address || '',\n      number: (client as any).number || '',\n      complement: (client as any).complement || '',\n      neighborhood: (client as any).neighborhood || '',\n      city: (client as any).city || '',\n      state: (client as any).state || '',\n      commercialName: (client as any).commercialName || '',\n      website: (client as any).website || '',\n      responsibleContact: (client as any).responsibleContact || '',\n      logoUrl: (client as any).logoUrl || '',\n      status: client.status || 'pending'\n    });\n    setIsEditingClient(true);\n    setIsClientFormOpen(true);\n  };\n\n  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {\n    const file = e.target.files?.[0];\n    if (!file) return;\n\n    if (!file.type.includes('image')) {\n      toast.error('Selecione uma imagem válida (JPG/PNG)');\n      return;\n    }\n\n    try {\n      setLoading(true);\n      // Gerar ID temporário se estiver criando novo\n      const uploadId = clientForm.id || `temp_${Date.now()}`;\n      const storageRef = ref(storage, `clientes/${uploadId}/logo`);\n      \n      await uploadBytes(storageRef, file);\n      const url = await getDownloadURL(storageRef);\n      \n      setClientForm(prev => ({ ...prev, logoUrl: url }));\n      toast.success('Logo carregada!');\n    } catch (error) {\n      toast.error('Erro ao fazer upload da logo');\n    } finally {\n      setLoading(false);\n    }\n  };\n\n  const handleSaveClient = async (e: React.FormEvent) => {\n    e.preventDefault();\n    if (!clientForm.name || !clientForm.email) {\n      toast.error('Preencha nome e e-mail');\n      return;\n    }\n    try {\n      setLoading(true);\n      const normalizedClient = {\n        ...clientForm,\n        email: clientForm.email.toLowerCase().trim(),\n        role: 'cliente'\n      };\n\n      if (isEditingClient && clientForm.id) {\n        await (clientService as any).updateClient(clientForm.id, normalizedClient);\n        toast.success('Cliente atualizado com sucesso!');\n      } else {\n        await clientService.createClient(normalizedClient);\n        toast.success('Cliente adicionado com sucesso!');\n      }\n      setIsClientFormOpen(false);\n      loadAllData();\n    } catch (error) {\n      toast.error('Erro ao salvar cliente');\n    } finally {\n      setLoading(false);\n    }\n  };\n\n  const handleDeleteClient = async (id: string, email: string) => {\n    if (window.confirm('Excluir este cliente permanentemente? Isso removerá o acesso dele.')) {\n      try {\n        setLoading(true);\n        try {\n          await clientService.deleteClientAuth(email);\n        } catch (e: any) {\n          if (!e.message?.includes('not found')) toast.error('Apenas o registro local foi removido.');\n        }\n        await clientService.deleteClient(id);\n        toast.success('Cliente removido com sucesso');\n        loadAllData();\n      } catch (error) {\n        toast.error('Erro ao remover cliente');\n      } finally {\n        setLoading(false);\n      }\n    }\n  };\n\n  const handleOpenTeamView = (client: Client) => {\n    setSelectedClient(client);\n    setIsAddingTeamMember(false);\n    setIsTeamViewOpen(true);\n  };\n\n  const handleSaveTeamMember = async (e: React.FormEvent) => {\n    e.preventDefault();\n    if (!memberForm.firstName || !memberForm.email || !memberForm.role) {\n      toast.error('Preencha os campos obrigatórios (Nome, E-mail e Função)');\n      return;\n    }\n\n    if (!selectedClient?.id) {\n      toast.error('ID do cliente não encontrado. Tente recarregar a página.');\n      return;\n    }\n\n    try {\n      setLoading(true);\n      const fullName = `${memberForm.firstName} ${memberForm.lastName}`.trim().toUpperCase();\n      const normalizedMember = {\n        name: fullName,\n        email: memberForm.email.toLowerCase().trim(),\n        phone: memberForm.phone,\n        role: memberForm.role,\n        jobTitle: memberForm.jobTitle.toUpperCase(),\n        accessLevel: memberForm.accessLevel,\n        clienteId: selectedClient.id,\n        status: 'pending'\n      };\n      \n      await teamService.createTeamMember(normalizedMember as any);\n      await emailService.sendInvite(normalizedMember.email, normalizedMember.name, `${window.location.origin}/register?email=${encodeURIComponent(normalizedMember.email)}`);\n\n      toast.success('Membro adicionado e convite enviado!');\n      setMemberForm({ \n        firstName: '', lastName: '', email: '', phone: '', \n        password: '', jobTitle: '', role: 'equipe', accessLevel: 'validador', photoUrl: '' \n      });\n      setIsAddingTeamMember(false);\n      await loadAllData();\n    } catch (error) {\n      console.error('Erro ao cadastrar membro da equipe:', error);\n      toast.error('Erro ao adicionar membro da equipe.');\n    } finally {\n      setLoading(false);\n    }\n  };\n\n  const handleDeleteTeamMember = async (id: string, email: string) => {\n    if (window.confirm('Excluir este membro da equipe permanentemente?')) {\n      try {\n        setLoading(true);\n        try {\n          await teamService.deleteTeamMemberAuth(email);\n        } catch (e: any) {\n          if (!e.message?.includes('not found')) toast.error('Apenas registro local removido.');\n        }\n        await teamService.deleteTeamMember(id);\n        toast.success('Membro removido com sucesso');\n        loadAllData();\n      } catch (error) {\n        toast.error('Erro ao remover membro');\n      } finally {\n        setLoading(false);\n      }\n    }\n  };\n\n  const sendEmailInvite = async (name: string, email: string) => {\n    try {\n      setSendingEmail(email);\n      await emailService.sendInvite(email, name, `${window.location.origin}/register?email=${encodeURIComponent(email)}`);\n      toast.success('Convite enviado!');\n    } catch (error) {} finally {\n      setSendingEmail(null);\n    }\n  };\n\n  const getClientTeamCount = (clientId: string) => {\n    return allTeamMembers.filter(m => (m as any).clienteId === clientId).length;\n  };\n  \n  const clientTeamMembers = selectedClient \n    ? allTeamMembers.filter(m => (m as any).clienteId === selectedClient.id) \n    : [];\n\n  const filteredClients = clients.filter(c => \n    c.name?.toLowerCase().includes(searchTerm.toLowerCase()) || \n    c.email?.toLowerCase().includes(searchTerm.toLowerCase())\n  );\n\n  return (\n    <div className=\"space-y-12 pb-20 text-left\">\n      {!isClientFormOpen && !isTeamViewOpen && (\n        <header className=\"flex flex-col md:flex-row md:items-end justify-between gap-6\">\n          <div className=\"text-left\">\n            <h1 className=\"text-5xl font-bold tracking-tight text-white mb-2 uppercase italic font-black\">Gestão de Clientes</h1>\n            <p className=\"text-zinc-500 text-lg\">Gerencie o cadastro e os planejamentos dos seus clientes.</p>\n          </div>\n          <div className=\"flex gap-4\">\n            <button onClick={handleOpenAddClient} className=\"flex items-center gap-2 px-8 py-3.5 rounded-xl bg-[#ff5351] text-white font-bold uppercase tracking-widest hover:opacity-90 transition-all shadow-lg text-xs\">\n              <UserPlus className=\"w-5 h-5\" /> Adicionar Cliente\n            </button>\n          </div>\n        </header>\n      )}\n\n      {isClientFormOpen && (\n        <form autoComplete=\"off\" onSubmit={handleSaveClient} className=\"animate-in slide-in-from-right-8 duration-500\">\n          <header className=\"flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8\">\n            <div className=\"text-left\">\n              <button type=\"button\" onClick={() => setIsClientFormOpen(false)} className=\"text-[#ff5351] hover:text-white transition-colors text-sm font-bold flex items-center gap-2 mb-4 uppercase tracking-widest\">\n                <ChevronDown className=\"w-4 h-4 rotate-90\" /> Voltar para Clientes\n              </button>\n              <h1 className=\"text-4xl font-bold tracking-tight text-white flex items-center gap-4\">\n                {isEditingClient ? <Edit2 className=\"w-8 h-8 text-[#ff5351]\" /> : <Building className=\"w-8 h-8 text-[#ff5351]\" />}\n                {isEditingClient ? 'Editar Cliente' : 'Novo Cliente'}\n              </h1>\n            </div>\n            <div className=\"flex gap-4\">\n              <button type=\"button\" onClick={() => setIsClientFormOpen(false)} className=\"px-8 py-3 rounded-xl bg-zinc-900 border border-zinc-800 text-white font-bold hover:bg-zinc-800 transition-all text-xs uppercase tracking-widest\">Cancelar</button>\n              <button type=\"submit\" disabled={loading} className=\"px-8 py-3 rounded-xl bg-[#ff5351] text-white font-bold hover:opacity-90 transition-all text-xs uppercase tracking-widest shadow-xl shadow-[#ff5351]/20 disabled:opacity-50\">\n                {loading ? 'Salvando...' : 'Salvar Cadastro'}\n              </button>\n            </div>\n          </header>\n\n          <div className=\"space-y-6\">\n            <section className=\"bg-[#1f1f1f] border border-zinc-800/80 rounded-3xl p-6 shadow-xl\">\n              <h3 className=\"text-lg font-bold text-white mb-8 flex items-center gap-2\"><User className=\"w-5 h-5 text-[#ff5351]\"/> Informações Principais</h3>\n              \n              <div className=\"flex flex-col md:flex-row gap-8\">\n                {/* Área da Logo */}\n                <div className=\"space-y-2\">\n                  <label className=\"text-[10px] uppercase font-black tracking-widest text-zinc-500 block ml-1\">Logo do Cliente</label>\n                  <button \n                    type=\"button\"\n                    onClick={() => fileInputRef.current?.click()}\n                    className=\"w-[150px] h-[150px] rounded-2xl border-2 border-dashed border-zinc-800 bg-zinc-900/50 hover:bg-zinc-900 hover:border-[#ff5351]/50 transition-all flex flex-col items-center justify-center gap-2 group overflow-hidden relative\"\n                  >\n                    {clientForm.logoUrl ? (\n                      <>\n                        <img src={clientForm.logoUrl} alt=\"Logo\" className=\"w-full h-full object-cover\" />\n                        <div className=\"absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center\">\n                          <ImageIcon className=\"w-6 h-6 text-white\" />\n                        </div>\n                      </>\n                    ) : (\n                      <>\n                        <Upload className=\"w-6 h-6 text-zinc-600 group-hover:text-[#ff5351] transition-colors\" />\n                        <span className=\"text-[9px] font-black uppercase text-zinc-500 tracking-tighter\">300x300px</span>\n                      </>\n                    )}\n                  </button>\n                  <input \n                    type=\"file\" \n                    ref={fileInputRef} \n                    className=\"hidden\" \n                    accept=\"image/*\" \n                    onChange={handleLogoUpload} \n                  />\n                </div>\n\n                {/* Campos de Texto */}\n                <div className=\"flex-1 space-y-5\">\n                  <div className=\"grid grid-cols-1 md:grid-cols-2 gap-5\">\n                    <div className=\"space-y-2\">\n                      <label className=\"text-[10px] uppercase font-black tracking-widest text-zinc-500\">Nome da Empresa</label>\n                      <input \n                        type=\"text\" \n                        value={clientForm.name} \n                        onChange={e => setClientForm({...clientForm, name: e.target.value.toUpperCase()})} \n                        className=\"w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-4 text-white focus:border-[#ff5351] outline-none text-sm\"\n                        placeholder=\"NOME COMERCIAL\"\n                      />\n                    </div>\n                    <div className=\"space-y-2\">\n                      <label className=\"text-[10px] uppercase font-black tracking-widest text-zinc-500\">E-MAIL PRINCIPAL</label>\n                      <input \n                        type=\"email\" \n                        value={clientForm.email} \n                        onChange={e => setClientForm({...clientForm, email: e.target.value.toLowerCase().trim()})} \n                        disabled={isEditingClient} \n                        className=\"w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-4 text-white focus:border-[#ff5351] outline-none text-sm disabled:opacity-50\"\n                        placeholder=\"contato@empresa.com\"\n                      />\n                    </div>\n                  </div>\n\n                  <div className=\"grid grid-cols-1 md:grid-cols-2 gap-5\">\n                    <div className=\"space-y-2\">\n                      <label className=\"text-[10px] uppercase font-black tracking-widest text-zinc-500\">Razão Social / CNPJ</label>\n                      <input \n                        type=\"text\" \n                        value={clientForm.document} \n                        onChange={e => setClientForm({...clientForm, document: e.target.value.toUpperCase()})} \n                        className=\"w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-4 text-white focus:border-[#ff5351] outline-none text-sm\"\n                        placeholder=\"NOME LEGAL OU CNPJ\"\n                      />\n                    </div>\n                    <div className=\"space-y-2\">\n                      <label className=\"text-[10px] uppercase font-black tracking-widest text-zinc-500\">Site / Link</label>\n                      <div className=\"relative\">\n                        <input \n                          type=\"text\" \n                          value={clientForm.website} \n                          onChange={e => setClientForm({...clientForm, website: e.target.value.toLowerCase().trim()})} \n                          className=\"w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-4 pl-11 text-white focus:border-[#ff5351] outline-none text-sm\"\n                          placeholder=\"www.empresa.com.br\"\n                        />\n                        <Globe className=\"w-4 h-4 text-zinc-700 absolute left-4 top-1/2 -translate-y-1/2\" />\n                      </div>\n                    </div>\n                  </div>\n                </div>\n              </div>\n            </section>\n\n            <section className=\"bg-[#1f1f1f] border border-zinc-800/80 rounded-3xl p-6 shadow-xl\">\n              <h3 className=\"text-lg font-bold text-white mb-5 flex items-center gap-2\"><MapPin className=\"w-5 h-5 text-[#ff5351]\"/> Endereço</h3>\n              <div className=\"grid grid-cols-1 md:grid-cols-4 gap-5 mb-4\">\n                <div className=\"space-y-2\"><label className=\"text-[10px] uppercase font-black tracking-widest text-zinc-500\">CEP</label><input type=\"text\" value={clientForm.zipCode} onChange={e => setClientForm({...clientForm, zipCode: e.target.value})} className=\"w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-white focus:border-[#ff5351] outline-none text-sm\" placeholder=\"00000-000\"/></div>\n                <div className=\"space-y-2 md:col-span-3\"><label className=\"text-[10px] uppercase font-black tracking-widest text-zinc-500\">Rua / Logradouro</label><input type=\"text\" value={clientForm.address} onChange={e => setClientForm({...clientForm, address: e.target.value.toUpperCase()})} className=\"w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-white focus:border-[#ff5351] outline-none text-sm\" placeholder=\"AV. PRINCIPAL\"/></div>\n              </div>\n              <div className=\"grid grid-cols-1 md:grid-cols-4 gap-5\">\n                <div className=\"space-y-2\"><label className=\"text-[10px] uppercase font-black tracking-widest text-zinc-500\">Número</label><input type=\"text\" value={clientForm.number} onChange={e => setClientForm({...clientForm, number: e.target.value.toUpperCase()})} className=\"w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-white focus:border-[#ff5351] outline-none text-sm\" placeholder=\"123\"/></div>\n                <div className=\"space-y-2\"><label className=\"text-[10px] uppercase font-black tracking-widest text-zinc-500\">Bairro</label><input type=\"text\" value={clientForm.neighborhood} onChange={e => setClientForm({...clientForm, neighborhood: e.target.value.toUpperCase()})} className=\"w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-white focus:border-[#ff5351] outline-none text-sm\" placeholder=\"CENTRO\"/></div>\n                <div className=\"space-y-2\"><label className=\"text-[10px] uppercase font-black tracking-widest text-zinc-500\">Cidade</label><input type=\"text\" value={clientForm.city} onChange={e => setClientForm({...clientForm, city: e.target.value.toUpperCase()})} className=\"w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-white focus:border-[#ff5351] outline-none text-sm\" placeholder=\"SÃO PAULO\"/></div>\n                <div className=\"space-y-2\"><label className=\"text-[10px] uppercase font-black tracking-widest text-zinc-500\">Estado</label><input type=\"text\" value={clientForm.state} onChange={e => setClientForm({...clientForm, state: e.target.value.toUpperCase()})} className=\"w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-white focus:border-[#ff5351] outline-none text-sm\" placeholder=\"SP\"/></div>\n              </div>\n            </section>\n\n            <section className=\"bg-[#1f1f1f] border border-zinc-800/80 rounded-3xl p-6 shadow-xl mb-10\">\n              <h3 className=\"text-lg font-bold text-white mb-5 flex items-center gap-2\"><Briefcase className=\"w-5 h-5 text-[#ff5351]\"/> Dados Comerciais</h3>\n              <div className=\"grid grid-cols-1 md:grid-cols-2 gap-5\">\n                <div className=\"space-y-2\"><label className=\"text-[10px] uppercase font-black tracking-widest text-zinc-500\">Telefone / WhatsApp</label><div className=\"relative\"><input type=\"text\" value={clientForm.phone} onChange={e => setClientForm({...clientForm, phone: e.target.value})} className=\"w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-4 pl-11 text-white text-sm\" placeholder=\"(00) 00000-0000\"/><Phone className=\"w-4 h-4 text-zinc-700 absolute left-4 top-1/2 -translate-y-1/2\" /></div></div>\n                <div className=\"space-y-2\"><label className=\"text-[10px] uppercase font-black tracking-widest text-zinc-500\">Responsável de Contato</label><div className=\"relative\"><input type=\"text\" value={clientForm.responsibleContact} onChange={e => setClientForm({...clientForm, responsibleContact: e.target.value.toUpperCase()})} className=\"w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-4 pl-11 text-white focus:border-[#ff5351] outline-none text-sm\" placeholder=\"NOME DO RESPONSÁVEL LEGAL\"/><User className=\"w-4 h-4 text-zinc-700 absolute left-4 top-1/2 -translate-y-1/2\" /></div></div>\n              </div>\n            </section>\n          </div>\n        </form>\n      )}\n\n      {isTeamViewOpen && selectedClient && (\n        <div className=\"animate-in slide-in-from-bottom-8 duration-500\">\n          <header className=\"flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8 border-b border-zinc-800 pb-6\">\n            <div className=\"text-left\">\n              <button onClick={() => setIsTeamViewOpen(false)} className=\"text-[#ff5351] hover:text-white transition-colors text-sm font-bold flex items-center gap-2 mb-4 uppercase tracking-widest\">\n                <ChevronDown className=\"w-4 h-4 rotate-90\" /> Voltar\n              </button>\n              <h1 className=\"text-4xl font-bold tracking-tight text-white mb-2 uppercase italic font-black\">Equipe: {selectedClient.name}</h1>\n            </div>\n            <div className=\"flex gap-4\">\n              <button onClick={() => setIsAddingTeamMember(!isAddingTeamMember)} className=\"flex items-center gap-2 px-8 py-3 rounded-xl bg-[#ff5351] text-white font-bold hover:opacity-90 transition-all text-xs uppercase tracking-widest shadow-xl shadow-[#ff5351]/20\">\n                {isAddingTeamMember ? <X className=\"w-5 h-5\" /> : <UserPlus className=\"w-5 h-5\" />} {isAddingTeamMember ? 'Cancelar' : 'Adicionar Membro'}\n              </button>\n            </div>\n          </header>\n\n          {isAddingTeamMember && (\n            <form autoComplete=\"off\" onSubmit={handleSaveTeamMember} className=\"space-y-6 mb-12 animate-in fade-in duration-300 text-left\">\n              <section className=\"bg-[#1f1f1f] border border-zinc-800/80 rounded-3xl p-6 shadow-xl text-left\">\n                <div className=\"flex items-center gap-3 mb-6\"><Camera className=\"w-5 h-5 text-[#ff5351]\" /><h3 className=\"text-lg font-bold text-white\">Foto de Perfil</h3></div>\n                <div className=\"flex items-center gap-6 p-4 bg-zinc-900/50 border border-zinc-800/50 rounded-2xl\">\n                  <div className=\"w-24 h-24 rounded-2xl bg-zinc-800 border border-zinc-700 flex flex-col items-center justify-center text-zinc-500 relative group overflow-hidden\"><User className=\"w-8 h-8 mb-1 group-hover:scale-110 transition-transform\" /><div className=\"absolute bottom-2 right-2 w-6 h-6 bg-[#ff5351] rounded-full flex items-center justify-center shadow-lg\"><Upload className=\"w-3 h-3 text-white\" /></div></div>\n                  <div><p className=\"text-sm font-bold text-white mb-1\">Carregar uma foto</p><p className=\"text-xs text-zinc-500 mb-4\">Recomendado: JPG, PNG ou WebP (Máx. 2MB)</p><button type=\"button\" className=\"px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold uppercase tracking-wider rounded-lg transition-all border border-zinc-700\">Selecionar Arquivo</button></div>\n                </div>\n              </section>\n              <section className=\"bg-[#1f1f1f] border border-zinc-800/80 rounded-3xl p-6 shadow-xl\">\n                <div className=\"flex items-center gap-3 mb-6\"><User className=\"w-5 h-5 text-[#ff5351]\" /><h3 className=\"text-lg font-bold text-white\">Informações Pessoais</h3></div>\n                <div className=\"grid grid-cols-1 md:grid-cols-2 gap-5 mb-5\">\n                  <div className=\"space-y-2\"><label className=\"text-[10px] uppercase font-black tracking-widest text-zinc-500\">NOME</label><input type=\"text\" value={memberForm.firstName} onChange={e => setMemberForm({...memberForm, firstName: e.target.value.toUpperCase()})} placeholder=\"Ex: JOÃO\" className=\"w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3.5 text-white focus:border-[#ff5351] outline-none text-sm\"/></div>\n                  <div className=\"space-y-2\"><label className=\"text-[10px] uppercase font-black tracking-widest text-zinc-500\">SOBRENOME</label><input type=\"text\" value={memberForm.lastName} onChange={e => setMemberForm({...memberForm, lastName: e.target.value.toUpperCase()})} placeholder=\"Ex: SILVA\" className=\"w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3.5 text-white focus:border-[#ff5351] outline-none text-sm\"/></div>\n                </div>\n                <div className=\"grid grid-cols-1 md:grid-cols-2 gap-5 mb-5\">\n                  <div className=\"space-y-2\"><label className=\"text-[10px] uppercase font-black tracking-widest text-zinc-500\">E-MAIL</label><div className=\"relative\"><input type=\"email\" value={memberForm.email} onChange={e => setMemberForm({...memberForm, email: e.target.value.toLowerCase().trim()})} placeholder=\"joao.silva@empresa.com\" className=\"w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3.5 pl-11 text-white focus:border-[#ff5351] outline-none text-sm\"/><Mail className=\"w-4 h-4 text-zinc-500 absolute left-4 top-1/2 -translate-y-1/2\" /></div></div>\n                  <div className=\"space-y-2\"><label className=\"text-[10px] uppercase font-black tracking-widest text-zinc-500\">TELEFONE</label><div className=\"relative\"><input type=\"text\" value={memberForm.phone} onChange={e => setMemberForm({...memberForm, phone: e.target.value})} placeholder=\"(00) 00000-0000\" className=\"w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3.5 pl-11 text-white focus:border-[#ff5351] outline-none text-sm\"/><Phone className=\"w-4 h-4 text-zinc-500 absolute left-4 top-1/2 -translate-y-1/2\" /></div></div>\n                </div>\n              </section>\n              <section className=\"bg-[#1f1f1f] border border-zinc-800/80 rounded-3xl p-6 shadow-xl\">\n                <div className=\"flex items-center gap-3 mb-6\"><Briefcase className=\"w-5 h-5 text-[#ff5351]\" /><h3 className=\"text-lg font-bold text-white\">Informações Profissionais</h3></div>\n                <div className=\"grid grid-cols-1 md:grid-cols-2 gap-5 mb-6\">\n                  <div className=\"space-y-2\"><label className=\"text-[10px] uppercase font-black tracking-widest text-zinc-500\">CARGO</label><input type=\"text\" value={memberForm.jobTitle} onChange={e => setMemberForm({...memberForm, jobTitle: e.target.value.toUpperCase()})} placeholder=\"Ex: DESENVOLVEDOR SENIOR\" className=\"w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3.5 text-white focus:border-[#ff5351] outline-none text-sm\"/></div>\n                  <div className=\"space-y-2\"><label className=\"text-[10px] uppercase font-black tracking-widest text-zinc-500\">FUNÇÃO</label><div className=\"relative\"><select value={memberForm.role} onChange={e => setMemberForm({...memberForm, role: e.target.value})} className=\"w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3.5 text-white focus:border-[#ff5351] outline-none text-sm appearance-none cursor-pointer\"><option value=\"\" disabled>Selecione uma função</option><option value=\"equipe\">Equipe Cliente</option></select><ChevronDown className=\"w-4 h-4 text-zinc-700 absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none\" /></div></div>\n                </div>\n                <div className=\"space-y-3\"><label className=\"text-[10px] uppercase font-black tracking-widest text-zinc-500\">NÍVEL DE ACESSO</label><div className=\"grid grid-cols-1 md:grid-cols-3 gap-4\">\n                    {[\n                      { id: 'aprovador', label: 'Aprovador Principal', desc: 'Aprovação final do conteúdo' },\n                      { id: 'validador', label: 'Validador', desc: 'Sugere correções no conteúdo' },\n                      { id: 'visualizador', label: 'Visualizador', desc: 'Apenas acompanha o projeto' }\n                    ].map(level => (\n                      <label key={level.id} className={cn(\"cursor-pointer border rounded-2xl p-4 flex items-start gap-3 transition-all\", memberForm.accessLevel === level.id ? \"bg-[#ff5351]/10 border-[#ff5351]\" : \"bg-zinc-900 border-zinc-800 hover:border-zinc-600\")}><div className=\"pt-0.5\"><div className={cn(\"w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all\", memberForm.accessLevel === level.id ? \"border-[#ff5351]\" : \"border-zinc-600\")}>{memberForm.accessLevel === level.id && <div className=\"w-2 h-2 rounded-full bg-[#ff5351]\" />}</div></div><div><input type=\"radio\" name=\"accessLevel\" value={level.id} checked={memberForm.accessLevel === level.id} onChange={e => setMemberForm({...memberForm, accessLevel: e.target.value})} className=\"hidden\" /><p className=\"text-white font-bold text-sm\">{level.label}</p><p className=\"text-zinc-500 text-xs mt-0.5\">{level.desc}</p></div></label>\n                    ))}\n                  </div></div>\n              </section>\n              <div className=\"flex justify-end pt-2\"><button type=\"submit\" disabled={loading} className=\"px-10 py-4 bg-white text-black font-black uppercase tracking-widest text-xs rounded-xl hover:bg-[#ff5351] hover:text-white transition-all shadow-xl disabled:opacity-50 flex items-center gap-2\"><UserPlus className=\"w-4 h-4\" />{loading ? 'Aguarde...' : 'Salvar Novo Membro'}</button></div>\n            </form>\n          )}\n\n          <DataTable \n            data={clientTeamMembers}\n            loading={loading}\n            emptyMessage=\"Nenhum membro vinculado a este cliente.\"\n            columns={[\n              { \n                header: 'Membro', \n                accessor: (member) => (\n                  <div className=\"text-left py-1\">\n                    <div className=\"text-white font-bold text-base leading-tight mb-1\">{member.name}</div>\n                    <div className=\"text-zinc-500 text-xs flex items-center gap-2\"><Mail className=\"w-3.5 h-3.5\" />{member.email}</div>\n                  </div>\n                )\n              },\n              {\n                header: 'Status',\n                accessor: (member) => (\n                  <span className={cn(\"inline-flex items-center gap-2 px-3 py-1 border rounded-full text-[10px] font-black uppercase tracking-widest\", member.status === 'confirmed' ? \"text-emerald-400 border-emerald-500/30 bg-emerald-500/10\" : \"text-amber-400 border-amber-500/30 bg-amber-500/10\")}>\n                    <div className={cn(\"w-1.5 h-1.5 rounded-full shadow-[0_0_8px_rgba(var(--color),0.5)]\", member.status === 'confirmed' ? \"bg-emerald-500\" : \"bg-amber-500\")} />\n                    {member.status === 'confirmed' ? '✓ OK, SENHA CRIADA' : '⏳ AGUARDANDO SENHA'}\n                  </span>\n                )\n              }\n            ]}\n            actions={(member) => (\n              <>\n                <button onClick={(e) => { e.stopPropagation(); sendEmailInvite(member.name, member.email); }} disabled={sendingEmail === member.email} className=\"p-2 bg-zinc-800 border border-zinc-700 hover:bg-[#ff5351] hover:border-transparent rounded-xl text-zinc-300 hover:text-white transition-all\" title=\"Reenviar Convite\"><Mail className=\"w-4 h-4\" /></button>\n                <button onClick={(e) => { e.stopPropagation(); handleDeleteTeamMember(member.id!, member.email); }} className=\"p-2 bg-zinc-800/50 hover:bg-red-500/10 rounded-xl text-zinc-600 hover:text-red-500 transition-all\" title=\"Excluir Membro\"><Trash2 className=\"w-4 h-4\" /></button>\n              </>\n            )}\n          />\n        </div>\n      )}\n\n      {!isClientFormOpen && !isTeamViewOpen && (\n        <div className=\"space-y-4 text-left\">\n          <div className=\"relative animate-in fade-in duration-300\">\n            <Search className=\"w-5 h-5 text-zinc-500 absolute left-5 top-1/2 -translate-y-1/2\" />\n            <input type=\"text\" placeholder=\"Buscar cliente por nome ou e-mail...\" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className=\"w-full bg-[#1a1a1a] border border-zinc-800 rounded-2xl pl-13 pr-5 py-4 text-white focus:border-[#ff5351] outline-none transition-all placeholder:text-zinc-600 shadow-xl\"/>\n          </div>\n\n          <DataTable \n            data={filteredClients}\n            loading={loading}\n            onRowClick={(client) => { if (client.id) navigate(`/clients/${client.id}`); }}\n            emptyMessage={searchTerm ? 'Nenhum cliente encontrado na busca.' : 'Nenhum cliente cadastrado.'}\n            columns={[\n              {\n                header: 'Cliente',\n                accessor: (client) => (\n                  <div \n                    onClick={(e) => { e.stopPropagation(); if(client.id) navigate(`/clients/${client.id}`); }}\n                    className=\"text-left py-1 cursor-pointer group/name flex items-center gap-3\"\n                  >\n                    <div className=\"w-8 h-8 rounded-lg bg-zinc-800 overflow-hidden border border-zinc-700 shrink-0 flex items-center justify-center\">\n                      {client.logoUrl ? (\n                        <img src={client.logoUrl} alt=\"\" className=\"w-full h-full object-cover\" />\n                      ) : (\n                        <Building className=\"w-4 h-4 text-zinc-600\" />\n                      )}\n                    </div>\n                    <div>\n                      <div className=\"text-white font-bold text-base leading-tight mb-1 uppercase italic group-hover/name:text-[#ff5351] transition-colors\">{client.name}</div>\n                      <div className=\"text-zinc-500 text-xs flex items-center gap-2 font-medium tracking-tight\"><Mail className=\"w-3.5 h-3.5\" />{client.email}</div>\n                    </div>\n                  </div>\n                )\n              },\n              {\n                header: 'Status',\n                accessor: (client) => (\n                  <span className={cn(\"inline-flex items-center gap-2 px-3 py-1 border rounded-full text-[10px] font-black uppercase tracking-widest\", client.status === 'confirmed' ? \"text-emerald-400 border-emerald-500/30 bg-emerald-500/10\" : \"text-amber-400 border-amber-500/30 bg-amber-500/10\")}>\n                    <div className={cn(\"w-1.5 h-1.5 rounded-full shadow-[0_0_8px_rgba(var(--color),0.5)]\", client.status === 'confirmed' ? \"bg-emerald-500\" : \"bg-amber-500\")} />\n                    {client.status === 'confirmed' ? '✓ OK, SENHA CRIADA' : '⏳ AGUARDANDO SENHA'}\n                  </span>\n                )\n              },\n              {\n                header: 'Membros',\n                align: 'center',\n                accessor: (client) => {\n                  const count = getClientTeamCount(client.id!);\n                  return count > 0 ? (\n                    <div className=\"w-7 h-7 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center text-white text-[10px] font-bold shadow-lg\">{count}</div>\n                  ) : <span className=\"text-zinc-700 text-xs font-medium\">-</span>;\n                }\n              }\n            ]}\n            actions={(client) => (\n              <>\n                <button onClick={(e) => { e.stopPropagation(); handleOpenTeamView(client); }} className=\"flex items-center gap-2 px-3 py-2 bg-zinc-800 border border-zinc-700 hover:bg-zinc-700 hover:border-transparent rounded-xl text-zinc-300 hover:text-white transition-all text-[10px] font-black uppercase tracking-widest\" title=\"Gerenciar Equipe do Cliente\"><Users className=\"w-4 h-4 text-[#ff5351]\" />Equipe</button>\n                <button onClick={(e) => { e.stopPropagation(); handleOpenEditClient(client); }} className=\"p-2 bg-zinc-800 border border-zinc-700 hover:bg-zinc-700 rounded-xl text-zinc-400 hover:text-white transition-all\" title=\"Editar Cadastro\"><Edit2 className=\"w-4 h-4\" /></button>\n                <button onClick={(e) => { e.stopPropagation(); sendEmailInvite(client.name, client.email); }} disabled={sendingEmail === client.email} className=\"p-2 bg-zinc-800 border border-zinc-700 hover:bg-[#ff5351] hover:border-transparent rounded-xl text-zinc-300 hover:text-white transition-all disabled:opacity-50\"><Mail className=\"w-4 h-4\" /></button>\n                <button onClick={(e) => { e.stopPropagation(); \n                  const inviteLink = `${window.location.origin}/register?email=${encodeURIComponent(client.email)}`;\n                  navigator.clipboard.writeText(`Seu conteúdo foi selecionado!\\nAcesse pelo link abaixo e crie sua senha:\\n\\n${inviteLink}`);\n                  toast.success('Mensagem de convite copiada!');\n                }} className=\"p-2 bg-zinc-800 border border-zinc-700 hover:bg-[#25D366] hover:border-transparent rounded-xl text-zinc-300 hover:text-white transition-all\"><ExternalLink className=\"w-4 h-4\" /></button>\n                <button onClick={(e) => { e.stopPropagation(); handleDeleteClient(client.id!, client.email); }} className=\"p-2 bg-zinc-800/50 hover:bg-red-500/10 rounded-xl text-zinc-600 hover:text-red-500 transition-all\"><Trash2 className=\"w-4 h-4\" /></button>\n              </>\n            )}\n          />\n        </div>\n      )}\n    </div>\n  );\n}\n",path:
