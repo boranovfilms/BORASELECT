@@ -540,7 +540,7 @@ export default function ClientAccess() {
                     onClick={(e) => { e.stopPropagation(); if(client.id) navigate(`/clients/${client.id}`); }}
                     className="text-left py-1 cursor-pointer group/name flex items-center gap-3"
                   >
-                    <div className="w-8 h-8 rounded-lg bg-zinc-800 overflow-hidden border border-zinc-700 shrink-0 flex items-center justify-center">
+                    <div className="w-8 h-8 rounded-lg bg-zinc-900 overflow-hidden border border-zinc-700 shrink-0 flex items-center justify-center">
                       {client.logoUrl ? (
                         <img src={client.logoUrl} alt="" className="w-full h-full object-cover" />
                       ) : (
