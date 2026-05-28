@@ -11,9 +11,28 @@ import { useProjectStore } from '@/src/store/useProjectStore';
 import { PermissionsMatrix } from '@/src/services/permissionsService';
 import { taskService, Task } from '@/src/services/taskService';
 
-interface AppLayoutProps {\n  children: React.ReactNode;\n  userRole?: string;\n  userName?: string;\n  permissions?: PermissionsMatrix;\n}
+interface AppLayoutProps {
+  children: React.ReactNode;
+  userRole?: string;
+  userName?: string;
+  permissions?: PermissionsMatrix;
+}
 
-export default function AppLayout({ children, userRole = 'cliente', userName = '', permissions = {} }: AppLayoutProps) {\n  const navigate = useNavigate();\n  const location = useLocation();\n  const user = auth.currentUser;\n  const { currentProjectName, currentProjectEmail } = useProjectStore();\n  const [showGlobalSettings, setShowGlobalSettings] = React.useState(false);\n  const [globalSettings, setGlobalSettings] = React.useState<GlobalSettings | null>(null);\n  const [uploadingWatermark, setUploadingWatermark] = React.useState(false);\n  const [savingSettings, setSavingSettings] = React.useState(false);\n  \n  // Estados de Notificação Global\n  const [pendingNotifications, setPendingNotifications] = React.useState<Task[]>([]);\n  const [showNotificationDropdown, setShowNotificationDropdown] = React.useState(false);\n  const audioContext = React.useRef<AudioContext | null>(null);\n  const dropdownRef = React.useRef<HTMLDivElement>(null);
+export default function AppLayout({ children, userRole = 'cliente', userName = '', permissions = {} }: AppLayoutProps) {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const user = auth.currentUser;
+  const { currentProjectName, currentProjectEmail } = useProjectStore();
+  const [showGlobalSettings, setShowGlobalSettings] = React.useState(false);
+  const [globalSettings, setGlobalSettings] = React.useState<GlobalSettings | null>(null);
+  const [uploadingWatermark, setUploadingWatermark] = React.useState(false);
+  const [savingSettings, setSavingSettings] = React.useState(false);
+  
+  // Estados de Notificação Global
+  const [pendingNotifications, setPendingNotifications] = React.useState<Task[]>([]);
+  const [showNotificationDropdown, setShowNotificationDropdown] = React.useState(false);
+  const audioContext = React.useRef<AudioContext | null>(null);
+  const dropdownRef = React.useRef<HTMLDivElement>(null);
 
   const effectiveName = userName || user?.displayName || 'Usuário';
   const firstName = effectiveName.split(' ')[0].toUpperCase();
@@ -61,7 +80,8 @@ export default function AppLayout({ children, userRole = 'cliente', userName = '
 
   // Monitoramento Global de Tarefas Delegadas
   React.useEffect(() => {
-    if (!user?.email) return;\n    const userEmail = user.email.toLowerCase().trim();
+    if (!user?.email) return;
+    const userEmail = user.email.toLowerCase().trim();
 
     const q = query(
       collection(db, 'tasks'),
