@@ -297,7 +297,7 @@ export default function ClientAccess() {
       )}
 
       {isClientFormOpen && (
-        <form autoComplete="off" onSubmit={handleSaveClient} className="animate-in slide-in-from-right-8 duration-500 text-left">
+        <div className="animate-in slide-in-from-right-8 duration-500 text-left">
           <header className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8">
             <div>
               <button type="button" onClick={() => setIsClientFormOpen(false)} className="text-[#ff5351] hover:text-white transition-colors text-sm font-bold flex items-center gap-2 mb-4 uppercase tracking-widest"><ChevronDown className="w-4 h-4 rotate-90" /> Voltar</button>
@@ -305,7 +305,7 @@ export default function ClientAccess() {
             </div>
             <div className="flex gap-4">
               <button type="button" onClick={() => setIsClientFormOpen(false)} className="px-8 py-3 rounded-xl bg-zinc-900 border border-zinc-800 text-white font-bold hover:bg-zinc-800 transition-all text-xs uppercase tracking-widest">Cancelar</button>
-              <button type="submit" disabled={saving} className="px-8 py-3 rounded-xl bg-[#ff5351] text-white font-bold hover:opacity-90 transition-all text-xs uppercase tracking-widest shadow-xl shadow-[#ff5351]/20 disabled:opacity-50">{saving ? 'Salvando...' : 'Salvar Cadastro'}</button>
+              <button type="button" onClick={handleSaveClient} disabled={saving} className="px-8 py-3 rounded-xl bg-[#ff5351] text-white font-bold hover:opacity-90 transition-all text-xs uppercase tracking-widest shadow-xl shadow-[#ff5351]/20 disabled:opacity-50">{saving ? 'Salvando...' : 'Salvar Cadastro'}</button>
             </div>
           </header>
 
@@ -362,7 +362,7 @@ export default function ClientAccess() {
               </div>
             </section>
           </div>
-        </form>
+        </div>
       )}
 
       {isTeamViewOpen && selectedClient && (
