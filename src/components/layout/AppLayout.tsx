@@ -3,11 +3,13 @@ import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Library, Users, Package, LayoutTemplate, CreditCard, Settings, Shield, HelpCircle, LogOut, Bell, X, Loader2, Image as ImageControl, Trash2, Save, CheckSquare, UsersRound, FileText, Database
 } from 'lucide-react';
-import { auth } from '@/src/lib/firebase';
+import { auth, db } from '@/src/lib/firebase';
+import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { cn } from '@/src/lib/utils';
 import { settingsService, GlobalSettings } from '@/src/services/settingsService';
 import { useProjectStore } from '@/src/store/useProjectStore';
 import { PermissionsMatrix } from '@/src/services/permissionsService';
+import { taskService, Task } from '@/src/services/taskService';
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -24,12 +26,85 @@ export default function AppLayout({ children, userRole = 'cliente', permissions 
   const [globalSettings, setGlobalSettings] = React.useState<GlobalSettings | null>(null);
   const [uploadingWatermark, setUploadingWatermark] = React.useState(false);
   const [savingSettings, setSavingSettings] = React.useState(false);
+  
+  // Estados de Notificação Global
+  const [pendingNotifications, setPendingNotifications] = React.useState<Task[]>([]);
+  const audioContext = React.useRef<AudioContext | null>(null);
 
   React.useEffect(() => { loadSettings(); }, []);
 
   const loadSettings = async () => {
     const s = await settingsService.getSettings();
     setGlobalSettings(s);
+  };
+
+  const playNotificationSound = () => {
+    try {
+      if (!audioContext.current) {
+        audioContext.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      }
+      const ctx = audioContext.current;
+      if (ctx.state === 'suspended') ctx.resume();
+      
+      [523, 659, 784].forEach((freq, i) => {
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.connect(g); g.connect(ctx.destination);
+        o.type = 'sine';
+        o.frequency.setValueAtTime(freq, ctx.currentTime + i * 0.15);
+        g.gain.setValueAtTime(0.25, ctx.currentTime + i * 0.15);
+        g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.15 + 0.3);
+        o.start(ctx.currentTime + i * 0.15);
+        o.stop(ctx.currentTime + i * 0.15 + 0.3);
+      });
+    } catch (e) {
+      console.warn('Som de notificação bloqueado');
+    }
+  };
+
+  // Monitoramento Global de Tarefas Delegadas
+  React.useEffect(() => {
+    if (!user?.email) return;
+    const userEmail = user.email.toLowerCase().trim();
+
+    const q = query(
+      collection(db, 'tasks'),
+      where('delegadoPara', '==', userEmail),
+      where('vistoPeloDelegado', '==', false),
+      where('status', '==', 'pendente')
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const newTasks = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Task));
+      setPendingNotifications(newTasks);
+
+      if (newTasks.length > 0) {
+        const sessionKey = `global_notified_${userEmail}`;
+        const notifiedIds = JSON.parse(sessionStorage.getItem(sessionKey) || '[]');
+        let shouldPlay = false;
+
+        newTasks.forEach(t => {
+          if (!notifiedIds.includes(t.id)) {
+            shouldPlay = true;
+            notifiedIds.push(t.id);
+          }
+        });
+
+        if (shouldPlay) {
+          playNotificationSound();
+          sessionStorage.setItem(sessionKey, JSON.stringify(notifiedIds));
+        }
+      }
+    });
+
+    return () => unsubscribe();
+  }, [user]);
+
+  const handleClearNotifications = async () => {
+    if (pendingNotifications.length > 0) {
+      await Promise.all(pendingNotifications.map(t => taskService.markAsSeen(t.id!)));
+    }
+    navigate('/tarefas');
   };
 
   const handleLogout = async () => {
@@ -71,8 +146,32 @@ export default function AppLayout({ children, userRole = 'cliente', permissions 
             <span className="text-xl font-black tracking-tighter uppercase text-white">BORA SELECT</span>
           </div>
         </div>
+
         <div className="flex items-center gap-4">
-          <button className="text-zinc-400 hover:text-white transition-colors"><Bell className="w-5 h-5" /></button>
+          <button 
+            onClick={handleClearNotifications}
+            className="relative p-2 text-zinc-400 hover:text-white transition-all group"
+          >
+            <Bell className={cn(
+              "w-6 h-6 transition-all", 
+              pendingNotifications.length > 0 && "text-[#ff5351] animate-[bell_2s_infinite_ease-in-out]"
+            )} />
+            
+            {pendingNotifications.length > 0 && (
+              <span className="absolute top-1 right-1 w-4 h-4 bg-[#ff5351] text-white text-[9px] font-black rounded-full flex items-center justify-center border-2 border-black animate-in zoom-in duration-300">
+                {pendingNotifications.length}
+              </span>
+            )}
+            
+            <style>{`
+              @keyframes bell {
+                0%, 100% { transform: rotate(0deg); }
+                10%, 30%, 50% { transform: rotate(15deg); }
+                20%, 40%, 60% { transform: rotate(-15deg); }
+                70%, 80%, 90% { transform: rotate(0deg); }
+              }
+            `}</style>
+          </button>
         </div>
       </header>
 
