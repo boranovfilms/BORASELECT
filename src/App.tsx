@@ -34,6 +34,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
   const [userRole, setUserRole] = useState<string>('cliente');
+  const [userName, setUserName] = useState<string>('');
   const [permissions, setPermissions] = useState<PermissionsMatrix>({});
 
   useEffect(() => {
@@ -47,6 +48,7 @@ export default function App() {
           // REGRA DE SUPER USUÁRIO (MASTER)
           if (cleanEmail === 'admin@boraselect.com.br') {
             setUserRole('master');
+            setUserName('Boranov');
           } else {
             // Busca outros usuários (Equipe e Clientes) no banco
             const q = query(collection(db, 'clients'), where('email', '==', cleanEmail));
@@ -55,8 +57,10 @@ export default function App() {
             if (!snapshot.empty) {
               const data = snapshot.docs[0].data();
               setUserRole(data.role || 'cliente');
+              setUserName(data.name || '');
             } else {
               setUserRole('cliente');
+              setUserName(currentUser.displayName || '');
             }
           }
           
@@ -83,7 +87,7 @@ export default function App() {
   }
 
   const wrapLayout = (element: React.ReactNode) => (
-    <AppLayout userRole={userRole} permissions={permissions}>
+    <AppLayout userRole={userRole} userName={userName} permissions={permissions}>
       {element}
     </AppLayout>
   );
