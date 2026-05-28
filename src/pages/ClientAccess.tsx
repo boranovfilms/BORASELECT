@@ -159,7 +159,10 @@ export default function ClientAccess() {
     setSaving(true);
     try {
       let finalClientId = clientForm.id;
-      if (!isEditingClient) {
+      let isNew = !isEditingClient;
+      
+      // 1. Criar ou Obter ID do Cliente
+      if (isNew) {
         const newDocRef = await clientService.createClient({
           ...clientForm,
           name: clientForm.name.toUpperCase(),
@@ -169,28 +172,49 @@ export default function ClientAccess() {
         finalClientId = newDocRef.id;
       }
 
+      // 2. Upload da Logo via API Proxy (se houver novo arquivo)
       let currentLogoUrl = clientForm.logoUrl;
       if (logoPreview && logoPreview.startsWith('data:image')) {
-        const upResponse = await fetch('/api/upload-logo', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ image: logoPreview, clientId: finalClientId })
-        });
-        if (upResponse.ok) {
-          const upResult = await upResponse.json();
-          currentLogoUrl = upResult.url;
+        try {
+          const upResponse = await fetch('/api/upload-logo', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ image: logoPreview, clientId: finalClientId })
+          });
+          if (upResponse.ok) {
+            const upResult = await upResponse.json();
+            currentLogoUrl = upResult.url;
+          }
+        } catch (uploadErr) {
+          console.warn('Logo upload failed, continuing without logo:', uploadErr);
         }
       }
 
-      await (clientService as any).updateClient(finalClientId, {
+      // 3. Atualizar com a URL da Logo final e demais dados
+      const finalData = {
         ...clientForm,
         id: finalClientId,
         logoUrl: currentLogoUrl,
         name: clientForm.name.toUpperCase(),
         email: clientForm.email.toLowerCase().trim()
-      });
+      };
+
+      await (clientService as any).updateClient(finalClientId, finalData);
       
-      toast.success(isEditingClient ? 'Cliente atualizado!' : 'Cliente adicionado!');
+      // 4. Envio de e-mail automático apenas para NOVOS clientes
+      if (isNew) {
+        try {
+          const inviteLink = `${window.location.origin}/register?email=${encodeURIComponent(finalData.email)}`;
+          await emailService.sendInvite(finalData.email, finalData.name, inviteLink);
+          toast.success('Cliente adicionado e convite enviado!');
+        } catch (mailErr) {
+          console.error('Failed to send invite email:', mailErr);
+          toast.error('Cliente salvo, mas o convite por e-mail falhou.');
+        }
+      } else {
+        toast.success('Cliente atualizado com sucesso!');
+      }
+
       setIsClientFormOpen(false);
       loadAllData();
     } catch (error) {
@@ -235,8 +259,15 @@ export default function ClientAccess() {
         status: 'pending'
       };
       await teamService.createTeamMember(normalizedMember as any);
-      await emailService.sendInvite(normalizedMember.email, normalizedMember.name, `${window.location.origin}/register?email=${encodeURIComponent(normalizedMember.email)}`);
-      toast.success('Membro adicionado!');
+      
+      try {
+        const inviteLink = `${window.location.origin}/register?email=${encodeURIComponent(normalizedMember.email)}`;
+        await emailService.sendInvite(normalizedMember.email, normalizedMember.name, inviteLink);
+        toast.success('Membro adicionado e convite enviado!');
+      } catch (mailErr) {
+        toast.error('Membro adicionado, mas o e-mail de convite falhou.');
+      }
+      
       setMemberForm({ firstName: '', lastName: '', email: '', phone: '', password: '', jobTitle: '', role: 'equipe', accessLevel: 'validador', photoUrl: '' });
       setIsAddingTeamMember(false);
       await loadAllData();
@@ -259,7 +290,9 @@ export default function ClientAccess() {
       setSendingEmail(email);
       await emailService.sendInvite(email, name, `${window.location.origin}/register?email=${encodeURIComponent(email)}`);
       toast.success('Convite enviado!');
-    } catch (error) {} finally { setSendingEmail(null); }
+    } catch (error) {
+      toast.error('Falha ao reenviar convite.');
+    } finally { setSendingEmail(null); }
   };
 
   const getClientTeamCount = (clientId: string) => allTeamMembers.filter(m => (m as any).clienteId === clientId).length;
@@ -327,10 +360,7 @@ export default function ClientAccess() {
               <h3 className="text-lg font-bold text-white mb-5 flex items-center gap-2"><MapPin className="w-5 h-5 text-[#ff5351]"/> Endereço</h3>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-5 mb-4">
                 <div className="space-y-2"><label className="text-[10px] uppercase font-black tracking-widest text-zinc-500">CEP</label><input type="text" value={clientForm.zipCode} onChange={e => setClientForm({...clientForm, zipCode: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-white focus:border-[#ff5351] outline-none text-sm" placeholder="00000-000"/></div>
-                <div className="space-y-2 md:col-span-3">
-                  <label className="text-[10px] uppercase font-black tracking-widest text-zinc-500">Rua / Logradouro</label>
-                  <input type="text" value={clientForm.address} onChange={e => setClientForm({...clientForm, address: e.target.value.toUpperCase()})} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-white focus:border-[#ff5351] outline-none text-sm" placeholder="AV. PRINCIPAL"/>
-                </div>
+                <div className="space-y-2 md:col-span-3"><label className="text-[10px] uppercase font-black tracking-widest text-zinc-500">Rua / Logradouro</label><input type="text" value={clientForm.address} onChange={e => setClientForm({...clientForm, address: e.target.value.toUpperCase()})} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-white focus:border-[#ff5351] outline-none text-sm" placeholder="AV. PRINCIPAL"/></div>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
                 <div className="space-y-2"><label className="text-[10px] uppercase font-black tracking-widest text-zinc-500">Número</label><input type="text" value={clientForm.number} onChange={e => setClientForm({...clientForm, number: e.target.value.toUpperCase()})} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-white focus:border-[#ff5351] outline-none text-sm" placeholder="123"/></div>
@@ -348,79 +378,4 @@ export default function ClientAccess() {
               </div>
             </section>
           </div>
-        </form>
-      )}
-
-      {isTeamViewOpen && selectedClient && (
-        <div className="animate-in slide-in-from-bottom-8 duration-500 text-left">
-          <header className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8 border-b border-zinc-800 pb-6">
-            <div className="text-left">
-              <button onClick={() => setIsTeamViewOpen(false)} className="text-[#ff5351] hover:text-white transition-colors text-sm font-bold flex items-center gap-2 mb-4 uppercase tracking-widest"><ChevronDown className="w-4 h-4 rotate-90" /> Voltar</button>
-              <h1 className="text-4xl font-bold tracking-tight text-white mb-2 uppercase italic font-black">Equipe: {selectedClient.name}</h1>
-            </div>
-            <button onClick={() => setIsAddingTeamMember(!isAddingTeamMember)} className="flex items-center gap-2 px-8 py-3 rounded-xl bg-[#ff5351] text-white font-bold hover:opacity-90 transition-all text-xs uppercase tracking-widest shadow-xl shadow-[#ff5351]/20">{isAddingTeamMember ? <X className="w-5 h-5" /> : <UserPlus className="w-5 h-5" />} {isAddingTeamMember ? 'Cancelar' : 'Adicionar Membro'}</button>
-          </header>
-
-          <DataTable 
-            data={allTeamMembers.filter(m => (m as any).clienteId === selectedClient.id)}
-            loading={loading}
-            emptyMessage="Nenhum membro vinculado."
-            columns={[
-              { header: 'Membro', accessor: (member) => <div className="text-left py-1"><div className="text-white font-bold text-base leading-tight mb-1">{member.name}</div><div className="text-zinc-500 text-xs flex items-center gap-2"><Mail className="w-3.5 h-3.5" />{member.email}</div></div> },
-              { header: 'Status', accessor: (member) => <span className={cn("inline-flex items-center gap-2 px-3 py-1 border rounded-full text-[10px] font-black uppercase tracking-widest", member.status === 'confirmed' ? "text-emerald-400 border-emerald-500/30 bg-emerald-500/10" : "text-amber-400 border-amber-500/30 bg-amber-500/10")}><div className={cn("w-1.5 h-1.5 rounded-full shadow-[0_0_8px_rgba(var(--color),0.5)]", member.status === 'confirmed' ? "bg-emerald-500" : "bg-amber-500")} />{member.status === 'confirmed' ? '✓ OK, SENHA CRIADA' : '⏳ AGUARDANDO SENHA'}</span> }
-            ]}
-            actions={(member) => (
-              <>
-                <button onClick={(e) => { e.stopPropagation(); sendEmailInvite(member.name, member.email); }} disabled={sendingEmail === member.email} className="p-2 bg-zinc-800 border border-zinc-700 hover:bg-[#ff5351] hover:border-transparent rounded-xl text-zinc-300 hover:text-white transition-all" title="Reenviar Convite"><Mail className="w-4 h-4" /></button>
-                <button onClick={(e) => { e.stopPropagation(); handleDeleteTeamMember(member.id!, member.email); }} className="p-2 bg-zinc-800/50 hover:bg-red-500/10 rounded-xl text-zinc-600 hover:text-red-500 transition-all" title="Excluir Membro"><Trash2 className="w-4 h-4" /></button>
-              </>
-            )}
-          />
-        </div>
-      )}
-
-      {!isClientFormOpen && !isTeamViewOpen && (
-        <div className="space-y-4 text-left">
-          <div className="relative animate-in fade-in duration-300">
-            <Search className="w-5 h-5 text-zinc-500 absolute left-5 top-1/2 -translate-y-1/2" />
-            <input type="text" placeholder="Buscar cliente por nome ou e-mail..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full bg-[#1a1a1a] border border-zinc-800 rounded-2xl pl-13 pr-5 py-4 text-white focus:border-[#ff5351] outline-none transition-all placeholder:text-zinc-600 shadow-xl"/>
-          </div>
-
-          <DataTable 
-            data={filteredClients}
-            loading={loading}
-            onRowClick={(client) => { if (client.id) navigate(`/clients/${client.id}`); }}
-            emptyMessage={searchTerm ? 'Nenhum cliente encontrado.' : 'Nenhum cliente cadastrado.'}
-            columns={[
-              {
-                header: 'Cliente',
-                accessor: (client) => (
-                  <div onClick={(e) => { e.stopPropagation(); if(client.id) navigate(`/clients/${client.id}`); }} className="text-left py-1 cursor-pointer group/name flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-zinc-900 overflow-hidden border border-zinc-700 shrink-0 flex items-center justify-center">
-                      {client.logoUrl ? <img src={client.logoUrl} alt="" className="w-full h-full object-cover" /> : <Building className="w-4 h-4 text-zinc-600" />}
-                    </div>
-                    <div>
-                      <div className="text-white font-bold text-base leading-tight mb-1 uppercase italic group-hover/name:text-[#ff5351] transition-colors">{client.name}</div>
-                      <div className="text-zinc-500 text-xs flex items-center gap-2 font-medium tracking-tight"><Mail className="w-3.5 h-3.5" />{client.email}</div>
-                    </div>
-                  </div>
-                )
-              },
-              { header: 'Status', accessor: (client) => <span className={cn("inline-flex items-center gap-2 px-3 py-1 border rounded-full text-[10px] font-black uppercase tracking-widest", client.status === 'confirmed' ? "text-emerald-400 border-emerald-500/30 bg-emerald-500/10" : "text-amber-400 border-amber-500/30 bg-amber-500/10")}><div className={cn("w-1.5 h-1.5 rounded-full shadow-[0_0_8px_rgba(var(--color),0.5)]", client.status === 'confirmed' ? "bg-emerald-500" : "bg-amber-500")} />{client.status === 'confirmed' ? '✓ OK, SENHA CRIADA' : '⏳ AGUARDANDO SENHA'}</span> },
-              { header: 'Membros', align: 'center', accessor: (client) => { const count = getClientTeamCount(client.id!); return count > 0 ? <div className="w-7 h-7 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center text-white text-[10px] font-bold shadow-lg">{count}</div> : <span className="text-zinc-700 text-xs font-medium">-</span>; } }
-            ]}
-            actions={(client) => (
-              <>
-                <button onClick={(e) => { e.stopPropagation(); handleOpenTeamView(client); }} className="flex items-center gap-2 px-3 py-2 bg-zinc-800 border border-zinc-700 hover:bg-zinc-700 hover:border-transparent rounded-xl text-zinc-300 hover:text-white transition-all text-[10px] font-black uppercase tracking-widest"><Users className="w-4 h-4 text-[#ff5351]" />Equipe</button>
-                <button onClick={(e) => { e.stopPropagation(); handleOpenEditClient(client); }} className="p-2 bg-zinc-800 border border-zinc-700 hover:bg-zinc-700 rounded-xl text-zinc-400 hover:text-white transition-all"><Edit2 className="w-4 h-4" /></button>
-                <button onClick={(e) => { e.stopPropagation(); sendEmailInvite(client.name, client.email); }} disabled={sendingEmail === client.email} className="p-2 bg-zinc-800 border border-zinc-700 hover:bg-[#ff5351] hover:border-transparent rounded-xl text-zinc-300 hover:text-white transition-all disabled:opacity-50"><Mail className="w-4 h-4" /></button>
-                <button onClick={(e) => { e.stopPropagation(); const inviteLink = `${window.location.origin}/register?email=${encodeURIComponent(client.email)}`; navigator.clipboard.writeText(`Seu conteúdo foi selecionado!\n\nAcesse pelo link abaixo e crie sua senha:\n\n${inviteLink}`); toast.success('Mensagem de convite copiada!'); }} className="p-2 bg-zinc-800 border border-zinc-800 rounded-xl hover:bg-[#25D366] hover:border-transparent rounded-xl text-zinc-300 hover:text-white transition-all"><ExternalLink className="w-4 h-4" /></button>
-                <button onClick={(e) => { e.stopPropagation(); handleDeleteClient(client.id!, client.email); }} className="p-2 bg-zinc-800/50 hover:bg-red-500/10 rounded-xl text-zinc-600 hover:text-red-500 transition-all"><Trash2 className="w-4 h-4" /></button>
-              </>
-            )}
-          />
-        </div>
-      )}
-    </div>
-  );
-}
+        </form>\n      )}\n\n      {isTeamViewOpen && selectedClient && (\n        <div className=\"animate-in slide-in-from-bottom-8 duration-500 text-left\">\n          <header className=\"flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8 border-b border-zinc-800 pb-6\">\n            <div className=\"text-left\">\n              <button onClick={() => setIsTeamViewOpen(false)} className=\"text-[#ff5351] hover:text-white transition-colors text-sm font-bold flex items-center gap-2 mb-4 uppercase tracking-widest\"><ChevronDown className=\"w-4 h-4 rotate-90\" /> Voltar</button>\n              <h1 className=\"text-4xl font-bold tracking-tight text-white mb-2 uppercase italic font-black\">Equipe: {selectedClient.name}</h1>\n            </div>\n            <button onClick={() => setIsAddingTeamMember(!isAddingTeamMember)} className=\"flex items-center gap-2 px-8 py-3 rounded-xl bg-[#ff5351] text-white font-bold hover:opacity-90 transition-all text-xs uppercase tracking-widest shadow-xl shadow-[#ff5351]/20\">{isAddingTeamMember ? <X className=\"w-5 h-5\" /> : <UserPlus className=\"w-5 h-5\" />} {isAddingTeamMember ? 'Cancelar' : 'Adicionar Membro'}</button>\n          </header>\n\n          <DataTable \n            data={allTeamMembers.filter(m => (m as any).clienteId === selectedClient.id)}\n            loading={loading}\n            emptyMessage=\"Nenhum membro vinculado.\"\n            columns={[\n              { header: 'Membro', accessor: (member) => <div className=\"text-left py-1\"><div className=\"text-white font-bold text-base leading-tight mb-1\">{member.name}</div><div className=\"text-zinc-500 text-xs flex items-center gap-2\"><Mail className=\"w-3.5 h-3.5\" />{member.email}</div></div> },\n              { header: 'Status', accessor: (member) => <span className={cn(\"inline-flex items-center gap-2 px-3 py-1 border rounded-full text-[10px] font-black uppercase tracking-widest\", member.status === 'confirmed' ? \"text-emerald-400 border-emerald-500/30 bg-emerald-500/10\" : \"text-amber-400 border-amber-500/30 bg-amber-500/10\")}><div className={cn(\"w-1.5 h-1.5 rounded-full shadow-[0_0_8px_rgba(var(--color),0.5)]\", member.status === 'confirmed' ? \"bg-emerald-500\" : \"bg-amber-500\")} />{member.status === 'confirmed' ? '✓ OK, SENHA CRIADA' : '⏳ AGUARDANDO SENHA'}</span> }\n            ]}\n            actions={(member) => (\n              <>\n                <button onClick={(e) => { e.stopPropagation(); sendEmailInvite(member.name, member.email); }} disabled={sendingEmail === member.email} className=\"p-2 bg-zinc-800 border border-zinc-700 hover:bg-[#ff5351] hover:border-transparent rounded-xl text-zinc-300 hover:text-white transition-all\" title=\"Reenviar Convite\"><Mail className=\"w-4 h-4\" /></button>\n                <button onClick={(e) => { e.stopPropagation(); handleDeleteTeamMember(member.id!, member.email); }} className=\"p-2 bg-zinc-800/50 hover:bg-red-500/10 rounded-xl text-zinc-600 hover:text-red-500 transition-all\" title=\"Excluir Membro\"><Trash2 className=\"w-4 h-4\" /></button>\n              </>\n            )}\n          />\n        </div>\n      )}\n\n      {!isClientFormOpen && !isTeamViewOpen && (\n        <div className=\"space-y-4 text-left\">\n          <div className=\"relative animate-in fade-in duration-300\">\n            <Search className=\"w-5 h-5 text-zinc-500 absolute left-5 top-1/2 -translate-y-1/2\" />\n            <input type=\"text\" placeholder=\"Buscar cliente por nome ou e-mail...\" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className=\"w-full bg-[#1a1a1a] border border-zinc-800 rounded-2xl pl-13 pr-5 py-4 text-white focus:border-[#ff5351] outline-none transition-all placeholder:text-zinc-600 shadow-xl\"/>\n          </div>\n\n          <DataTable \n            data={filteredClients}\n            loading={loading}\n            onRowClick={(client) => { if (client.id) navigate(`/clients/${client.id}`); }}\n            emptyMessage={searchTerm ? 'Nenhum cliente encontrado.' : 'Nenhum cliente cadastrado.'}\n            columns={[\n              {\n                header: 'Cliente',\n                accessor: (client) => (\n                  <div onClick={(e) => { e.stopPropagation(); if(client.id) navigate(`/clients/${client.id}`); }} className=\"text-left py-1 cursor-pointer group/name flex items-center gap-3\">\n                    <div className=\"w-8 h-8 rounded-lg bg-zinc-900 overflow-hidden border border-zinc-700 shrink-0 flex items-center justify-center\">\n                      {client.logoUrl ? <img src={client.logoUrl} alt=\"\" className=\"w-full h-full object-cover\" /> : <Building className=\"w-4 h-4 text-zinc-600\" />}\n                    </div>\n                    <div>\n                      <div className=\"text-white font-bold text-base leading-tight mb-1 uppercase italic group-hover/name:text-[#ff5351] transition-colors\">{client.name}</div>\n                      <div className=\"text-zinc-500 text-xs flex items-center gap-2 font-medium tracking-tight\"><Mail className=\"w-3.5 h-3.5\" />{client.email}</div>\n                    </div>\n                  </div>\n                )\n              },\n              { header: 'Status', accessor: (client) => <span className={cn(\"inline-flex items-center gap-2 px-3 py-1 border rounded-full text-[10px] font-black uppercase tracking-widest\", client.status === 'confirmed' ? \"text-emerald-400 border-emerald-500/30 bg-emerald-500/10\" : \"text-amber-400 border-amber-500/30 bg-amber-500/10\")}><div className={cn(\"w-1.5 h-1.5 rounded-full shadow-[0_0_8px_rgba(var(--color),0.5)]\", client.status === 'confirmed' ? \"bg-emerald-500\" : \"bg-amber-500\")} />{member.status === 'confirmed' ? '✓ OK, SENHA CRIADA' : '⏳ AGUARDANDO SENHA'}</span> },\n              { header: 'Membros', align: 'center', accessor: (client) => { const count = getClientTeamCount(client.id!); return count > 0 ? <div className=\"w-7 h-7 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center text-white text-[10px] font-bold shadow-lg\">{count}</div> : <span className=\"text-zinc-700 text-xs font-medium\">-</span>; } }\n            ]}\n            actions={(client) => (\n              <>\n                <button onClick={(e) => { e.stopPropagation(); handleOpenTeamView(client); }} className=\"flex items-center gap-2 px-3 py-2 bg-zinc-800 border border-zinc-700 hover:bg-zinc-700 hover:border-transparent rounded-xl text-zinc-300 hover:text-white transition-all text-[10px] font-black uppercase tracking-widest\"><Users className=\"w-4 h-4 text-[#ff5351]\" />Equipe</button>\n                <button onClick={(e) => { e.stopPropagation(); handleOpenEditClient(client); }} className=\"p-2 bg-zinc-800 border border-zinc-700 hover:bg-zinc-700 rounded-xl text-zinc-400 hover:text-white transition-all\"><Edit2 className=\"w-4 h-4\" /></button>\n                <button onClick={(e) => { e.stopPropagation(); sendEmailInvite(client.name, client.email); }} disabled={sendingEmail === client.email} className=\"p-2 bg-zinc-800 border border-zinc-700 hover:bg-[#ff5351] hover:border-transparent rounded-xl text-zinc-300 hover:text-white transition-all disabled:opacity-50\"><Mail className=\"w-4 h-4\" /></button>\n                <button onClick={(e) => { e.stopPropagation(); const inviteLink = `${window.location.origin}/register?email=${encodeURIComponent(client.email)}`; navigator.clipboard.writeText(`Seu conteúdo foi selecionado!\n\nAcesse pelo link abaixo e crie sua senha:\n\n${inviteLink}`); toast.success('Mensagem de convite copiada!'); }} className=\"p-2 bg-zinc-800 border border-zinc-700 hover:bg-[#25D366] hover:border-transparent rounded-xl text-zinc-300 hover:text-white transition-all\"><ExternalLink className=\"w-4 h-4\" /></button>\n                <button onClick={(e) => { e.stopPropagation(); handleDeleteClient(client.id!, client.email); }} className=\"p-2 bg-zinc-800/50 hover:bg-red-500/10 rounded-xl text-zinc-600 hover:text-red-500 transition-all\"><Trash2 className=\"w-4 h-4\" /></button>\n              </>\n            )}\n          />\n        </div>\n      )}\n    </div>\n  );\n}\n",path:
