@@ -1,7 +1,7 @@
 import React from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {
-  LayoutDashboard, Library, Users, Package, LayoutTemplate, CreditCard, Settings, Shield, HelpCircle, LogOut, Bell, X, Loader2, Image as ImageControl, Trash2, Save, CheckSquare, UsersRound, FileText, Database
+  LayoutDashboard, Library, Users, Package, LayoutTemplate, CreditCard, Settings, Shield, HelpCircle, LogOut, Bell, X, Loader2, Image as ImageControl, Trash2, Save, CheckSquare, UsersRound, FileText, Database, ChevronRight
 } from 'lucide-react';
 import { auth, db } from '@/src/lib/firebase';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
@@ -29,9 +29,20 @@ export default function AppLayout({ children, userRole = 'cliente', permissions 
   
   // Estados de Notificação Global
   const [pendingNotifications, setPendingNotifications] = React.useState<Task[]>([]);
+  const [showNotificationDropdown, setShowNotificationDropdown] = React.useState(false);
   const audioContext = React.useRef<AudioContext | null>(null);
+  const dropdownRef = React.useRef<HTMLDivElement>(null);
 
-  React.useEffect(() => { loadSettings(); }, []);
+  React.useEffect(() => { 
+    loadSettings();
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowNotificationDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const loadSettings = async () => {
     const s = await settingsService.getSettings();
@@ -100,10 +111,9 @@ export default function AppLayout({ children, userRole = 'cliente', permissions 
     return () => unsubscribe();
   }, [user]);
 
-  const handleClearNotifications = async () => {
-    if (pendingNotifications.length > 0) {
-      await Promise.all(pendingNotifications.map(t => taskService.markAsSeen(t.id!)));
-    }
+  const handleNotificationClick = async (task: Task) => {
+    await taskService.markAsSeen(task.id!);
+    setShowNotificationDropdown(false);
     navigate('/tarefas');
   };
 
@@ -147,9 +157,9 @@ export default function AppLayout({ children, userRole = 'cliente', permissions 
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4 relative" ref={dropdownRef}>
           <button 
-            onClick={handleClearNotifications}
+            onClick={() => setShowNotificationDropdown(!showNotificationDropdown)}
             className="relative p-2 text-zinc-400 hover:text-white transition-all group"
           >
             <Bell className={cn(
@@ -172,6 +182,48 @@ export default function AppLayout({ children, userRole = 'cliente', permissions 
               }
             `}</style>
           </button>
+
+          {showNotificationDropdown && (
+            <div className="absolute top-full right-0 mt-2 w-80 bg-[#1a1a1a] border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200 z-[300]">
+              <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
+                <span className="text-[10px] font-black uppercase tracking-widest text-white italic">Notificações</span>
+                {pendingNotifications.length > 0 && (
+                  <span className="px-2 py-0.5 bg-[#ff5351] text-white text-[9px] font-black rounded-full">{pendingNotifications.length}</span>
+                )}
+              </div>
+              
+              <div className="max-h-64 overflow-y-auto custom-scrollbar">
+                {pendingNotifications.length === 0 ? (
+                  <div className="p-8 text-center text-zinc-600">
+                    <CheckSquare className="w-8 h-8 mx-auto mb-2 opacity-20" />
+                    <p className="text-xs font-bold uppercase tracking-widest">Tudo limpo!</p>
+                  </div>
+                ) : (
+                  pendingNotifications.map((task) => (
+                    <button
+                      key={task.id}
+                      onClick={() => handleNotificationClick(task)}
+                      className="w-full p-4 text-left border-b border-zinc-800/50 hover:bg-[#ff5351]/5 transition-all flex items-start gap-3 group/item"
+                    >
+                      <div className="w-2 h-2 rounded-full bg-[#ff5351] mt-1.5 shadow-[0_0_8px_rgba(255,83,81,0.4)]" />
+                      <div className="flex-1 overflow-hidden">
+                        <p className="text-xs font-bold text-white uppercase truncate group-hover/item:text-[#ff5351] transition-colors">{task.nome}</p>
+                        <p className="text-[9px] text-zinc-500 font-black uppercase tracking-widest mt-1">Nova tarefa delegada</p>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-zinc-700 group-hover/item:text-[#ff5351] transition-colors" />
+                    </button>
+                  ))
+                )}
+              </div>
+
+              <button 
+                onClick={() => { setShowNotificationDropdown(false); navigate('/tarefas'); }}
+                className="w-full p-4 bg-zinc-900/50 text-[10px] font-black uppercase tracking-widest text-zinc-400 hover:text-white hover:bg-zinc-800 transition-all border-t border-zinc-800 flex items-center justify-center gap-2"
+              >
+                Ver todas as tarefas <ArrowRight className="w-3 h-3" />
+              </button>
+            </div>
+          )}
         </div>
       </header>
 
@@ -207,3 +259,4 @@ export default function AppLayout({ children, userRole = 'cliente', permissions 
     </div>
   );
 }
+import { ArrowRight } from 'lucide-react';

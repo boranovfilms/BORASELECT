@@ -104,7 +104,7 @@ export default function Tarefas() {
               played = true;
             }
             notifiedTasks.push(t.id);
-            taskService.markAsSeen(t.id!);
+            // Marcar como visto no banco opcionalmente aqui, mas o header já cuida disso no clique
           }
         });
         sessionStorage.setItem(sessionKey, JSON.stringify(notifiedTasks));
@@ -249,7 +249,26 @@ export default function Tarefas() {
         onRowClick={(task) => handleEditTask(task)}
         columns={[
           ...(activeTab === 'pendentes' ? [{ header: '', accessor: (task: Task) => (<div className="flex justify-center" onClick={(e) => e.stopPropagation()}><button onClick={() => toggleTaskSelection(task.id!)} className={cn("w-5 h-5 rounded border-2 transition-all flex items-center justify-center", selectedTasks.has(task.id!) ? "bg-[#ff5351] border-[#ff5351]" : "border-zinc-700 bg-zinc-900 hover:border-zinc-500")}>{selectedTasks.has(task.id!) && <Check className="w-3 h-3 text-white" strokeWidth={4} />}</button></div>), className: 'w-10' }] : []),
-          { header: 'Atividade', accessor: (task) => (<div className="py-1"><div className="font-bold text-sm text-white mb-0.5 uppercase group-hover:text-[#ff5351] transition-colors">{task.nome}</div><div className="flex items-center gap-2 text-[10px] text-zinc-500 font-bold uppercase tracking-widest"><MessageSquare className="w-3 h-3" />{task.historico?.length || 0} registros no histórico{task.delegadoNome && <span className="text-[#ff5351] ml-2">• Delegada para: {task.delegadoNome.toUpperCase()}</span>}</div></div>) },
+          { 
+            header: 'Atividade', 
+            accessor: (task) => {
+              const isNew = !task.vistoPeloDelegado && task.delegadoPara?.toLowerCase().trim() === auth.currentUser?.email?.toLowerCase().trim();
+              return (
+                <div className={cn(
+                  "py-1 px-3 -ml-6 border-l-[3px] transition-all",
+                  isNew ? "border-[#ff5351] bg-[#ff5351]/5" : "border-transparent"
+                )}>
+                  <div className="font-bold text-sm text-white mb-0.5 uppercase group-hover:text-[#ff5351] transition-colors">{task.nome}</div>
+                  <div className="flex items-center gap-2 text-[10px] text-zinc-500 font-bold uppercase tracking-widest">
+                    <MessageSquare className="w-3 h-3" />
+                    {task.historico?.length || 0} registros no histórico
+                    {task.delegadoNome && <span className="text-[#ff5351] ml-2">• Delegada para: {task.delegadoNome.toUpperCase()}</span>}
+                    {isNew && <span className="ml-2 px-1.5 py-0.5 bg-[#ff5351] text-white text-[7px] font-black rounded animate-pulse">NOVA</span>}
+                  </div>
+                </div>
+              );
+            }
+          },
           { header: 'Prioridade', accessor: (task) => getPriorityBadge(task.prioridade), align: 'center' },
           { header: 'Acesso', accessor: (task) => <span className="text-[10px] font-black uppercase text-zinc-500 tracking-widest flex items-center gap-1.5"><Shield className="w-3 h-3" />{task.tipoAcesso}</span> },
           { header: 'Responsável', accessor: (task) => <span className="text-zinc-300 text-xs font-bold uppercase">{task.responsavelTarefa}</span> }
