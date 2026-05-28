@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Tv, Play, Pause, RotateCcw, ChevronUp, ChevronDown, Maximize2, FlipHorizontal, Settings2, Trash2, Wifi, WifiOff, Loader2 } from 'lucide-react';
+import { Tv, Play, Pause, RotateCcw, ChevronUp, ChevronDown, Maximize2, FlipHorizontal, Settings2, Trash2, Wifi, WifiOff, Loader2, Type, MoveHorizontal } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { toast } from 'react-hot-toast';
 
@@ -7,10 +7,12 @@ export default function Teleprompter() {
   const [text, setText] = useState('');
   const [isPlaying, setIsPlaying] = useState(false);
   const [speed, setSpeed] = useState(5);
-  const [fontSize, setFontSize] = useState(48);
+  const [fontSize, setFontSize] = useState(36);
+  const [margin, setMargin] = useState(10);
   const [isMirrored, setIsMirrored] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [activeMode, setActiveMode] = useState<'MARGEM' | 'FONTE'>('MARGEM');
   
   const prompterRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -21,22 +23,13 @@ export default function Teleprompter() {
   const connectToControl = () => {
     if (typeof window === 'undefined') return;
     
-    // Check for Secure Context Mixed Content restriction
-    // If site is HTTPS and try to connect to ws:// (not wss://), it will likely fail.
-    // We wrap everything in try/catch to prevent the component from crashing.
     try {
       if (!window.WebSocket) {
         toast.error('Navegador não suporta WebSocket');
         return;
       }
 
-      if (window.location.protocol === 'https:') {
-        toast.error('Aviso: Conexão não-segura (ws://) pode ser bloqueada em sites HTTPS.');
-      }
-
       setIsConnecting(true);
-      
-      // Attempt connection to the local ESP32 IP
       const ws = new WebSocket('ws://10.0.0.113:81');
 
       ws.onopen = () => {
@@ -54,28 +47,22 @@ export default function Teleprompter() {
         }
       };
 
-      ws.onclose = (event) => {
+      ws.onclose = () => {
         setIsConnected(false);
         setIsConnecting(false);
-        // If it closed with an error code related to mixed content or security
-        if (!event.wasClean) {
-          console.warn('Conexão WebSocket fechada de forma inesperada.');
-        }
       };
 
       ws.onerror = (error) => {
         setIsConnected(false);
         setIsConnecting(false);
-        console.error('Erro WebSocket:', error);
-        toast.error('Erro na conexão com ESP32. Verifique se o IP está acessível.');
+        toast.error('Erro na conexão com ESP32.');
         ws.close();
       };
 
       socketRef.current = ws;
     } catch (e: any) {
       setIsConnecting(false);
-      console.error('Erro crítico ao iniciar WebSocket:', e);
-      toast.error('Erro ao abrir conexão: ' + (e.message || 'Erro desconhecido'));
+      toast.error('Erro ao abrir conexão.');
     }
   };
 
@@ -103,6 +90,26 @@ export default function Teleprompter() {
         break;
       case 'RESET':
         handleReset();
+        break;
+      case 'MARGIN_LEFT':
+        setMargin(prev => Math.max(prev - 2, 0));
+        break;
+      case 'MARGIN_RIGHT':
+        setMargin(prev => Math.min(prev + 2, 40));
+        break;
+      case 'FONT_UP':
+        setFontSize(prev => Math.min(prev + 2, 72));
+        break;
+      case 'FONT_DOWN':
+        setFontSize(prev => Math.max(prev - 2, 20));
+        break;
+      case 'MODE_FONT':
+        setActiveMode('FONTE');
+        toast('Modo: Fonte', { icon: 'T', id: 'mode' });
+        break;
+      case 'MODE_MARGIN':
+        setActiveMode('MARGEM');
+        toast('Modo: Margem', { icon: '↔️', id: 'mode' });
         break;
     }
   };
@@ -142,7 +149,6 @@ export default function Teleprompter() {
     } catch (e) {}
   };
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (socketRef.current) {
@@ -171,6 +177,11 @@ export default function Teleprompter() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2 md:gap-3">
+          <div className="hidden lg:flex items-center gap-2 px-4 py-2 bg-black/40 rounded-xl border border-white/5 mr-2">
+            <span className="text-[8px] font-black text-zinc-600 uppercase">Ajuste Ativo:</span>
+            <span className="text-[10px] font-black text-[#ff5351] uppercase tracking-widest">{activeMode}</span>
+          </div>
+
           <button 
             onClick={isConnected ? disconnectControl : connectToControl}
             disabled={isConnecting}
@@ -194,7 +205,7 @@ export default function Teleprompter() {
 
       <div className="flex-1 flex flex-col lg:flex-row gap-6 min-h-0">
         <aside className="w-full lg:w-96 flex flex-col gap-6 shrink-0 h-1/2 lg:h-auto">
-          <section className="flex-1 bg-[#141414] border border-zinc-800 rounded-[32px] p-6 flex flex-col space-y-4 shadow-2xl overflow-hidden min-h-[300px]">
+          <section className="flex-1 bg-[#141414] border border-zinc-800 rounded-[32px] p-6 flex flex-col space-y-4 shadow-2xl overflow-hidden min-h-[250px]">
             <div className="flex items-center justify-between border-b border-zinc-800 pb-3 shrink-0">
               <div className="flex items-center gap-2">
                 <Settings2 className="w-4 h-4 text-[#ff5351]" />
@@ -205,21 +216,33 @@ export default function Teleprompter() {
             <textarea value={text} onChange={e => setText(e.target.value)} placeholder="COLE SEU TEXTO AQUI..." className="flex-1 bg-black border border-zinc-800 rounded-2xl p-4 text-sm text-white resize-none outline-none focus:border-[#ff5351] font-medium leading-relaxed custom-scrollbar" />
           </section>
 
-          <section className="bg-[#141414] border border-zinc-800 rounded-[32px] p-6 space-y-6 shadow-2xl shrink-0">
-             <div className="space-y-4">
+          <section className="bg-[#141414] border border-zinc-800 rounded-[32px] p-6 space-y-4 shadow-2xl shrink-0">
+             <div className="space-y-3">
                 <div className="flex items-center justify-between text-[10px] font-black uppercase text-zinc-500"><span>Velocidade</span><span className="text-[#ff5351]">{speed}</span></div>
                 <input type="range" min="1" max="20" value={speed} onChange={e => setSpeed(Number(e.target.value))} className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-[#ff5351]" />
              </div>
-             <div className="space-y-4">
+             <div className="space-y-3">
                 <div className="flex items-center justify-between text-[10px] font-black uppercase text-zinc-500"><span>Fonte</span><span className="text-[#ff5351]">{fontSize}px</span></div>
-                <input type="range" min="20" max="100" value={fontSize} onChange={e => setFontSize(Number(e.target.value))} className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-[#ff5351]" />
+                <input type="range" min="20" max="72" value={fontSize} onChange={e => setFontSize(Number(e.target.value))} className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-[#ff5351]" />
+             </div>
+             <div className="space-y-3">
+                <div className="flex items-center justify-between text-[10px] font-black uppercase text-zinc-500"><span>Margem</span><span className="text-[#ff5351]">{margin}%</span></div>
+                <input type="range" min="0" max="40" value={margin} onChange={e => setMargin(Number(e.target.value))} className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-[#ff5351]" />
              </div>
           </section>
         </aside>
 
         <main ref={containerRef} className="flex-1 bg-black border border-zinc-800 rounded-[32px] md:rounded-[40px] relative overflow-hidden flex flex-col shadow-inner min-h-[400px]">
-          <div ref={prompterRef} className={cn("flex-1 overflow-y-auto px-8 md:px-16 py-[45vh] text-center select-none no-scrollbar", isMirrored && "transform -scale-x-100")} style={{ scrollBehavior: 'auto' }}>
-            <div className="max-w-5xl mx-auto font-black leading-tight uppercase italic whitespace-pre-wrap transition-all tracking-tight" style={{ fontSize: `${fontSize}px`, color: '#fff' }}>
+          {/* Indicador de Modo Ativo */}
+          <div className="absolute top-8 right-8 z-30 animate-in fade-in slide-in-from-right-4">
+            <div className="flex items-center gap-3 px-6 py-3 bg-[#ff5351] rounded-2xl shadow-[0_0_20px_rgba(255,83,81,0.4)]">
+              {activeMode === 'MARGEM' ? <MoveHorizontal className="w-4 h-4 text-white" /> : <Type className="w-4 h-4 text-white" />}
+              <span className="text-xs font-black text-white uppercase tracking-[0.2em]">{activeMode}</span>
+            </div>
+          </div>
+
+          <div ref={prompterRef} className={cn("flex-1 overflow-y-auto py-[45vh] text-center select-none no-scrollbar", isMirrored && "transform -scale-x-100")} style={{ scrollBehavior: 'auto' }}>
+            <div className="font-black leading-tight uppercase italic whitespace-pre-wrap transition-all tracking-tight mx-auto" style={{ fontSize: `${fontSize}px`, color: '#fff', paddingLeft: `${margin}%`, paddingRight: `${margin}%` }}>
               {text || 'INSIRA O TEXTO NO CAMPO AO LADO PARA COMEÇAR...'}
             </div>
           </div>
@@ -235,9 +258,9 @@ export default function Teleprompter() {
               {isPlaying ? <Pause className="w-10 h-10 fill-current" /> : <Play className="w-10 h-10 fill-current ml-1" />}
             </button>
             <div className="flex items-center gap-1 bg-black/40 rounded-2xl p-1">
-              <button onClick={() => setFontSize(prev => Math.max(prev - 5, 20))} className="p-4 text-zinc-500 hover:text-white transition-all font-black">-</button>
+              <button onClick={() => setFontSize(prev => Math.max(prev - 2, 20))} className="p-4 text-zinc-500 hover:text-white transition-all font-black">-</button>
               <div className="px-4 text-center border-x border-white/5 min-w-[60px]"><span className="text-[8px] font-black text-zinc-600 uppercase block">Fonte</span><span className="text-xl font-black text-white italic">{fontSize}</span></div>
-              <button onClick={() => setFontSize(prev => Math.min(prev + 5, 100))} className="p-4 text-zinc-500 hover:text-white transition-all font-black">+</button>
+              <button onClick={() => setFontSize(prev => Math.min(prev + 2, 72))} className="p-4 text-zinc-500 hover:text-white transition-all font-black">+</button>
             </div>
           </div>
 
