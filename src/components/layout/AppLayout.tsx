@@ -1,7 +1,7 @@
 import React from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {
-  LayoutDashboard, Library, Users, Package, LayoutTemplate, CreditCard, Settings, Shield, HelpCircle, LogOut, Bell, X, Loader2, Image as ImageControl, Trash2, Save, CheckSquare, UsersRound, FileText, Database, ChevronRight, ArrowRight
+  LayoutDashboard, Library, Users, Package, LayoutTemplate, CreditCard, Settings, Shield, HelpCircle, LogOut, Bell, X, Loader2, Image as ImageControl, Trash2, Save, CheckSquare, UsersRound, FileText, Database, ChevronRight, ArrowRight, Tv
 } from 'lucide-react';
 import { auth, db } from '@/src/lib/firebase';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
@@ -137,6 +137,7 @@ export default function AppLayout({ children, userRole = 'cliente', userName = '
     { id: 'modelos', icon: LayoutTemplate, label: 'Modelos', path: '/modelos' },
     { id: 'creditos', icon: CreditCard, label: 'Créditos', path: '/credits' },
     { id: 'tarefas', icon: CheckSquare, label: 'Tarefas Diárias', path: '/tarefas' },
+    { id: 'teleprompter', icon: Tv, label: 'Teleprompter', path: '/teleprompter' },
     { id: 'painel_master', icon: Shield, label: 'Painel Master', path: '/painel-master' },
     { id: 'diagnostico', icon: Database, label: 'Teste Tabela', path: '/diagnostico' }
   ];
@@ -145,6 +146,7 @@ export default function AppLayout({ children, userRole = 'cliente', userName = '
     if (mod.id === 'planejamentos' && userRole === 'cliente') return true;
     if (mod.id === 'painel_master' && userRole === 'master') return true;
     if (mod.id === 'diagnostico' && userRole === 'master') return true;
+    if (mod.id === 'teleprompter' && userRole === 'master') return true;
     return permissions[mod.id]?.[userRole] === true;
   });
 
