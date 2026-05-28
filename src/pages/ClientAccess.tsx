@@ -319,6 +319,7 @@ export default function ClientAccess() {
               <h3 className="text-lg font-bold text-white mb-8 flex items-center gap-2"><User className="w-5 h-5 text-[#ff5351]"/> Informações Principais</h3>
               
               <div className="flex flex-col md:flex-row gap-8">
+                {/* Área da Logo */}
                 <div className="space-y-2">
                   <label className="text-[10px] uppercase font-black tracking-widest text-zinc-500 block ml-1">Logo do Cliente</label>
                   <button 
@@ -349,6 +350,7 @@ export default function ClientAccess() {
                   />
                 </div>
 
+                {/* Campos de Texto */}
                 <div className="flex-1 space-y-5">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                     <div className="space-y-2">
@@ -476,33 +478,33 @@ export default function ClientAccess() {
                       { id: 'validador', label: 'Validador', desc: 'Sugere correções no conteúdo' },
                       { id: 'visualizador', label: 'Visualizador', desc: 'Apenas acompanha o projeto' }
                     ].map(level => (
-                      <label key={level.id} className={cn("cursor-pointer border rounded-2xl p-4 flex items-start gap-3 transition-all", memberForm.accessLevel === level.id ? "bg-[#ff5351]/10 border-[#ff5351]" : "bg-zinc-900 border-zinc-800 hover:border-zinc-600")}><div className="pt-0.5"><div className={cn("w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all", memberForm.accessLevel === level.id ? "border-[#ff5351]" : "border-zinc-600")}>{memberForm.accessLevel === level.id && <div className="w-2 h-2 rounded-full bg-[#ff5351]\" />}</div></div><div><input type=\"radio\" name=\"accessLevel\" value={level.id} checked={memberForm.accessLevel === level.id} onChange={e => setMemberForm({...memberForm, accessLevel: e.target.value})} className=\"hidden\" /><p className=\"text-white font-bold text-sm\">{level.label}</p><p className=\"text-zinc-500 text-xs mt-0.5\">{level.desc}</p></div></label>
+                      <label key={level.id} className={cn("cursor-pointer border rounded-2xl p-4 flex items-start gap-3 transition-all", memberForm.accessLevel === level.id ? "bg-[#ff5351]/10 border-[#ff5351]" : "bg-zinc-900 border-zinc-800 hover:border-zinc-600")}><div className="pt-0.5"><div className={cn("w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all", memberForm.accessLevel === level.id ? "border-[#ff5351]" : "border-zinc-600")}>{memberForm.accessLevel === level.id && <div className="w-2 h-2 rounded-full bg-[#ff5351]" />}</div></div><div><input type="radio" name="accessLevel" value={level.id} checked={memberForm.accessLevel === level.id} onChange={e => setMemberForm({...memberForm, accessLevel: e.target.value})} className="hidden" /><p className="text-white font-bold text-sm">{level.label}</p><p className="text-zinc-500 text-xs mt-0.5">{level.desc}</p></div></label>
                     ))}
                   </div></div>
               </section>
-              <div className=\"flex justify-end pt-2\"><button type=\"submit\" disabled={loading} className=\"px-10 py-4 bg-white text-black font-black uppercase tracking-widest text-xs rounded-xl hover:bg-[#ff5351] hover:text-white transition-all shadow-xl disabled:opacity-50 flex items-center gap-2\"><UserPlus className=\"w-4 h-4\" />{loading ? 'Aguarde...' : 'Salvar Novo Membro'}</button></div>
+              <div className="flex justify-end pt-2"><button type="submit" disabled={loading} className="px-10 py-4 bg-white text-black font-black uppercase tracking-widest text-xs rounded-xl hover:bg-[#ff5351] hover:text-white transition-all shadow-xl disabled:opacity-50 flex items-center gap-2"><UserPlus className="w-4 h-4" />{loading ? 'Aguarde...' : 'Salvar Novo Membro'}</button></div>
             </form>
           )}
 
           <DataTable 
             data={clientTeamMembers}
             loading={loading}
-            emptyMessage=\"Nenhum membro vinculado a este cliente.\"
+            emptyMessage="Nenhum membro vinculado a este cliente."
             columns={[
               { 
                 header: 'Membro', 
                 accessor: (member) => (
-                  <div className=\"text-left py-1\">
-                    <div className=\"text-white font-bold text-base leading-tight mb-1\">{member.name}</div>
-                    <div className=\"text-zinc-500 text-xs flex items-center gap-2\"><Mail className=\"w-3.5 h-3.5\" />{member.email}</div>
+                  <div className="text-left py-1">
+                    <div className="text-white font-bold text-base leading-tight mb-1">{member.name}</div>
+                    <div className="text-zinc-500 text-xs flex items-center gap-2"><Mail className="w-3.5 h-3.5" />{member.email}</div>
                   </div>
                 )
               },
               {
                 header: 'Status',
                 accessor: (member) => (
-                  <span className={cn(\"inline-flex items-center gap-2 px-3 py-1 border rounded-full text-[10px] font-black uppercase tracking-widest\", member.status === 'confirmed' ? \"text-emerald-400 border-emerald-500/30 bg-emerald-500/10\" : \"text-amber-400 border-amber-500/30 bg-amber-500/10\")}>
-                    <div className={cn(\"w-1.5 h-1.5 rounded-full shadow-[0_0_8px_rgba(var(--color),0.5)]\", member.status === 'confirmed' ? \"bg-emerald-500\" : \"bg-amber-500\")} />
+                  <span className={cn("inline-flex items-center gap-2 px-3 py-1 border rounded-full text-[10px] font-black uppercase tracking-widest", member.status === 'confirmed' ? "text-emerald-400 border-emerald-500/30 bg-emerald-500/10" : "text-amber-400 border-amber-500/30 bg-amber-500/10")}>
+                    <div className={cn("w-1.5 h-1.5 rounded-full shadow-[0_0_8px_rgba(var(--color),0.5)]", member.status === 'confirmed' ? "bg-emerald-500" : "bg-amber-500")} />
                     {member.status === 'confirmed' ? '✓ OK, SENHA CRIADA' : '⏳ AGUARDANDO SENHA'}
                   </span>
                 )
@@ -510,8 +512,8 @@ export default function ClientAccess() {
             ]}
             actions={(member) => (
               <>
-                <button onClick={(e) => { e.stopPropagation(); sendEmailInvite(member.name, member.email); }} disabled={sendingEmail === member.email} className=\"p-2 bg-zinc-800 border border-zinc-700 hover:bg-[#ff5351] hover:border-transparent rounded-xl text-zinc-300 hover:text-white transition-all\" title=\"Reenviar Convite\"><Mail className=\"w-4 h-4\" /></button>
-                <button onClick={(e) => { e.stopPropagation(); handleDeleteTeamMember(member.id!, member.email); }} className=\"p-2 bg-zinc-800/50 hover:bg-red-500/10 rounded-xl text-zinc-600 hover:text-red-500 transition-all\" title=\"Excluir Membro\"><Trash2 className=\"w-4 h-4\" /></button>
+                <button onClick={(e) => { e.stopPropagation(); sendEmailInvite(member.name, member.email); }} disabled={sendingEmail === member.email} className="p-2 bg-zinc-800 border border-zinc-700 hover:bg-[#ff5351] hover:border-transparent rounded-xl text-zinc-300 hover:text-white transition-all" title="Reenviar Convite"><Mail className="w-4 h-4" /></button>
+                <button onClick={(e) => { e.stopPropagation(); handleDeleteTeamMember(member.id!, member.email); }} className="p-2 bg-zinc-800/50 hover:bg-red-500/10 rounded-xl text-zinc-600 hover:text-red-500 transition-all" title="Excluir Membro"><Trash2 className="w-4 h-4" /></button>
               </>
             )}
           />
@@ -519,10 +521,10 @@ export default function ClientAccess() {
       )}
 
       {!isClientFormOpen && !isTeamViewOpen && (
-        <div className=\"space-y-4 text-left\">
-          <div className=\"relative animate-in fade-in duration-300\">
-            <Search className=\"w-5 h-5 text-zinc-500 absolute left-5 top-1/2 -translate-y-1/2\" />
-            <input type=\"text\" placeholder=\"Buscar cliente por nome ou e-mail...\" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className=\"w-full bg-[#1a1a1a] border border-zinc-800 rounded-2xl pl-13 pr-5 py-4 text-white focus:border-[#ff5351] outline-none transition-all placeholder:text-zinc-600 shadow-xl\"/>
+        <div className="space-y-4 text-left">
+          <div className="relative animate-in fade-in duration-300">
+            <Search className="w-5 h-5 text-zinc-500 absolute left-5 top-1/2 -translate-y-1/2" />
+            <input type="text" placeholder="Buscar cliente por nome ou e-mail..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full bg-[#1a1a1a] border border-zinc-800 rounded-2xl pl-13 pr-5 py-4 text-white focus:border-[#ff5351] outline-none transition-all placeholder:text-zinc-600 shadow-xl"/>
           </div>
 
           <DataTable 
@@ -536,5 +538,58 @@ export default function ClientAccess() {
                 accessor: (client) => (
                   <div 
                     onClick={(e) => { e.stopPropagation(); if(client.id) navigate(`/clients/${client.id}`); }}
-                    className=\"text-left py-1 cursor-pointer group/name flex items-center gap-3\"
-                  >\n                    <div className=\"w-8 h-8 rounded-lg bg-zinc-900 overflow-hidden border border-zinc-700 shrink-0 flex items-center justify-center\">\n                      {client.logoUrl ? (\n                        <img src={client.logoUrl} alt=\"\" className=\"w-full h-full object-cover\" />\n                      ) : (\n                        <Building className=\"w-4 h-4 text-zinc-600\" />\n                      )}\n                    </div>\n                    <div>\n                      <div className=\"text-white font-bold text-base leading-tight mb-1 uppercase italic group-hover/name:text-[#ff5351] transition-colors\">{client.name}</div>\n                      <div className=\"text-zinc-500 text-xs flex items-center gap-2 font-medium tracking-tight\"><Mail className=\"w-3.5 h-3.5\" />{client.email}</div>\n                    </div>\n                  </div>\n                )\n              },\n              {\n                header: 'Status',\n                accessor: (client) => (\n                  <span className={cn(\"inline-flex items-center gap-2 px-3 py-1 border rounded-full text-[10px] font-black uppercase tracking-widest\", client.status === 'confirmed' ? \"text-emerald-400 border-emerald-500/30 bg-emerald-500/10\" : \"text-amber-400 border-amber-500/30 bg-amber-500/10\")}>\n                    <div className={cn(\"w-1.5 h-1.5 rounded-full shadow-[0_0_8px_rgba(var(--color),0.5)]\", client.status === 'confirmed' ? \"bg-emerald-500\" : \"bg-amber-500\")} />\n                    {client.status === 'confirmed' ? '✓ OK, SENHA CRIADA' : '⏳ AGUARDANDO SENHA'}\n                  </span>\n                )\n              },\n              {\n                header: 'Membros',\n                align: 'center',\n                accessor: (client) => {\n                  const count = getClientTeamCount(client.id!);\n                  return count > 0 ? (\n                    <div className=\"w-7 h-7 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center text-white text-[10px] font-bold shadow-lg\">{count}</div>\n                  ) : <span className=\"text-zinc-700 text-xs font-medium\">-</span>;\n                }\n              }\n            ]}\n            actions={(client) => (\n              <>\n                <button onClick={(e) => { e.stopPropagation(); handleOpenTeamView(client); }} className=\"flex items-center gap-2 px-3 py-2 bg-zinc-800 border border-zinc-700 hover:bg-zinc-700 hover:border-transparent rounded-xl text-zinc-300 hover:text-white transition-all text-[10px] font-black uppercase tracking-widest\" title=\"Gerenciar Equipe do Cliente\"><Users className=\"w-4 h-4 text-[#ff5351]\" />Equipe</button>\n                <button onClick={(e) => { e.stopPropagation(); handleOpenEditClient(client); }} className=\"p-2 bg-zinc-800 border border-zinc-700 hover:bg-zinc-700 rounded-xl text-zinc-400 hover:text-white transition-all\" title=\"Editar Cadastro\"><Edit2 className=\"w-4 h-4\" /></button>\n                <button onClick={(e) => { e.stopPropagation(); sendEmailInvite(client.name, client.email); }} disabled={sendingEmail === client.email} className=\"p-2 bg-zinc-800 border border-zinc-700 hover:bg-[#ff5351] hover:border-transparent rounded-xl text-zinc-300 hover:text-white transition-all disabled:opacity-50\"><Mail className=\"w-4 h-4\" /></button>\n                <button onClick={(e) => { e.stopPropagation(); \n                  const inviteLink = `${window.location.origin}/register?email=${encodeURIComponent(client.email)}`;\n                  navigator.clipboard.writeText(`Seu conteúdo foi selecionado!\\nAcesse pelo link abaixo e crie sua senha:\\n\\n${inviteLink}`);\n                  toast.success('Mensagem de convite copiada!');\n                }} className=\"p-2 bg-zinc-800 border border-zinc-700 hover:bg-[#25D366] hover:border-transparent rounded-xl text-zinc-300 hover:text-white transition-all\"><ExternalLink className=\"w-4 h-4\" /></button>\n                <button onClick={(e) => { e.stopPropagation(); handleDeleteClient(client.id!, client.email); }} className=\"p-2 bg-zinc-800/50 hover:bg-red-500/10 rounded-xl text-zinc-600 hover:text-red-500 transition-all\"><Trash2 className=\"w-4 h-4\" /></button>\n              </>\n            )}\n          />\n        </div>\n      )}\n    </div>\n  );\n}\n",path:
+                    className="text-left py-1 cursor-pointer group/name flex items-center gap-3"
+                  >
+                    <div className="w-8 h-8 rounded-lg bg-zinc-800 overflow-hidden border border-zinc-700 shrink-0 flex items-center justify-center">
+                      {client.logoUrl ? (
+                        <img src={client.logoUrl} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        <Building className="w-4 h-4 text-zinc-600" />
+                      )}
+                    </div>
+                    <div>
+                      <div className="text-white font-bold text-base leading-tight mb-1 uppercase italic group-hover/name:text-[#ff5351] transition-colors">{client.name}</div>
+                      <div className="text-zinc-500 text-xs flex items-center gap-2 font-medium tracking-tight"><Mail className="w-3.5 h-3.5" />{client.email}</div>
+                    </div>
+                  </div>
+                )
+              },
+              {
+                header: 'Status',
+                accessor: (client) => (
+                  <span className={cn("inline-flex items-center gap-2 px-3 py-1 border rounded-full text-[10px] font-black uppercase tracking-widest", client.status === 'confirmed' ? "text-emerald-400 border-emerald-500/30 bg-emerald-500/10" : "text-amber-400 border-amber-500/30 bg-amber-500/10")}>
+                    <div className={cn("w-1.5 h-1.5 rounded-full shadow-[0_0_8px_rgba(var(--color),0.5)]", client.status === 'confirmed' ? "bg-emerald-500" : "bg-amber-500")} />
+                    {client.status === 'confirmed' ? '✓ OK, SENHA CRIADA' : '⏳ AGUARDANDO SENHA'}
+                  </span>
+                )
+              },
+              {
+                header: 'Membros',
+                align: 'center',
+                accessor: (client) => {
+                  const count = getClientTeamCount(client.id!);
+                  return count > 0 ? (
+                    <div className="w-7 h-7 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center text-white text-[10px] font-bold shadow-lg">{count}</div>
+                  ) : <span className="text-zinc-700 text-xs font-medium">-</span>;
+                }
+              }
+            ]}
+            actions={(client) => (
+              <>
+                <button onClick={(e) => { e.stopPropagation(); handleOpenTeamView(client); }} className="flex items-center gap-2 px-3 py-2 bg-zinc-800 border border-zinc-700 hover:bg-zinc-700 hover:border-transparent rounded-xl text-zinc-300 hover:text-white transition-all text-[10px] font-black uppercase tracking-widest" title="Gerenciar Equipe do Cliente"><Users className="w-4 h-4 text-[#ff5351]" />Equipe</button>
+                <button onClick={(e) => { e.stopPropagation(); handleOpenEditClient(client); }} className="p-2 bg-zinc-800 border border-zinc-700 hover:bg-zinc-700 rounded-xl text-zinc-400 hover:text-white transition-all" title="Editar Cadastro"><Edit2 className="w-4 h-4" /></button>
+                <button onClick={(e) => { e.stopPropagation(); sendEmailInvite(client.name, client.email); }} disabled={sendingEmail === client.email} className="p-2 bg-zinc-800 border border-zinc-700 hover:bg-[#ff5351] hover:border-transparent rounded-xl text-zinc-300 hover:text-white transition-all disabled:opacity-50"><Mail className="w-4 h-4" /></button>
+                <button onClick={(e) => { e.stopPropagation(); 
+                  const inviteLink = `${window.location.origin}/register?email=${encodeURIComponent(client.email)}`;
+                  navigator.clipboard.writeText(`Seu conteúdo foi selecionado!\nAcesse pelo link abaixo e crie sua senha:\n\n${inviteLink}`);
+                  toast.success('Mensagem de convite copiada!');
+                }} className="p-2 bg-zinc-800 border border-zinc-700 hover:bg-[#25D366] hover:border-transparent rounded-xl text-zinc-300 hover:text-white transition-all"><ExternalLink className="w-4 h-4" /></button>
+                <button onClick={(e) => { e.stopPropagation(); handleDeleteClient(client.id!, client.email); }} className="p-2 bg-zinc-800/50 hover:bg-red-500/10 rounded-xl text-zinc-600 hover:text-red-500 transition-all"><Trash2 className="w-4 h-4" /></button>
+              </>
+            )}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
