@@ -164,7 +164,15 @@ export default function AppLayout({ children, userRole = 'cliente', userName = '
           </div>
         </div>
 
-        <div className="flex items-center gap-4 relative" ref={dropdownRef}>
+        <div className="flex items-center gap-2 md:gap-4 relative" ref={dropdownRef}>
+          <button 
+            onClick={() => navigate('/teleprompter')}
+            className="flex md:hidden p-2 text-zinc-400 hover:text-white transition-all group"
+            title="Teleprompter"
+          >
+            <Tv className="w-6 h-6" />
+          </button>
+
           <button 
             onClick={() => setShowNotificationDropdown(!showNotificationDropdown)}
             className="relative p-2 text-zinc-400 hover:text-white transition-all group"
