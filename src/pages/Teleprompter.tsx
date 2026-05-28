@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Bluetooth, Tv, Save, Trash2, RefreshCw, Cpu, Activity, Info, Play, Pause, RotateCcw, ChevronUp, ChevronDown, FileText, Upload, Settings } from 'lucide-react';
+import { Bluetooth, Tv, Save, Trash2, RefreshCw, Cpu, Activity, Info, Play, Pause, RotateCcw, ChevronUp, ChevronDown, FileText, Upload, Settings, Keyboard } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { toast } from 'react-hot-toast';
 
@@ -9,6 +9,12 @@ interface InputMapping {
   id: string;
   hex: string;
   action: TPAction;
+}
+
+interface KeyHistory {
+  key: string;
+  code: string;
+  timestamp: string;
 }
 
 const ACTION_LABELS: Record<TPAction, string> = {
@@ -27,6 +33,7 @@ export default function Teleprompter() {
   const [loading, setLoading] = useState(false);
   const [lastRawInput, setLastRawInput] = useState<{hex: string, dec: string} | null>(null);
   const [mappings, setMappings] = useState<InputMapping[]>([]);
+  const [keyHistory, setKeyHistory] = useState<KeyHistory[]>([]);
   
   // Estados do Teleprompter
   const [text, setText] = useState('');
@@ -69,10 +76,12 @@ export default function Teleprompter() {
       setDevice(dev);
       toast.success(`Conectado a ${dev.name}`);
 
-      const server = await dev.gatt?.connect();
-      // O mapeamento real depende de encontrar a característica de notificação.
-      // Como o FEELWORLD é HID, ele envia sinais de teclado.
-      // Vamos usar o listener de teclado como ponte para o mapeamento.
+      dev.addEventListener('gattserverdisconnected', () => {
+        setDevice(null);
+        toast.error('Controle desconectado');
+      });
+
+      await dev.gatt?.connect();
     } catch (error: any) {
       if (error.name !== 'NotFoundError') toast.error('Erro: ' + error.message);
     } finally {
@@ -86,6 +95,14 @@ export default function Teleprompter() {
       const hexId = `KEY_${e.code}`;
       const decId = e.keyCode.toString();
       
+      // Update history
+      const newHistory: KeyHistory = {
+        key: e.key === ' ' ? 'ESPAÇO' : e.key.toUpperCase(),
+        code: e.code,
+        timestamp: new Date().toLocaleTimeString()
+      };
+      setKeyHistory(prev => [newHistory, ...prev].slice(0, 5));
+
       if (activeTab === 'map') {
         setLastRawInput({ hex: hexId, dec: decId });
         setMappings(prev => {
@@ -140,6 +157,25 @@ export default function Teleprompter() {
 
   return (
     <div className="min-h-[80vh] flex flex-col animate-in fade-in duration-700">
+      {/* Status Bar */}
+      <div className="flex items-center justify-between bg-zinc-900/50 border border-zinc-800 rounded-2xl px-6 py-3 mb-8">
+        <div className="flex items-center gap-3">
+          <div className={cn("w-2.5 h-2.5 rounded-full animate-pulse", device ? "bg-emerald-500" : "bg-red-500")} />
+          <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">
+            {device ? `Conectado: ${device.name}` : 'Desconectado'}
+          </span>
+        </div>
+        <div className="hidden md:flex items-center gap-2 text-[9px] font-bold text-zinc-500 uppercase tracking-tighter">
+          <span>1. Conectar</span>
+          <span className="text-zinc-700">→</span>
+          <span>2. Pressionar Botão</span>
+          <span className="text-zinc-700">→</span>
+          <span>3. Definir Função</span>
+          <span className="text-zinc-700">→</span>
+          <span>4. Salvar</span>
+        </div>
+      </div>
+
       {/* Abas */}
       <div className="flex gap-4 mb-8">
         <button onClick={() => setActiveTab('map')} className={cn("px-6 py-3 rounded-xl font-black uppercase text-[10px] tracking-widest border transition-all", activeTab === 'map' ? "bg-[#ff5351] border-[#ff5351] text-white shadow-lg" : "bg-zinc-900 border-zinc-800 text-zinc-500")}>1. Mapear Controle</button>
@@ -160,10 +196,13 @@ export default function Teleprompter() {
                 </button>
               </div>
 
-              {lastRawInput && (
-                <div className="bg-black/40 border border-zinc-800 rounded-2xl p-6 text-center animate-in zoom-in-95">
-                  <p className="text-[9px] text-zinc-500 font-black uppercase mb-2">Sinal Detectado</p>
-                  <div className="text-2xl font-black text-[#ff5351] font-mono">{lastRawInput.hex}</div>
+              {keyHistory.length > 0 && (
+                <div className="bg-[#ff5351]/5 border border-[#ff5351]/20 rounded-2xl p-6 text-center animate-in zoom-in-95">
+                  <p className="text-[9px] text-[#ff5351] font-black uppercase mb-4 tracking-[0.2em]">Botão pressionado!</p>
+                  <div className="text-4xl font-black text-white italic tracking-tighter uppercase mb-4">{keyHistory[0].key}</div>
+                  <div className="flex items-center justify-center gap-3">
+                    <span className="px-3 py-1 bg-zinc-900 border border-zinc-800 text-zinc-500 rounded-lg text-[9px] font-black">CODE: {keyHistory[0].code}</span>
+                  </div>
                 </div>
               )}
             </section>
@@ -181,11 +220,14 @@ export default function Teleprompter() {
 
               <div className="space-y-3">
                 {mappings.length === 0 ? (
-                  <div className="py-20 text-center text-zinc-600 italic text-sm">Pressione os botões do controle para começar o mapeamento...</div>
+                  <div className="py-20 text-center flex flex-col items-center gap-4">
+                    <Keyboard className="w-12 h-12 text-zinc-800 animate-bounce" />
+                    <p className="text-zinc-600 font-bold uppercase text-[10px] tracking-widest max-w-[200px]">Pressione os botões do controle para iniciar o mapeamento</p>
+                  </div>
                 ) : (
                   mappings.map(m => (
-                    <div key={m.id} className="flex items-center justify-between bg-zinc-900/50 p-4 rounded-2xl border border-zinc-800">
-                      <div className="font-mono text-xs text-white uppercase">{m.hex}</div>
+                    <div key={m.id} className="flex items-center justify-between bg-zinc-900/50 p-4 rounded-2xl border border-zinc-800 hover:border-zinc-700 transition-all">
+                      <div className="font-mono text-xs text-white uppercase font-black">{m.hex}</div>
                       <select value={m.action} onChange={e => updateMapping(m.id, e.target.value as TPAction)} className="bg-black border border-zinc-800 rounded-lg px-4 py-2 text-[10px] font-bold text-white uppercase outline-none focus:border-[#ff5351]">
                         {Object.entries(ACTION_LABELS).map(([val, label]) => (<option key={val} value={val}>{label}</option>))}
                       </select>
@@ -197,9 +239,36 @@ export default function Teleprompter() {
           </div>
 
           <div className="space-y-6">
+            <section className="bg-[#141414] border border-zinc-800 rounded-[32px] p-6 shadow-2xl">
+              <div className="flex items-center justify-between mb-6 border-b border-zinc-800 pb-3">
+                <div className="flex items-center gap-2">
+                  <Activity className="w-4 h-4 text-[#ff5351]" />
+                  <h3 className="text-white font-black uppercase tracking-widest text-[10px]">Histórico Recente</h3>
+                </div>
+                {keyHistory.length > 0 && (
+                  <button onClick={() => setKeyHistory([])} className="text-zinc-600 hover:text-[#ff5351] transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
+                )}
+              </div>
+              <div className="space-y-2">
+                {keyHistory.length === 0 ? (
+                  <p className="text-[10px] text-zinc-700 font-bold uppercase text-center py-4">Nenhum sinal...</p>
+                ) : (
+                  keyHistory.map((h, i) => (
+                    <div key={i} className="flex items-center justify-between bg-black/30 p-3 rounded-xl border border-zinc-800/50">
+                      <span className="text-[10px] font-black text-zinc-400">{h.key}</span>
+                      <span className="text-[8px] font-mono text-zinc-600 uppercase tracking-tighter">{h.timestamp}</span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </section>
+
             <div className="bg-blue-500/5 border border-blue-500/10 rounded-2xl p-6">
-              <h4 className="text-blue-400 font-black uppercase text-[10px] mb-2">Instruções</h4>
-              <p className="text-blue-400/70 text-[10px] leading-relaxed uppercase font-bold">1. Conecte o controle FEELWORLD-05 ao Bluetooth do dispositivo.<br/>2. Clique em 'Conectar via Bluetooth' acima.<br/>3. Pressione cada botão e defina sua função.<br/>4. Salve e vá para a aba Teleprompter.</p>
+              <div className="flex items-center gap-2 mb-3">
+                <Info className="w-4 h-4 text-blue-500" />
+                <h4 className="text-blue-400 font-black uppercase text-[10px]">Importante</h4>
+              </div>
+              <p className="text-blue-400/70 text-[9px] leading-relaxed uppercase font-bold">O FEELWORLD-05 deve estar pareado no Windows/Mac antes de conectar aqui. Ele será identificado como um teclado externo.</p>
             </div>
           </div>
         </div>
@@ -243,7 +312,7 @@ export default function Teleprompter() {
           </div>
 
           {/* Exibição */}
-          <div className="flex-1 bg-black border border-zinc-800 rounded-[40px] relative overflow-hidden flex flex-col">
+          <div className="flex-1 bg-black border border-zinc-800 rounded-[40px] relative overflow-hidden flex flex-col shadow-inner">
             <div ref={prompterRef} className="flex-1 overflow-y-auto px-12 py-32 text-center select-none custom-scrollbar scroll-smooth" style={{ scrollBehavior: 'auto' }}>
               <div className="max-w-4xl mx-auto font-black leading-tight uppercase italic whitespace-pre-wrap transition-all" style={{ fontSize: `${fontSize}px`, color: '#fff' }}>{text || 'SEU TEXTO APARECERÁ AQUI...'}</div>
             </div>
