@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../lib/firebase';
 import { collection, getDocs, limit, query } from 'firebase/firestore';
 import { DataTable } from '../components/ui/DataTable';
-import { Database, Search, RefreshCw, Loader2, Copy, Check, Video, Trash2, Key, AlertTriangle } from 'lucide-react';
+import { Database, Search, RefreshCw, Loader2, Copy, Check, Video, Trash2, Key } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { cn } from '../lib/utils';
 
@@ -99,7 +99,10 @@ export default function DebugTable() {
   };
 
   const deleteSelectedVideos = async () => {
-    if (selectedVideos.size === 0) return;\n    if (!window.confirm(`ATENÇÃO: Você está prestes a apagar ${selectedVideos.size} vídeos permanentemente do Cloudflare. Continuar?`)) return;
+    if (selectedVideos.size === 0) return;
+    
+    const confirmMsg = `ATENÇÃO: Você está prestes a apagar ${selectedVideos.size} vídeos permanentemente do Cloudflare. Continuar?`;
+    if (!window.confirm(confirmMsg)) return;
 
     setIsDeleting(true);
     setDeleteProgress({ current: 0, total: selectedVideos.size });
