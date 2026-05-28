@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Tv, Play, Pause, RotateCcw, ChevronUp, ChevronDown, Monitor, Maximize2, FlipHorizontal, Wifi, WifiOff, Settings2, Trash2 } from 'lucide-react';
+import { Tv, Play, Pause, RotateCcw, ChevronUp, ChevronDown, Maximize2, FlipHorizontal, Settings2, Trash2 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { toast } from 'react-hot-toast';
 
@@ -15,49 +15,62 @@ export default function Teleprompter() {
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollPos = useRef(0);
   const socketRef = useRef<WebSocket | null>(null);
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const reconnectTimeoutRef = useRef<any>(null);
 
-  // WebSocket Logic
+  // WebSocket Logic with safety checks for mobile/SSR
   useEffect(() => {
     const connect = () => {
+      if (typeof window === 'undefined' || !window.WebSocket) return;
       if (socketRef.current?.readyState === WebSocket.OPEN) return;
 
-      console.log('Tentando conectar ao ESP32...');
-      const ws = new WebSocket('ws://10.0.0.113:81');
+      try {
+        console.log('Tentando conectar ao ESP32...');
+        const ws = new WebSocket('ws://10.0.0.113:81');
 
-      ws.onopen = () => {
-        setIsConnected(true);
-        toast.success('Conectado ao ESP32');
-        if (reconnectTimeoutRef.current) {
-          clearTimeout(reconnectTimeoutRef.current);
-          reconnectTimeoutRef.current = null;
-        }
-      };
+        ws.onopen = () => {
+          setIsConnected(true);
+          toast.success('Conectado ao ESP32');
+          if (reconnectTimeoutRef.current) {
+            clearTimeout(reconnectTimeoutRef.current);
+            reconnectTimeoutRef.current = null;
+          }
+        };
 
-      ws.onmessage = (event) => {
-        const command = event.data.trim();
-        console.log('Comando ESP32:', command);
-        handleCommand(command);
-      };
+        ws.onmessage = (event) => {
+          try {
+            const command = event.data.toString().trim();
+            console.log('Comando ESP32:', command);
+            handleCommand(command);
+          } catch (e) {
+            console.error('Erro ao processar comando:', e);
+          }
+        };
 
-      ws.onclose = () => {
-        setIsConnected(false);
-        console.log('Conexão fechada. Tentando reconectar...');
-        reconnectTimeoutRef.current = setTimeout(connect, 3000);
-      };
+        ws.onclose = () => {
+          setIsConnected(false);
+          console.log('Conexão fechada. Tentando reconectar...');
+          reconnectTimeoutRef.current = setTimeout(connect, 3000);
+        };
 
-      ws.onerror = (error) => {
-        console.error('Erro WebSocket:', error);
-        ws.close();
-      };
+        ws.onerror = (error) => {
+          console.error('Erro WebSocket:', error);
+          // Don't toast error here to avoid spamming on mobile if local IP is unreachable
+          ws.close();
+        };
 
-      socketRef.current = ws;
+        socketRef.current = ws;
+      } catch (e) {
+        console.error('Falha ao iniciar WebSocket:', e);
+      }
     };
 
     connect();
 
     return () => {
-      if (socketRef.current) socketRef.current.close();
+      if (socketRef.current) {
+        socketRef.current.onclose = null; // Prevent reconnect on unmount
+        socketRef.current.close();
+      }
       if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
     };
   }, []);
@@ -109,26 +122,33 @@ export default function Teleprompter() {
   };
 
   const toggleFullscreen = () => {
-    if (!document.fullscreenElement) {
-      containerRef.current?.requestFullscreen();
-    } else {
-      document.exitFullscreen();
+    if (!containerRef.current) return;
+    try {
+      if (!document.fullscreenElement) {
+        containerRef.current.requestFullscreen().catch(err => {
+          console.warn('Erro ao entrar em tela cheia:', err);
+        });
+      } else {
+        document.exitFullscreen();
+      }
+    } catch (e) {
+      console.error('Fullscreen API não suportada:', e);
     }
   };
 
   return (
-    <div className="animate-in fade-in duration-700 h-[calc(100vh-120px)] flex flex-col gap-6">
+    <div className="animate-in fade-in duration-700 h-[calc(100vh-120px)] flex flex-col gap-4 md:gap-6">
       {/* Header / Toolbar */}
-      <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-zinc-900/50 border border-zinc-800 p-4 rounded-3xl">
+      <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-zinc-900/50 border border-zinc-800 p-4 rounded-3xl shrink-0">
         <div className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-[#ff5351]/10 flex items-center justify-center">
-            <Tv className="w-6 h-6 text-[#ff5351]" />
+          <div className="w-10 h-10 md:w-12 md:h-12 rounded-2xl bg-[#ff5351]/10 flex items-center justify-center shrink-0">
+            <Tv className="w-5 h-5 md:w-6 md:h-6 text-[#ff5351]" />
           </div>
           <div>
-            <h1 className="text-xl font-black text-white uppercase italic tracking-tight">Teleprompter Master</h1>
+            <h1 className="text-lg md:text-xl font-black text-white uppercase italic tracking-tight">Teleprompter Master</h1>
             <div className="flex items-center gap-2">
               <div className={cn("w-2 h-2 rounded-full", isConnected ? "bg-emerald-500 animate-pulse" : "bg-red-500")} />
-              <span className="text-[10px] font-black uppercase text-zinc-500 tracking-widest">
+              <span className="text-[9px] md:text-[10px] font-black uppercase text-zinc-500 tracking-widest">
                 {isConnected ? '🟢 Conectado ao ESP32' : '🔴 Desconectado'}
               </span>
             </div>
@@ -139,7 +159,7 @@ export default function Teleprompter() {
           <button 
             onClick={() => setIsMirrored(!isMirrored)} 
             className={cn(
-              "px-4 py-2.5 rounded-xl border font-black text-[10px] uppercase tracking-widest transition-all flex items-center gap-2",
+              "flex-1 md:flex-none px-3 md:px-4 py-2 md:py-2.5 rounded-xl border font-black text-[9px] md:text-[10px] uppercase tracking-widest transition-all flex items-center justify-center gap-2",
               isMirrored ? "bg-[#ff5351] border-[#ff5351] text-white" : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white"
             )}
           >
@@ -147,21 +167,21 @@ export default function Teleprompter() {
           </button>
           <button 
             onClick={toggleFullscreen} 
-            className="px-4 py-2.5 bg-zinc-900 border border-zinc-800 rounded-xl font-black text-[10px] uppercase tracking-widest text-zinc-400 hover:text-white transition-all flex items-center gap-2"
+            className="flex-1 md:flex-none px-3 md:px-4 py-2 md:py-2.5 bg-zinc-900 border border-zinc-800 rounded-xl font-black text-[9px] md:text-[10px] uppercase tracking-widest text-zinc-400 hover:text-white transition-all flex items-center justify-center gap-2"
           >
             <Maximize2 className="w-4 h-4" /> Tela Cheia
           </button>
         </div>
       </header>
 
-      <div className="flex-1 flex flex-col lg:flex-row gap-6 min-h-0">
+      <div className="flex-1 flex flex-col lg:flex-row gap-4 md:gap-6 min-h-0">
         {/* Lado Esquerdo: Input e Controles */}
-        <aside className="w-full lg:w-96 flex flex-col gap-6 shrink-0">
-          <section className="flex-1 bg-[#141414] border border-zinc-800 rounded-[32px] p-6 flex flex-col space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+        <aside className="w-full lg:w-96 flex flex-col gap-4 md:gap-6 shrink-0 h-1/2 lg:h-auto">
+          <section className="flex-1 bg-[#141414] border border-zinc-800 rounded-[24px] md:rounded-[32px] p-4 md:p-6 flex flex-col space-y-4 shadow-2xl overflow-hidden">
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-3 shrink-0">
               <div className="flex items-center gap-2">
                 <Settings2 className="w-4 h-4 text-[#ff5351]" />
-                <h3 className="text-white font-black uppercase tracking-widest text-[10px]">Roteiro / Script</h3>
+                <h3 className="text-white font-black uppercase tracking-widest text-[9px] md:text-[10px]">Roteiro / Script</h3>
               </div>
               <button onClick={() => setText('')} className="text-zinc-600 hover:text-red-500 transition-colors">
                 <Trash2 className="w-4 h-4" />
@@ -171,20 +191,20 @@ export default function Teleprompter() {
               value={text} 
               onChange={e => setText(e.target.value)}
               placeholder="COLE SEU TEXTO AQUI..."
-              className="flex-1 bg-black border border-zinc-800 rounded-2xl p-4 text-sm text-white resize-none outline-none focus:border-[#ff5351] font-medium leading-relaxed custom-scrollbar"
+              className="flex-1 bg-black border border-zinc-800 rounded-2xl p-4 text-xs md:text-sm text-white resize-none outline-none focus:border-[#ff5351] font-medium leading-relaxed custom-scrollbar"
             />
           </section>
 
-          <section className="bg-[#141414] border border-zinc-800 rounded-[32px] p-6 space-y-6 shadow-2xl">
-             <div className="space-y-4">
-                <div className="flex items-center justify-between text-[10px] font-black uppercase text-zinc-500">
+          <section className="bg-[#141414] border border-zinc-800 rounded-[24px] md:rounded-[32px] p-4 md:p-6 space-y-4 md:space-y-6 shadow-2xl shrink-0">
+             <div className="space-y-3 md:space-y-4">
+                <div className="flex items-center justify-between text-[9px] md:text-[10px] font-black uppercase text-zinc-500">
                   <span>Velocidade de Rolagem</span>
                   <span className="text-[#ff5351]">{speed}</span>
                 </div>
                 <input type="range" min="1" max="20" value={speed} onChange={e => setSpeed(Number(e.target.value))} className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-[#ff5351]" />
              </div>
-             <div className="space-y-4">
-                <div className="flex items-center justify-between text-[10px] font-black uppercase text-zinc-500">
+             <div className="space-y-3 md:space-y-4">
+                <div className="flex items-center justify-between text-[9px] md:text-[10px] font-black uppercase text-zinc-500">
                   <span>Tamanho da Fonte</span>
                   <span className="text-[#ff5351]">{fontSize}px</span>
                 </div>
@@ -194,11 +214,11 @@ export default function Teleprompter() {
         </aside>
 
         {/* Lado Direito: O Teleprompter Real */}
-        <main ref={containerRef} className="flex-1 bg-black border border-zinc-800 rounded-[40px] relative overflow-hidden flex flex-col shadow-inner group">
+        <main ref={containerRef} className="flex-1 bg-black border border-zinc-800 rounded-[24px] md:rounded-[40px] relative overflow-hidden flex flex-col shadow-inner group">
           <div 
             ref={prompterRef} 
             className={cn(
-              "flex-1 overflow-y-auto px-12 py-[40vh] text-center select-none no-scrollbar",
+              "flex-1 overflow-y-auto px-6 md:px-12 py-[40vh] text-center select-none no-scrollbar",
               isMirrored && "transform -scale-x-100"
             )}
             style={{ scrollBehavior: 'auto' }}
@@ -212,39 +232,39 @@ export default function Teleprompter() {
           </div>
 
           {/* HUD de Controle Flutuante */}
-          <div className="absolute bottom-8 left-1/2 -translate-x-1/2 bg-[#141414]/90 backdrop-blur-2xl border border-white/5 rounded-[32px] p-3 flex items-center gap-3 shadow-2xl z-20 opacity-40 group-hover:opacity-100 transition-opacity">
-            <button onClick={handleReset} className="p-4 text-zinc-400 hover:text-white transition-all hover:bg-zinc-800 rounded-2xl" title="Reiniciar"><RotateCcw className="w-6 h-6" /></button>
+          <div className="absolute bottom-4 md:bottom-8 left-1/2 -translate-x-1/2 bg-[#141414]/90 backdrop-blur-2xl border border-white/5 rounded-[24px] md:rounded-[32px] p-2 md:p-3 flex items-center gap-2 md:gap-3 shadow-2xl z-20 opacity-90 lg:opacity-40 group-hover:opacity-100 transition-opacity scale-90 md:scale-100">
+            <button onClick={handleReset} className="p-3 md:p-4 text-zinc-400 hover:text-white transition-all hover:bg-zinc-800 rounded-2xl shrink-0" title="Reiniciar"><RotateCcw className="w-5 h-5 md:w-6 md:h-6" /></button>
             
-            <div className="flex items-center gap-1 bg-black/40 rounded-2xl p-1">
-              <button onClick={() => setSpeed(prev => Math.max(prev - 1, 1))} className="p-4 text-zinc-500 hover:text-[#ff5351] transition-all"><ChevronDown className="w-6 h-6" /></button>
-              <div className="px-4 text-center border-x border-white/5">
-                <span className="text-[8px] font-black text-zinc-600 uppercase block">Vel.</span>
-                <span className="text-xl font-black text-white italic">{speed}</span>
+            <div className="flex items-center gap-0.5 md:gap-1 bg-black/40 rounded-2xl p-1">
+              <button onClick={() => setSpeed(prev => Math.max(prev - 1, 1))} className="p-3 md:p-4 text-zinc-500 hover:text-[#ff5351] transition-all"><ChevronDown className="w-5 h-5 md:w-6 md:h-6" /></button>
+              <div className="px-2 md:px-4 text-center border-x border-white/5 min-w-[40px] md:min-w-[60px]">
+                <span className="text-[7px] md:text-[8px] font-black text-zinc-600 uppercase block leading-none">Vel.</span>
+                <span className="text-base md:text-xl font-black text-white italic">{speed}</span>
               </div>
-              <button onClick={() => setSpeed(prev => Math.min(prev + 1, 20))} className="p-4 text-zinc-500 hover:text-[#ff5351] transition-all"><ChevronUp className="w-6 h-6" /></button>
+              <button onClick={() => setSpeed(prev => Math.min(prev + 1, 20))} className="p-3 md:p-4 text-zinc-500 hover:text-[#ff5351] transition-all"><ChevronUp className="w-5 h-5 md:w-6 md:h-6" /></button>
             </div>
 
             <button 
               onClick={() => setIsPlaying(!isPlaying)} 
-              className="w-20 h-20 bg-[#ff5351] rounded-[24px] flex items-center justify-center text-white shadow-xl shadow-[#ff5351]/20 hover:scale-105 active:scale-95 transition-all"
+              className="w-16 h-16 md:w-20 md:h-20 bg-[#ff5351] rounded-[20px] md:rounded-[24px] flex items-center justify-center text-white shadow-xl shadow-[#ff5351]/20 hover:scale-105 active:scale-95 transition-all shrink-0"
             >
-              {isPlaying ? <Pause className="w-10 h-10 fill-current" /> : <Play className="w-10 h-10 fill-current ml-1" />}
+              {isPlaying ? <Pause className="w-8 h-8 md:w-10 md:h-10 fill-current" /> : <Play className="w-8 h-8 md:w-10 md:h-10 fill-current ml-1" />}
             </button>
 
-            <div className="flex items-center gap-1 bg-black/40 rounded-2xl p-1">
-              <button onClick={() => setFontSize(prev => Math.max(prev - 5, 20))} className="p-4 text-zinc-500 hover:text-white transition-all"><RotateCcw className="w-6 h-6 rotate-90" /></button>
-              <div className="px-4 text-center border-x border-white/5">
-                <span className="text-[8px] font-black text-zinc-600 uppercase block">Fonte</span>
-                <span className="text-xl font-black text-white italic">{fontSize}</span>
+            <div className="flex items-center gap-0.5 md:gap-1 bg-black/40 rounded-2xl p-1">
+              <button onClick={() => setFontSize(prev => Math.max(prev - 5, 20))} className="p-3 md:p-4 text-zinc-500 hover:text-white transition-all"><RotateCcw className="w-5 h-5 md:w-6 md:h-6 rotate-90" /></button>
+              <div className="px-2 md:px-4 text-center border-x border-white/5 min-w-[40px] md:min-w-[60px]">
+                <span className="text-[7px] md:text-[8px] font-black text-zinc-600 uppercase block leading-none">Fonte</span>
+                <span className="text-base md:text-xl font-black text-white italic">{fontSize}</span>
               </div>
-              <button onClick={() => setFontSize(prev => Math.min(prev + 5, 100))} className="p-4 text-zinc-500 hover:text-white transition-all"><RotateCcw className="w-6 h-6 -rotate-90" /></button>
+              <button onClick={() => setFontSize(prev => Math.min(prev + 5, 100))} className="p-3 md:p-4 text-zinc-500 hover:text-white transition-all"><RotateCcw className="w-5 h-5 md:w-6 md:h-6 -rotate-90" /></button>
             </div>
           </div>
 
           {/* Linha de Leitura Central */}
           <div className="absolute top-1/2 left-0 right-0 h-[2px] bg-[#ff5351]/30 pointer-events-none z-10" />
-          <div className="absolute top-1/2 left-4 w-2 h-2 rounded-full bg-[#ff5351] -translate-y-1/2 shadow-[0_0_10px_#ff5351] z-10" />
-          <div className="absolute top-1/2 right-4 w-2 h-2 rounded-full bg-[#ff5351] -translate-y-1/2 shadow-[0_0_10px_#ff5351] z-10" />
+          <div className="absolute top-1/2 left-2 md:left-4 w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-[#ff5351] -translate-y-1/2 shadow-[0_0_10px_#ff5351] z-10" />
+          <div className="absolute top-1/2 right-2 md:right-4 w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-[#ff5351] -translate-y-1/2 shadow-[0_0_10px_#ff5351] z-10" />
           
           {/* Sombra de Vinheta */}
           <div className="absolute inset-0 pointer-events-none bg-gradient-to-b from-black via-transparent to-black opacity-60 z-0" />
