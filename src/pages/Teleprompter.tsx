@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Tv, Play, Pause, RotateCcw, ChevronUp, ChevronDown, Maximize2, FlipHorizontal, Settings2, Trash2, Wifi, WifiOff, Loader2, Type, MoveHorizontal } from 'lucide-react';
+import { Tv, Play, Pause, RotateCcw, ChevronUp, ChevronDown, Maximize2, FlipHorizontal, Settings2, Trash2, Wifi, WifiOff, Loader2, Type, MoveHorizontal, Smartphone, Laptop } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { toast } from 'react-hot-toast';
 
@@ -13,6 +13,7 @@ export default function Teleprompter() {
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [activeMode, setActiveMode] = useState<'MARGEM' | 'FONTE'>('MARGEM');
+  const [viewMode, setViewMode] = useState<'prompter' | 'remote'>('prompter');
   
   const prompterRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -74,6 +75,14 @@ export default function Teleprompter() {
       socketRef.current = null;
       setIsConnected(false);
       toast.success('Controle desconectado');
+    }
+  };
+
+  const sendCommand = (cmd: string) => {
+    if (socketRef.current?.readyState === WebSocket.OPEN) {
+      socketRef.current.send(cmd);
+    } else {
+      toast.error('Controle não conectado ao servidor');
     }
   };
 
@@ -158,6 +167,74 @@ export default function Teleprompter() {
     };
   }, []);
 
+  if (viewMode === 'remote') {
+    return (
+      <div className="animate-in fade-in duration-700 min-h-[80vh] flex flex-col gap-6">
+        <header className="flex items-center justify-between bg-zinc-900/50 border border-zinc-800 p-4 rounded-3xl shrink-0">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-[#ff5351]/10 flex items-center justify-center shrink-0">
+              <Smartphone className="w-6 h-6 text-[#ff5351]" />
+            </div>
+            <div>
+              <h1 className="text-lg font-black text-white uppercase italic tracking-tight">Controle Remoto</h1>
+              <div className="flex items-center gap-2">
+                <div className={cn("w-2 h-2 rounded-full", isConnected ? "bg-emerald-500 animate-pulse" : "bg-red-500")} />
+                <span className="text-[10px] font-black uppercase text-zinc-500 tracking-widest">{isConnected ? '🟢 Online' : '🔴 Offline'}</span>
+              </div>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            {!isConnected ? (
+              <button onClick={connectToControl} disabled={isConnecting} className="px-4 py-3 bg-[#ff5351] text-white rounded-xl font-black text-[10px] uppercase transition-all shadow-lg">{isConnecting ? '...' : 'Conectar'}</button>
+            ) : (
+              <button onClick={disconnectControl} className="px-4 py-3 bg-zinc-800 text-zinc-400 rounded-xl font-black text-[10px] uppercase transition-all">Sair</button>
+            )}
+            <button onClick={() => setViewMode('prompter')} className="px-4 py-3 bg-white text-black rounded-xl font-black text-[10px] uppercase flex items-center gap-2 shadow-xl"><Laptop className="w-4 h-4" /> Tablet</button>
+          </div>
+        </header>
+
+        <div className="flex-1 grid grid-cols-2 gap-4">
+          <button onClick={() => sendCommand('PLAY_PAUSE')} className="col-span-2 h-32 bg-[#ff5351] rounded-[32px] flex flex-col items-center justify-center gap-2 shadow-2xl active:scale-95 transition-all text-white">
+            <Play className="w-10 h-10 fill-current" />
+            <span className="font-black uppercase tracking-widest text-xs">Play / Pause</span>
+          </button>
+          
+          <button onClick={() => sendCommand('SPEED_DOWN')} className="h-28 bg-zinc-900 border border-zinc-800 rounded-[32px] flex flex-col items-center justify-center gap-2 active:bg-zinc-800 transition-all text-zinc-400">
+            <ChevronDown className="w-8 h-8" />
+            <span className="font-black uppercase tracking-widest text-[9px]">Velocidade -</span>
+          </button>
+          <button onClick={() => sendCommand('SPEED_UP')} className="h-28 bg-zinc-900 border border-zinc-800 rounded-[32px] flex flex-col items-center justify-center gap-2 active:bg-zinc-800 transition-all text-zinc-400">
+            <ChevronUp className="w-8 h-8" />
+            <span className="font-black uppercase tracking-widest text-[9px]">Velocidade +</span>
+          </button>
+
+          <button onClick={() => sendCommand('MARGIN_LEFT')} className="h-28 bg-zinc-900 border border-zinc-800 rounded-[32px] flex flex-col items-center justify-center gap-2 active:bg-zinc-800 transition-all text-zinc-400">
+            <MoveHorizontal className="w-8 h-8 rotate-90" />
+            <span className="font-black uppercase tracking-widest text-[9px]">Margem -</span>
+          </button>
+          <button onClick={() => sendCommand('MARGIN_RIGHT')} className="h-28 bg-zinc-900 border border-zinc-800 rounded-[32px] flex flex-col items-center justify-center gap-2 active:bg-zinc-800 transition-all text-zinc-400">
+            <MoveHorizontal className="w-8 h-8" />
+            <span className="font-black uppercase tracking-widest text-[9px]">Margem +</span>
+          </button>
+
+          <button onClick={() => sendCommand('FONT_DOWN')} className="h-28 bg-zinc-900 border border-zinc-800 rounded-[32px] flex flex-col items-center justify-center gap-2 active:bg-zinc-800 transition-all text-zinc-400">
+            <Type className="w-8 h-8 scale-75" />
+            <span className="font-black uppercase tracking-widest text-[9px]">Fonte Menor</span>
+          </button>
+          <button onClick={() => sendCommand('FONT_UP')} className="h-28 bg-zinc-900 border border-zinc-800 rounded-[32px] flex flex-col items-center justify-center gap-2 active:bg-zinc-800 transition-all text-zinc-400">
+            <Type className="w-8 h-8" />
+            <span className="font-black uppercase tracking-widest text-[9px]">Fonte Maior</span>
+          </button>
+
+          <button onClick={() => sendCommand('RESET')} className="col-span-2 h-24 bg-zinc-800 border border-zinc-700 rounded-[32px] flex flex-col items-center justify-center gap-2 active:bg-zinc-700 transition-all text-zinc-300">
+            <RotateCcw className="w-6 h-6" />
+            <span className="font-black uppercase tracking-widest text-[9px]">Voltar ao Início</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="animate-in fade-in duration-700 h-[calc(100vh-120px)] flex flex-col gap-4 md:gap-6">
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-zinc-900/50 border border-zinc-800 p-4 md:p-6 rounded-3xl shrink-0">
@@ -177,11 +254,8 @@ export default function Teleprompter() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2 md:gap-3">
-          <div className="hidden lg:flex items-center gap-2 px-4 py-2 bg-black/40 rounded-xl border border-white/5 mr-2">
-            <span className="text-[8px] font-black text-zinc-600 uppercase">Ajuste Ativo:</span>
-            <span className="text-[10px] font-black text-[#ff5351] uppercase tracking-widest">{activeMode}</span>
-          </div>
-
+          <button onClick={() => setViewMode('remote')} className="hidden md:flex px-4 py-3 bg-zinc-900 border border-zinc-800 rounded-xl font-black text-[10px] uppercase tracking-widest text-zinc-400 hover:text-white transition-all items-center gap-2"><Smartphone className="w-4 h-4" /> Controle Remoto</button>
+          
           <button 
             onClick={isConnected ? disconnectControl : connectToControl}
             disabled={isConnecting}
@@ -193,11 +267,11 @@ export default function Teleprompter() {
             )}
           >
             {isConnecting ? <Loader2 className="w-4 h-4 animate-spin" /> : isConnected ? <WifiOff className="w-4 h-4" /> : <Wifi className="w-4 h-4" />}
-            {isConnected ? 'Desconectar' : 'Conectar ao Controle'}
+            {isConnected ? 'Desconectar' : 'Conectar ao ESP32'}
           </button>
           
           <div className="flex gap-2 flex-1 md:flex-none">
-            <button onClick={() => setIsMirrored(!isMirrored)} className={cn("flex-1 px-4 py-3 rounded-xl border font-black text-[10px] uppercase tracking-widest transition-all flex items-center justify-center gap-2", isMirrored ? "bg-[#ff5351] border-[#ff5351] text-white" : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white")}><FlipHorizontal className="w-4 h-4" /></button>
+            <button onClick={() => setIsMirrored(!isMirrored)} className={cn("flex-1 px-4 py-3 rounded-xl border font-black text-[10px] uppercase tracking-widest transition-all flex items-center justify-center gap-2", isMirrored ? "bg-[#ff5351] border-[#ff5351] text-white" : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white")} title="Espelhar Texto"><FlipHorizontal className="w-4 h-4" /></button>
             <button onClick={toggleFullscreen} className={cn("flex-1 px-4 py-3 bg-zinc-900 border border-zinc-800 rounded-xl font-black text-[10px] uppercase tracking-widest text-zinc-400 hover:text-white transition-all flex items-center justify-center gap-2", !document.fullscreenEnabled && "hidden")}><Maximize2 className="w-4 h-4" /></button>
           </div>
         </div>
@@ -241,7 +315,7 @@ export default function Teleprompter() {
             </div>
           </div>
 
-          <div ref={prompterRef} className={cn("flex-1 overflow-y-auto py-[45vh] text-center select-none no-scrollbar", isMirrored && "transform -scale-x-100")} style={{ scrollBehavior: 'auto' }}>
+          <div ref={prompterRef} className={cn("flex-1 overflow-y-auto py-[45vh] text-center select-none no-scrollbar transition-transform duration-500", isMirrored && "scale-x-[-1]")} style={{ scrollBehavior: 'auto' }}>
             <div className="font-black leading-tight uppercase italic whitespace-pre-wrap transition-all tracking-tight mx-auto" style={{ fontSize: `${fontSize}px`, color: '#fff', paddingLeft: `${margin}%`, paddingRight: `${margin}%` }}>
               {text || 'INSIRA O TEXTO NO CAMPO AO LADO PARA COMEÇAR...'}
             </div>
