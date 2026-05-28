@@ -99,8 +99,7 @@ export default function DebugTable() {
   };
 
   const deleteSelectedVideos = async () => {
-    if (selectedVideos.size === 0) return;
-    if (!window.confirm(`ATENÇÃO: Você está prestes a apagar ${selectedVideos.size} vídeos permanentemente do Cloudflare. Continuar?`)) return;
+    if (selectedVideos.size === 0) return;\n    if (!window.confirm(`ATENÇÃO: Você está prestes a apagar ${selectedVideos.size} vídeos permanentemente do Cloudflare. Continuar?`)) return;
 
     setIsDeleting(true);
     setDeleteProgress({ current: 0, total: selectedVideos.size });
@@ -326,12 +325,12 @@ export default function DebugTable() {
             columns={columns} 
             data={data} 
             loading={loading}
-            emptyMessage=\"Nenhum dado encontrado nesta coleção.\"
+            emptyMessage="Nenhum dado encontrado nesta coleção."
           />
         ) : (
-          <div className=\"py-20 text-center border border-dashed border-zinc-800 rounded-3xl\">
-            <Search className=\"w-12 h-12 text-zinc-900 mx-auto mb-4\" />
-            <p className=\"text-zinc-600 font-bold uppercase text-[10px] tracking-widest\">
+          <div className="py-20 text-center border border-dashed border-zinc-800 rounded-3xl">
+            <Search className="w-12 h-12 text-zinc-900 mx-auto mb-4" />
+            <p className="text-zinc-600 font-bold uppercase text-[10px] tracking-widest">
               {loading ? 'Carregando banco de dados...' : 'Selecione uma coleção ou aguarde'}
             </p>
           </div>
