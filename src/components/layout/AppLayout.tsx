@@ -125,7 +125,19 @@ export default function AppLayout({ children, userRole = 'cliente', permissions 
     navigate('/login');
   };
 
-  const ALL_MODULES = [\n    { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard', path: '/' },\n    { id: 'projetos', icon: Library, label: 'Projeto Seleção', path: '/projetos' },\n    { id: 'planejamentos', icon: FileText, label: 'Planejamentos', path: '/meus-planejamentos' },\n    { id: 'clientes', icon: Users, label: 'Clientes', path: '/clients' },\n    { id: 'equipe', icon: UsersRound, label: 'Equipe', path: '/equipe' },\n    { id: 'pacotes', icon: Package, label: 'Serviços', path: '/packages' },\n    { id: 'modelos', icon: LayoutTemplate, label: 'Modelos', path: '/modelos' },\n    { id: 'creditos', icon: CreditCard, label: 'Créditos', path: '/credits' },\n    { id: 'tarefas', icon: CheckSquare, label: 'Tarefas Diárias', path: '/tarefas' },\n    { id: 'painel_master', icon: Shield, label: 'Painel Master', path: '/painel-master' },\n    { id: 'diagnostico', icon: Database, label: 'Teste Tabela', path: '/diagnostico' }\n  ];
+  const ALL_MODULES = [
+    { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard', path: '/' },
+    { id: 'projetos', icon: Library, label: 'Projeto Seleção', path: '/projetos' },
+    { id: 'planejamentos', icon: FileText, label: 'Planejamentos', path: '/meus-planejamentos' },
+    { id: 'clientes', icon: Users, label: 'Clientes', path: '/clients' },
+    { id: 'equipe', icon: UsersRound, label: 'Equipe', path: '/equipe' },
+    { id: 'pacotes', icon: Package, label: 'Serviços', path: '/packages' },
+    { id: 'modelos', icon: LayoutTemplate, label: 'Modelos', path: '/modelos' },
+    { id: 'creditos', icon: CreditCard, label: 'Créditos', path: '/credits' },
+    { id: 'tarefas', icon: CheckSquare, label: 'Tarefas Diárias', path: '/tarefas' },
+    { id: 'painel_master', icon: Shield, label: 'Painel Master', path: '/painel-master' },
+    { id: 'diagnostico', icon: Database, label: 'Teste Tabela', path: '/diagnostico' }
+  ];
 
   const navItems = ALL_MODULES.filter(mod => {
     if (mod.id === 'planejamentos' && userRole === 'cliente') return true;
@@ -195,7 +207,14 @@ export default function AppLayout({ children, userRole = 'cliente', permissions 
                       key={task.id}
                       onClick={() => handleNotificationClick(task)}
                       className="w-full p-4 text-left border-b border-zinc-800/50 hover:bg-[#ff5351]/5 transition-all flex items-start gap-3 group/item"
-                    >\n                      <div className="w-2 h-2 rounded-full bg-[#ff5351] mt-1.5 shadow-[0_0_8px_rgba(255,83,81,0.4)]" />\n                      <div className="flex-1 overflow-hidden">\n                        <p className="text-xs font-bold text-white uppercase truncate group-hover/item:text-[#ff5351] transition-colors">{task.nome}</p>\n                        <p className="text-[9px] text-zinc-500 font-black uppercase tracking-widest mt-1">Nova tarefa delegada</p>\n                      </div>\n                      <ChevronRight className="w-4 h-4 text-zinc-700 group-hover/item:text-[#ff5351] transition-colors" />\n                    </button>
+                    >
+                      <div className="w-2 h-2 rounded-full bg-[#ff5351] mt-1.5 shadow-[0_0_8px_rgba(255,83,81,0.4)]" />
+                      <div className="flex-1 overflow-hidden">
+                        <p className="text-xs font-bold text-white uppercase truncate group-hover/item:text-[#ff5351] transition-colors">{task.nome}</p>
+                        <p className="text-[9px] text-zinc-500 font-black uppercase tracking-widest mt-1">Nova tarefa delegada</p>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-zinc-700 group-hover/item:text-[#ff5351] transition-colors" />
+                    </button>
                   ))
                 )}
               </div>
@@ -231,4 +250,19 @@ export default function AppLayout({ children, userRole = 'cliente', permissions 
             {navItems.map((item) => (
               <NavLink key={item.id} to={item.path} className={({ isActive }) => cn('flex items-center gap-3 px-4 py-3 rounded-lg transition-all text-sm font-medium', isActive ? 'bg-zinc-800/50 text-[#ff5351] border-l-2 border-[#ff5351]' : 'text-zinc-400 hover:text-white hover:bg-zinc-800')}>
                 <item.icon className="w-4 h-4" />{item.label}
-              </NavLink>\n            ))}\n          </nav>\n\n          <div className=\"mt-auto pt-4 border-t border-zinc-800 space-y-1\">\n            <button onClick={handleLogout} className=\"w-full flex items-center gap-3 px-4 py-3 text-zinc-400 hover:text-[#ff5351] transition-all text-sm font-medium\"><LogOut className=\"w-4 h-4\" />Logout</button>\n          </div>\n        </aside>\n\n        <main className=\"flex-1 lg:ml-64 p-8\">\n          <div className=\"max-w-7xl mx-auto\">{children}</div>\n        </main>\n      </div>\n    </div>\n  );\n}\n",path:
+              </NavLink>
+            ))}
+          </nav>
+
+          <div className="mt-auto pt-4 border-t border-zinc-800 space-y-1">
+            <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-3 text-zinc-400 hover:text-[#ff5351] transition-all text-sm font-medium"><LogOut className="w-4 h-4" />Logout</button>
+          </div>
+        </aside>
+
+        <main className="flex-1 lg:ml-64 p-8">
+          <div className="max-w-7xl mx-auto">{children}</div>
+        </main>
+      </div>
+    </div>
+  );
+}
