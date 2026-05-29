@@ -90,12 +90,6 @@ export default function Teleprompter() {
     return () => cancelAnimationFrame(rafId);
   }, [state.playing, state.velocidade, selectedMode]);
 
-  useEffect(() => {
-    if (!showControls && document.fullscreenElement) {
-      if (controlTimeout.current) clearTimeout(controlTimeout.current);
-    }
-  }, [showControls]);
-
   const handleScreenTouch = () => {
     if (selectedMode === 'prompter') {
       setShowControls(true);
@@ -128,33 +122,69 @@ export default function Teleprompter() {
     reader.readAsText(file);
   };
 
+  const clearText = () => {
+    if (window.confirm('Deseja limpar todo o texto do roteiro?')) {
+      updateState({ texto: '' });
+      toast.success('Texto removido');
+    }
+  };
+
   const calculateMargin = (val: number) => (val / 40) * 30;
 
-  const PillSlider = ({ label, value, min, max, onChange, icon: Icon }: any) => (
-    <div className="space-y-1.5 w-full">
-      <div className="flex justify-between items-center px-1">
-        <span className="text-[8px] font-black text-zinc-500 uppercase tracking-widest flex items-center gap-1">
-          {Icon && <Icon className="w-2.5 h-2.5" />} {label}
-        </span>
-        <span className="text-[10px] font-black text-white italic">{value}</span>
-      </div>
-      <div className="relative h-[27px] w-full bg-zinc-800 rounded-full flex items-center px-0.5 border border-white/5">
+  const PillSlider = ({ label, value, min, max, onChange, icon: Icon }: any) => {
+    const sliderRef = useRef<HTMLDivElement>(null);
+
+    const handleUpdate = (clientX: number) => {
+      if (!sliderRef.current) return;
+      const rect = sliderRef.current.getBoundingClientRect();
+      const percentage = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+      const newValue = Math.round(min + (max - min) * percentage);
+      if (newValue !== value) onChange(newValue);
+    };
+
+    const onTouchMove = (e: React.TouchEvent) => {
+      e.preventDefault();
+      handleUpdate(e.touches[0].clientX);
+    };
+
+    const onMouseDown = (e: React.MouseEvent) => {
+      handleUpdate(e.clientX);
+      const onMouseMove = (moveEvent: MouseEvent) => handleUpdate(moveEvent.clientX);
+      const onMouseUp = () => {
+        window.removeEventListener('mousemove', onMouseMove);
+        window.removeEventListener('mouseup', onMouseUp);
+      };
+      window.addEventListener('mousemove', onMouseMove);
+      window.addEventListener('mouseup', onMouseUp);
+    };
+
+    return (
+      <div className="space-y-1.5 w-full select-none">
+        <div className="flex justify-between items-center px-1">
+          <span className="text-[8px] font-black text-zinc-500 uppercase tracking-widest flex items-center gap-1">
+            {Icon && <Icon className="w-2.5 h-2.5" />} {label}
+          </span>
+          <span className="text-[10px] font-black text-white italic">{value}</span>
+        </div>
         <div 
-          className="absolute left-0.5 top-0.5 bottom-0.5 bg-[#ff5351] rounded-full transition-all duration-150 shadow-[0_0_10px_rgba(255,83,81,0.3)]"
-          style={{ width: `${((value - min) / (max - min)) * 100}%`, minWidth: '24px' }}
-        />
-        <input 
-          type="range" min={min} max={max} value={value} 
-          onChange={e => onChange(Number(e.target.value))}
-          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
-        />
-        <div 
-          className="absolute w-[23px] h-[23px] bg-white rounded-full shadow-lg transition-all duration-150 pointer-events-none"
-          style={{ left: `calc(${((value - min) / (max - min)) * 100}% - ${((value - min) / (max - min)) * 23}px + 2px)` }}
-        />
+          ref={sliderRef}
+          onMouseDown={onMouseDown}
+          onTouchMove={onTouchMove}
+          onTouchStart={onTouchMove}
+          className="relative h-[27px] w-full bg-zinc-800 rounded-full flex items-center px-0.5 border border-white/5 cursor-pointer"
+        >
+          <div 
+            className="absolute left-0.5 top-0.5 bottom-0.5 bg-[#ff5351] rounded-full transition-all duration-75 shadow-[0_0_10px_rgba(255,83,81,0.3)]"
+            style={{ width: `${((value - min) / (max - min)) * 100}%`, minWidth: '24px' }}
+          />
+          <div 
+            className="absolute w-[23px] h-[23px] bg-white rounded-full shadow-lg transition-all duration-75 pointer-events-none"
+            style={{ left: `calc(${((value - min) / (max - min)) * 100}% - ${((value - min) / (max - min)) * 23}px + 2px)` }}
+          />
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   if (!selectedMode) {
     return (
@@ -185,21 +215,23 @@ export default function Teleprompter() {
 
   if (selectedMode === 'remote') {
     return (
-      <div className="animate-in fade-in duration-700 min-h-[85vh] flex flex-col gap-6 max-w-lg mx-auto pb-10">
-        <header className="bg-[#141414] border border-zinc-800 p-6 rounded-[32px] shadow-2xl flex items-center justify-between">
+      <div className="animate-in fade-in duration-700 min-h-[85vh] flex flex-col gap-6 max-w-lg mx-auto pb-10 px-4">
+        <header className="bg-[#141414] border border-zinc-800 p-6 rounded-[32px] shadow-2xl flex items-center justify-between mt-4">
           <div className="flex items-center gap-4">
             <Tv className="w-6 h-6 text-[#ff5351]" />
             <div>
-              <h1 className="text-lg font-black text-white uppercase italic">Boranov TP</h1>
+              <h1 className="text-lg font-black text-white uppercase italic leading-none mb-1">Boranov TP</h1>
               <div className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /><span className="text-[8px] font-black text-emerald-500 uppercase tracking-widest">Sincronizado</span></div>
             </div>
           </div>
-          <button onClick={() => { setSelectedMode(null); sessionStorage.removeItem('tp_selected_mode'); }} className="p-3 bg-zinc-800 rounded-2xl text-zinc-400"><RotateCcw className="w-4 h-4" /></button>
+          <button onClick={() => { setSelectedMode(null); sessionStorage.removeItem('tp_selected_mode'); }} className="flex items-center gap-2 px-4 py-2.5 bg-zinc-800 rounded-xl text-zinc-400 hover:text-white transition-all text-[9px] font-black uppercase tracking-widest">
+            <RotateCcw className="w-3.5 h-3.5" /> Trocar Modo
+          </button>
         </header>
 
         <div className="flex bg-zinc-900/50 p-1.5 rounded-2xl border border-zinc-800">
-          <button onClick={() => setRemoteTab('control')} className={cn("flex-1 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all", remoteTab === 'control' ? "bg-zinc-800 text-white shadow-lg" : "text-zinc-500")}>Controle</button>
-          <button onClick={() => setRemoteTab('text')} className={cn("flex-1 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all", remoteTab === 'text' ? "bg-zinc-800 text-white shadow-lg" : "text-zinc-500")}>Texto</button>
+          <button onClick={() => setRemoteTab('control')} className={cn("flex-1 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all", remoteTab === 'control' ? "bg-zinc-800 text-white shadow-lg" : "text-zinc-500")}>Painel</button>
+          <button onClick={() => setRemoteTab('text')} className={cn("flex-1 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all", remoteTab === 'text' ? "bg-zinc-800 text-white shadow-lg" : "text-zinc-500")}>Roteiro</button>
         </div>
 
         {remoteTab === 'control' ? (
@@ -210,12 +242,12 @@ export default function Teleprompter() {
             </button>
 
             <div className="bg-[#141414] border border-zinc-800 p-6 rounded-[32px] shadow-xl">
-              <PillSlider label="Velocidade de Rolagem" value={state.velocidade} min={1} max={20} onChange={(v:any) => updateState({ velocidade: v })} />
+              <PillSlider label="Velocidade" value={state.velocidade} min={1} max={20} onChange={(v:any) => updateState({ velocidade: v })} />
             </div>
 
             <div className="bg-[#141414] border border-zinc-800 p-6 rounded-[32px] shadow-xl space-y-6">
               <PillSlider label="Margem Lateral" value={state.margem} min={0} max={40} onChange={(v:any) => updateState({ margem: v })} icon={MoveHorizontal} />
-              <PillSlider label="Tamanho da Fonte" value={state.fonte} min={20} max={72} onChange={(v:any) => updateState({ fonte: v })} icon={Type} />
+              <PillSlider label="Tamanho Fonte" value={state.fonte} min={20} max={72} onChange={(v:any) => updateState({ fonte: v })} icon={Type} />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -229,11 +261,16 @@ export default function Teleprompter() {
           </div>
         ) : (
           <div className="flex-1 flex flex-col gap-4 animate-in slide-in-from-bottom-4">
-            <textarea value={state.texto} onChange={e => updateState({ texto: e.target.value })} placeholder="DIGITE OU COLE O ROTEIRO AQUI..." className="flex-1 min-h-[300px] bg-black border border-zinc-800 rounded-[32px] p-6 text-sm text-white resize-none outline-none focus:border-[#ff5351] leading-relaxed" />
-            <label className="w-full py-5 bg-zinc-800 rounded-[24px] flex items-center justify-center gap-3 cursor-pointer hover:bg-zinc-700 transition-all text-white font-black uppercase text-xs">
-              <Upload className="w-5 h-5" /> Carregar Arquivo .TXT
-              <input type="file" accept=".txt" onChange={handleFileUpload} className="hidden" />
-            </label>
+            <textarea value={state.texto} onChange={e => updateState({ texto: e.target.value })} placeholder="DIGITE OU COLE O ROTEIRO AQUI..." className="flex-1 min-h-[350px] bg-black border border-zinc-800 rounded-[32px] p-6 text-sm text-white resize-none outline-none focus:border-[#ff5351] leading-relaxed custom-scrollbar" />
+            <div className="grid grid-cols-2 gap-3">
+              <label className="flex-1 py-5 bg-zinc-900 border border-zinc-800 rounded-[24px] flex items-center justify-center gap-3 cursor-pointer hover:bg-zinc-800 transition-all text-white font-black uppercase text-[10px]">
+                <Upload className="w-4 h-4 text-[#ff5351]" /> Carregar .TXT
+                <input type="file" accept=".txt" onChange={handleFileUpload} className="hidden" />
+              </label>
+              <button onClick={clearText} className="py-5 bg-zinc-900 border border-zinc-800 rounded-[24px] flex items-center justify-center gap-3 hover:bg-red-500/10 transition-all text-zinc-400 hover:text-red-500 font-black uppercase text-[10px]">
+                <Trash2 className="w-4 h-4" /> Limpar Texto
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -257,7 +294,6 @@ export default function Teleprompter() {
           </div>
         </div>
 
-        {/* Linha Guia e Bolinhas */}
         <div className="absolute top-1/2 left-0 right-0 h-[1.5px] bg-[#ff5351]/40 pointer-events-none z-10" />
         <div 
           className="absolute top-1/2 w-4 h-4 rounded-full bg-[#ff5351] -translate-y-1/2 shadow-[0_0_15px_#ff5351] z-20 transition-all duration-300"
@@ -268,12 +304,10 @@ export default function Teleprompter() {
           style={{ right: `calc(${calculateMargin(state.margem)}% - 8px)` }}
         />
         
-        {/* Sombras Gradientes (Vinheta) */}
         <div className="absolute top-0 left-0 right-0 h-[35vh] bg-gradient-to-b from-black via-black/80 to-transparent z-0 pointer-events-none" />
         <div className="absolute bottom-0 left-0 right-0 h-[35vh] bg-gradient-to-t from-black via-black/80 to-transparent z-0 pointer-events-none" />
       </main>
 
-      {/* Menu de Controle Inferior */}
       <div className={cn(
         "fixed bottom-8 left-1/2 -translate-x-1/2 z-[400] w-[95%] max-w-5xl bg-zinc-900/95 backdrop-blur-3xl border border-white/5 rounded-[40px] p-4 flex items-center gap-6 shadow-[0_20px_50px_rgba(0,0,0,0.5)] transition-all duration-700",
         !showControls && "opacity-0 translate-y-32"
@@ -290,12 +324,15 @@ export default function Teleprompter() {
         </div>
 
         <div className="flex items-center gap-3 pr-2">
-          <button onClick={() => updateState({ voltarInicio: true })} className="p-4 bg-zinc-800 text-zinc-400 hover:text-white rounded-2xl transition-all" title="Reiniciar"><RotateCcw className="w-5 h-5" /></button>
-          <button onClick={() => updateState({ espelhado: !state.espelhado })} className={cn("p-4 rounded-2xl transition-all", state.espelhado ? "bg-[#ff5351] text-white" : "bg-zinc-800 text-zinc-400")} title="Espelhar"><FlipHorizontal className="w-5 h-5" /></button>
+          <button onClick={() => updateState({ voltarInicio: true })} className="p-4 bg-zinc-800 text-zinc-400 hover:text-white rounded-2xl transition-all"><RotateCcw className="w-5 h-5" /></button>
+          <button onClick={() => updateState({ espelhado: !state.espelhado })} className={cn("p-4 rounded-2xl transition-all", state.espelhado ? "bg-[#ff5351] text-white" : "bg-zinc-800 text-zinc-400")}><FlipHorizontal className="w-5 h-5" /></button>
           <button onClick={() => updateState({ playing: !state.playing })} className="w-20 h-20 bg-[#ff5351] rounded-3xl flex items-center justify-center text-white shadow-xl shadow-[#ff5351]/30 hover:scale-105 active:scale-95 transition-all">
             {state.playing ? <Pause className="w-8 h-8 fill-current" /> : <Play className="w-8 h-8 fill-current ml-1" />}
           </button>
-          <button onClick={toggleFullscreen} className="p-4 bg-zinc-800 text-zinc-400 hover:text-white rounded-2xl transition-all">{document.fullscreenElement ? <X className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}</button>
+          <div className="flex items-center gap-2">
+            <button onClick={toggleFullscreen} className="p-4 bg-zinc-800 text-zinc-400 hover:text-white rounded-2xl transition-all">{document.fullscreenElement ? <X className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}</button>
+            <button onClick={() => { setSelectedMode(null); sessionStorage.removeItem('tp_selected_mode'); }} className="p-4 bg-zinc-800 text-zinc-600 hover:text-white rounded-2xl transition-all" title="Trocar Modo"><Laptop className="w-5 h-5" /></button>
+          </div>
         </div>
       </div>
     </div>
