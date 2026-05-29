@@ -6,11 +6,13 @@ import {
 import { cn } from '../lib/utils';
 import { auth, db } from '../lib/firebase';
 import { collection, query, where, getDocs, onSnapshot } from 'firebase/firestore';
+import { useNavigate } from 'react-router-dom';
 
 export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [userRole, setUserRole] = useState<string>('cliente');
   const [userData, setUserData] = useState<any>(null);
+  const navigate = useNavigate();
   
   // Métricas Admin
   const [adminMetrics, setAdminMetrics] = useState({
@@ -69,7 +71,6 @@ export default function Dashboard() {
     const today = new Date().toISOString().split('T')[0];
 
     if (isAdmin) {
-      // Listener para Clientes
       onSnapshot(collection(db, 'clients'), (snap) => {
         const docs = snap.docs.map(d => d.data());
         setAdminMetrics(prev => ({
@@ -79,7 +80,6 @@ export default function Dashboard() {
         }));
       });
 
-      // Listener para Projetos
       onSnapshot(collection(db, 'projects'), (snap) => {
         const docs = snap.docs.map(d => d.data());
         setAdminMetrics(prev => ({
@@ -89,7 +89,6 @@ export default function Dashboard() {
         }));
       });
 
-      // Listener para Tarefas
       onSnapshot(collection(db, 'tasks'), (snap) => {
         const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         setAdminMetrics(prev => ({
@@ -100,7 +99,6 @@ export default function Dashboard() {
         setTodayTasks(docs.filter(d => d.dataLimite === today && d.status === 'pendente'));
       });
       
-      // Listener para Créditos
       onSnapshot(collection(db, 'clients'), (snap) => {
         const docs = snap.docs.map(d => d.data());
         const total = docs.reduce((sum, d) => sum + (Number(d.creditsTotal) || 0), 0);
@@ -108,7 +106,6 @@ export default function Dashboard() {
       });
 
     } else {
-      // MODO CLIENTE
       onSnapshot(query(collection(db, 'projects'), where('clientEmail', '==', email)), (snap) => {
         const docs = snap.docs.map(d => d.data());
         setClientMetrics(prev => ({
@@ -136,7 +133,6 @@ export default function Dashboard() {
 
   const isAdminView = ['master', 'admin', 'editor'].includes(userRole);
 
-  // --- LAYOUT ADMIN/MASTER ---
   if (isAdminView) {
     return (
       <div className="space-y-8 pb-20 animate-in fade-in duration-700">
@@ -173,12 +169,11 @@ export default function Dashboard() {
           <StatCard label="Créditos em Conta" value={adminMetrics.totalCredits} icon={Wallet} color="cyan" />
         </div>
 
-        <TodayTasks tasks={todayTasks} isAdmin={true} />
+        <TodayTasks tasks={todayTasks} isAdmin={true} navigate={navigate} />
       </div>
     );
   }
 
-  // --- LAYOUT CLIENTE ---
   return (
     <div className="space-y-8 pb-20 animate-in fade-in duration-700">
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-6">
@@ -217,11 +212,11 @@ export default function Dashboard() {
         <StatCard label="Minhas Tarefas" value={clientMetrics.myTasks} icon={CheckSquare} color="orange" />
       </div>
 
-      <TodayTasks tasks={todayTasks} isAdmin={false} />
+      <TodayTasks tasks={todayTasks} isAdmin={false} navigate={navigate} />
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <button className="h-14 bg-white text-black rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-[#ff5351] hover:text-white transition-all shadow-xl flex items-center justify-center gap-3">Acessar Meus Projetos <ArrowRight className="w-4 h-4" /></button>
-        <button className="h-14 bg-zinc-900 border border-zinc-800 text-white rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-zinc-800 transition-all flex items-center justify-center gap-3">Ver Todas as Tarefas</button>
+        <button onClick={() => navigate('/projetos')} className="h-14 bg-white text-black rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-[#ff5351] hover:text-white transition-all shadow-xl flex items-center justify-center gap-3">Acessar Meus Projetos <ArrowRight className="w-4 h-4" /></button>
+        <button onClick={() => navigate('/tarefas')} className="h-14 bg-zinc-900 border border-zinc-800 text-white rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-zinc-800 transition-all flex items-center justify-center gap-3">Ver Todas as Tarefas</button>
       </div>
     </div>
   );
@@ -249,7 +244,7 @@ function StatCard({ label, value, icon: Icon, color }: any) {
   );
 }
 
-function TodayTasks({ tasks, isAdmin }: any) {
+function TodayTasks({ tasks, isAdmin, navigate }: any) {
   const getPriorityBadge = (p: string) => {
     const colors: any = { alta: 'bg-red-500/10 text-red-400 border-red-500/20', media: 'bg-amber-500/10 text-amber-400 border-amber-500/20', baixa: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' };
     return <span className={cn("px-2 py-0.5 border rounded text-[8px] font-black uppercase tracking-widest", colors[p])}>{p}</span>;
@@ -265,7 +260,7 @@ function TodayTasks({ tasks, isAdmin }: any) {
             <p className="text-zinc-500 text-[10px] font-bold uppercase tracking-widest">Atividades com prazo para hoje</p>
           </div>
         </div>
-        <button className="px-4 py-2 border border-zinc-700 hover:border-[#ff5351] rounded-xl text-[10px] font-black uppercase tracking-widest text-zinc-400 hover:text-white transition-all flex items-center gap-2">Ver Todas <ArrowRight className="w-3 h-3" /></button>
+        <button onClick={() => navigate('/tarefas')} className="px-4 py-2 border border-zinc-700 hover:border-[#ff5351] rounded-xl text-[10px] font-black uppercase tracking-widest text-zinc-400 hover:text-white transition-all flex items-center gap-2">Ver Todas <ArrowRight className="w-3 h-3" /></button>
       </div>
 
       <div className="p-4 space-y-2">
@@ -273,7 +268,11 @@ function TodayTasks({ tasks, isAdmin }: any) {
           <div className="py-10 text-center text-zinc-600 italic text-sm font-medium">Nenhuma tarefa urgente para hoje.</div>
         ) : (
           tasks.map((task: any) => (
-            <div key={task.id} className="flex items-center justify-between p-4 bg-zinc-900/50 border border-zinc-800 rounded-2xl hover:border-[#ff5351]/30 transition-all group">
+            <div 
+              key={task.id} 
+              onClick={() => navigate('/tarefas')}
+              className="flex items-center justify-between p-4 bg-zinc-900/50 border border-zinc-800 rounded-2xl hover:border-[#ff5351]/30 transition-all group cursor-pointer"
+            >
               <div className="flex items-center gap-4">
                 <div className="w-1.5 h-1.5 rounded-full bg-[#ff5351] shadow-[0_0_8px_#ff5351]" />
                 <div>
