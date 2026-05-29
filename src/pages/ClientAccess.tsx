@@ -1,5 +1,5 @@
 export const dynamic = 'force-dynamic';
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   X, Copy, UserPlus, Mail, Trash2, ExternalLink, Edit2, Shield, Users, 
   Camera, User, Briefcase, Lock, Phone, Upload, MapPin, Building, ChevronDown, Search, Globe, Image as ImageIcon, Loader2, Sliders, Move
@@ -34,7 +34,7 @@ export default function ClientAccess() {
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [isAddingTeamMember, setIsAddingTeamMember] = useState(false);
 
-  // Estados de Crop Circular (Nativo)
+  // Estados de Crop Nativo (Canvas)
   const [showCropper, setShowCropper] = useState(false);
   const [imageToCrop, setImageToCrop] = useState<string | null>(null);
   const [cropConfig, setCropConfig] = useState({ zoom: 1, x: 0, y: 0 });
@@ -135,27 +135,20 @@ export default function ClientAccess() {
       const ctx = canvas.getContext('2d');
       const img = new Image();
       img.src = imageToCrop!;
-      
       await new Promise(res => img.onload = res);
       
       canvas.width = 400;
       canvas.height = 400;
-
-      // Desenha fundo preto
       ctx!.fillStyle = '#000';
       ctx!.fillRect(0, 0, 400, 400);
 
-      // Calcula dimensões da imagem com zoom
       const baseSize = Math.min(img.width, img.height);
       const drawWidth = (img.width / baseSize) * 400 * cropConfig.zoom;
       const drawHeight = (img.height / baseSize) * 400 * cropConfig.zoom;
-      
-      // Centraliza + Deslocamento do usuário
       const drawX = (400 - drawWidth) / 2 + cropConfig.x;
       const drawY = (400 - drawHeight) / 2 + cropConfig.y;
 
       ctx!.drawImage(img, drawX, drawY, drawWidth, drawHeight);
-      
       setMemberForm(prev => ({ ...prev, photoUrl: canvas.toDataURL('image/jpeg', 0.8) }));
       setShowCropper(false);
       setImageToCrop(null);
@@ -219,42 +212,14 @@ export default function ClientAccess() {
     } catch (error) { toast.error('Erro ao adicionar membro'); } finally { setLoading(false); }
   };
 
-  const handleDeleteClient = async (id: string, email: string) => {
-    if (!window.confirm('Excluir cliente?')) return;
-    try {
-      setLoading(true);
-      await clientService.deleteClient(id);
-      toast.success('Removido');
-      loadAllData();
-    } catch (error) { toast.error('Erro'); } finally { setLoading(false); }
-  };
-
-  const handleOpenTeamView = (client: Client) => {
-    setSelectedClient(client);
-    setIsAddingTeamMember(false);
-    setIsTeamViewOpen(true);
-  };
-
-  const sendEmailInvite = async (name: string, email: string) => {
-    try {
-      setSendingEmail(email);
-      await emailService.sendInvite(email, name, `${window.location.origin}/register?email=${encodeURIComponent(email)}`);
-      toast.success('Enviado!');
-    } catch (error) { toast.error('Falha'); } finally { setSendingEmail(null); }
-  };
-
-  const getClientTeamCount = (clientId: string) => allTeamMembers.filter(m => (m as any).clienteId === clientId).length;
-
   return (
     <div className="space-y-12 pb-20 text-left">
-      {/* MODAL DE CROP FULLSCREEN */}
       {showCropper && (
         <div className="fixed inset-0 z-[2000] bg-black flex flex-col items-center justify-center p-4 animate-in fade-in duration-300">
           <div className="text-center mb-8 space-y-2">
             <h2 className="text-2xl font-black text-white uppercase italic">Ajustar Foto</h2>
             <p className="text-zinc-500 text-xs uppercase tracking-widest font-bold">Arraste para mover • Scroll para Zoom</p>
           </div>
-          
           <div 
             className="w-full max-w-lg aspect-square relative bg-zinc-900 rounded-[40px] overflow-hidden border border-white/5 cursor-move"
             onMouseDown={(e) => { setIsDragging(true); dragStart.current = { x: e.clientX - cropConfig.x, y: e.clientY - cropConfig.y }; }}
@@ -269,23 +234,15 @@ export default function ClientAccess() {
             <img 
               src={imageToCrop!} 
               draggable={false}
-              className="absolute pointer-events-none select-none max-w-none transition-transform duration-75"
-              style={{ 
-                transform: `translate(calc(-50% + ${cropConfig.x}px), calc(-50% + ${cropConfig.y}px)) scale(${cropConfig.zoom})`,
-                left: '50%',
-                top: '50%'
-              }} 
+              className="absolute pointer-events-none select-none max-w-none"
+              style={{ transform: `translate(calc(-50% + ${cropConfig.x}px), calc(-50% + ${cropConfig.y}px)) scale(${cropConfig.zoom})`, left: '50%', top: '50%' }} 
             />
           </div>
-
-          <div className="w-full max-w-lg mt-10 space-y-8">
-            <div className="space-y-4">
-              <div className="flex justify-between text-[10px] font-black text-zinc-500 uppercase"><span>Zoom</span><span className="text-[#ff5351]">{Math.round(cropConfig.zoom * 100)}%</span></div>
-              <input type="range" min="1" max="3" step="0.01" value={cropConfig.zoom} onChange={e => setCropConfig(prev => ({ ...prev, zoom: Number(e.target.value) }))} className="w-full h-1.5 accent-[#ff5351] bg-zinc-800 rounded-lg appearance-none cursor-pointer" />
-            </div>
+          <div className="w-full max-w-lg mt-10 space-y-8 px-6">
+            <input type="range" min="1" max="3" step="0.01" value={cropConfig.zoom} onChange={e => setCropConfig(prev => ({ ...prev, zoom: Number(e.target.value) }))} className="w-full h-1.5 accent-[#ff5351] bg-zinc-800 rounded-lg appearance-none cursor-pointer" />
             <div className="flex gap-4">
               <button onClick={() => setShowCropper(false)} className="flex-1 py-5 bg-zinc-900 text-zinc-500 rounded-2xl font-black uppercase text-xs tracking-widest hover:text-white transition-all">Cancelar</button>
-              <button onClick={handleConfirmCrop} className="flex-2 py-5 bg-[#ff5351] text-white rounded-2xl font-black uppercase text-xs tracking-widest hover:brightness-110 transition-all shadow-2xl shadow-[#ff5351]/30 px-12">Confirmar Recorte</button>
+              <button onClick={handleConfirmCrop} className="flex-2 py-5 bg-[#ff5351] text-white rounded-2xl font-black uppercase text-xs tracking-widest hover:brightness-110 transition-all shadow-2xl shadow-[#ff5351]/30 px-12">Confirmar</button>
             </div>
           </div>
         </div>
@@ -293,8 +250,8 @@ export default function ClientAccess() {
 
       {!isClientFormOpen && !isTeamViewOpen && (
         <header className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-          <div className="text-left"><h1 className="text-5xl font-bold tracking-tight text-white mb-2 uppercase italic font-black text-left">Gestão de Clientes</h1><p className="text-zinc-500 text-lg text-left">Gerencie o cadastro dos seus clientes.</p></div>
-          <button onClick={handleOpenAddClient} className="flex items-center gap-2 px-8 py-3.5 rounded-xl bg-[#ff5351] text-white font-bold uppercase tracking-widest hover:opacity-90 transition-all shadow-lg text-xs"><UserPlus className="w-5 h-5" /> Adicionar Cliente</button>
+          <div className="text-left"><h1 className="text-5xl font-bold tracking-tight text-white mb-2 uppercase italic font-black text-left leading-none">Gestão de Clientes</h1><p className="text-zinc-500 text-lg text-left">Gerencie o cadastro dos seus clientes.</p></div>
+          <button onClick={() => { setClientForm({ id: '', name: '', email: '', phone: '', document: '', zipCode: '', address: '', number: '', complement: '', neighborhood: '', city: '', state: '', commercialName: '', website: '', responsibleContact: '', logoUrl: '', status: 'pending' }); setLogoPreview(''); setIsEditingClient(false); setIsClientFormOpen(true); }} className="flex items-center gap-2 px-8 py-3.5 rounded-xl bg-[#ff5351] text-white font-bold uppercase tracking-widest hover:opacity-90 transition-all shadow-lg text-xs"><UserPlus className="w-5 h-5" /> Adicionar Cliente</button>
         </header>
       )}
 
@@ -306,10 +263,10 @@ export default function ClientAccess() {
           </header>
           <div className="space-y-6">
             <section className="bg-[#1f1f1f] border border-zinc-800/80 rounded-3xl p-6 shadow-xl text-left">
-              <h3 className="text-lg font-bold text-white mb-8 flex items-center gap-2 text-left"><User className="w-5 h-5 text-[#ff5351]"/> Informações Principais</h3>
-              <div className="flex flex-col md:flex-row gap-8">
-                <div className="space-y-2 text-left"><label className="text-[10px] uppercase font-black tracking-widest text-zinc-500 block ml-1 text-left">Logo do Cliente</label><button type="button" onClick={() => fileInputRef.current?.click()} className="w-[150px] h-[150px] rounded-2xl border-2 border-dashed border-zinc-800 bg-zinc-900/50 hover:bg-zinc-900 transition-all flex flex-col items-center justify-center gap-2 group overflow-hidden relative">{logoPreview ? <img src={logoPreview} alt="Logo" className="w-full h-full object-cover" /> : (clientForm.logoUrl ? <img src={clientForm.logoUrl} alt="Logo" className="w-full h-full object-cover" /> : <><Upload className="w-6 h-6 text-zinc-600 group-hover:text-[#ff5351]" /><span className="text-[9px] font-black uppercase text-zinc-500">300x300px</span></>)}</button><input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleLogoSelect} /></div>
-                <div className="flex-1 space-y-5"><div className="grid grid-cols-1 md:grid-cols-2 gap-5"><div className="space-y-2 text-left"><label className="text-[10px] uppercase font-black tracking-widest text-zinc-500 block text-left">Nome da Empresa</label><input type="text" value={clientForm.name} onChange={e => setClientForm({...clientForm, name: e.target.value.toUpperCase()})} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-4 text-white focus:border-[#ff5351] outline-none text-sm text-left uppercase" placeholder="NOME COMERCIAL"/></div><div className="space-y-2 text-left"><label className="text-[10px] uppercase font-black tracking-widest text-zinc-500 block text-left">E-MAIL PRINCIPAL</label><input type="email" value={clientForm.email} onChange={e => setClientForm({...clientForm, email: e.target.value.toLowerCase().trim()})} disabled={isEditingClient} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-4 text-white focus:border-[#ff5351] outline-none text-sm disabled:opacity-50 text-left" placeholder="contato@empresa.com"/></div></div><div className="grid grid-cols-1 md:grid-cols-2 gap-5 text-left"><div className="space-y-2 text-left"><label className="text-[10px] uppercase font-black tracking-widest text-zinc-500 block text-left">Razão Social / CNPJ</label><div className="relative"><input type="text" value={clientForm.document} onChange={e => setClientForm({...clientForm, document: e.target.value.toUpperCase()})} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-4 pr-12 text-white focus:border-[#ff5351] outline-none text-sm text-left uppercase" placeholder="NOME LEGAL OU CNPJ"/><button type="button" onClick={handleFetchCnpj} className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-[#ff5351] transition-colors">{searchingCnpj ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}</button></div></div><div className="space-y-2 text-left"><label className="text-[10px] uppercase font-black tracking-widest text-zinc-500 block text-left">Site / Link</label><div className="relative"><input type="text" value={clientForm.website} onChange={e => setClientForm({...clientForm, website: e.target.value.toLowerCase().trim()})} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-4 pl-11 text-white focus:border-[#ff5351] outline-none text-sm text-left" placeholder="www.empresa.com.br"/><Globe className="w-4 h-4 text-zinc-700 absolute left-4 top-1/2 -translate-y-1/2" /></div></div></div></div>
+              <h3 className="text-lg font-bold text-white mb-8 flex items-center gap-2 text-left uppercase italic"><User className="w-5 h-5 text-[#ff5351]"/> Informações Principais</h3>
+              <div className="flex flex-col md:flex-row gap-8 text-left">
+                <div className="space-y-2 text-left"><label className="text-[10px] uppercase font-black tracking-widest text-zinc-500 block ml-1 text-left">Logo do Cliente</label><button type="button" onClick={() => fileInputRef.current?.click()} className="w-[150px] h-[150px] rounded-2xl border-2 border-dashed border-zinc-800 bg-zinc-900/50 hover:bg-zinc-900 transition-all flex flex-col items-center justify-center gap-2 group overflow-hidden relative shadow-inner">{logoPreview ? <img src={logoPreview} alt="Logo" className="w-full h-full object-cover" /> : (clientForm.logoUrl ? <img src={clientForm.logoUrl} alt="Logo" className="w-full h-full object-cover" /> : <><Upload className="w-6 h-6 text-zinc-600 group-hover:text-[#ff5351]" /><span className="text-[9px] font-black uppercase text-zinc-500">300x300px</span></>)}</button><input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleLogoSelect} /></div>
+                <div className="flex-1 space-y-5 text-left"><div className="grid grid-cols-1 md:grid-cols-2 gap-5 text-left"><div className="space-y-2 text-left"><label className="text-[10px] uppercase font-black tracking-widest text-zinc-500 block text-left">Nome da Empresa</label><input type="text" value={clientForm.name} onChange={e => setClientForm({...clientForm, name: e.target.value.toUpperCase()})} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-4 text-white focus:border-[#ff5351] outline-none text-sm text-left font-bold uppercase" placeholder="NOME COMERCIAL"/></div><div className="space-y-2 text-left"><label className="text-[10px] uppercase font-black tracking-widest text-zinc-500 block text-left">E-MAIL PRINCIPAL</label><input type="email" value={clientForm.email} onChange={e => setClientForm({...clientForm, email: e.target.value.toLowerCase().trim()})} disabled={isEditingClient} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-4 text-white focus:border-[#ff5351] outline-none text-sm disabled:opacity-50 text-left font-bold" placeholder="contato@empresa.com"/></div></div><div className="grid grid-cols-1 md:grid-cols-2 gap-5 text-left"><div className="space-y-2 text-left"><label className="text-[10px] uppercase font-black tracking-widest text-zinc-500 block text-left">Razão Social / CNPJ</label><div className="relative"><input type="text" value={clientForm.document} onChange={e => setClientForm({...clientForm, document: e.target.value.toUpperCase()})} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-4 pr-12 text-white focus:border-[#ff5351] outline-none text-sm text-left font-bold uppercase" placeholder="NOME LEGAL OU CNPJ"/><button type="button" onClick={handleFetchCnpj} className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-[#ff5351] transition-colors">{searchingCnpj ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}</button></div></div><div className="space-y-2 text-left"><label className="text-[10px] uppercase font-black tracking-widest text-zinc-500 block text-left">Site / Link</label><div className="relative"><input type="text" value={clientForm.website} onChange={e => setClientForm({...clientForm, website: e.target.value.toLowerCase().trim()})} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-4 pl-11 text-white focus:border-[#ff5351] outline-none text-sm text-left font-bold" placeholder="www.empresa.com.br"/><Globe className="w-4 h-4 text-zinc-700 absolute left-4 top-1/2 -translate-y-1/2" /></div></div></div></div>
               </div>
             </section>
           </div>
@@ -326,56 +283,38 @@ export default function ClientAccess() {
           {isAddingTeamMember && (
             <form autoComplete="off" onSubmit={handleSaveTeamMember} className="space-y-6 mb-12 animate-in fade-in duration-300 text-left">
               <section className="bg-[#1f1f1f] border border-zinc-800/80 rounded-3xl p-8 shadow-xl text-left">
-                <div className="flex items-center gap-3 mb-8 text-left"><User className="w-5 h-5 text-[#ff5351]" /><h3 className="text-xl font-bold text-white uppercase italic text-left">Informações Pessoais</h3></div>
-                
+                <div className="flex items-center gap-3 mb-8 text-left italic uppercase font-black tracking-widest text-[#ff5351]"><User className="w-5 h-5" /><h3>Informações Pessoais</h3></div>
                 <div className="flex flex-col md:flex-row gap-10 items-center text-left">
                   <div className="space-y-3 text-center">
-                    <label className="text-[10px] uppercase font-black tracking-widest text-zinc-500 block text-center">Foto do Membro</label>
-                    <button type="button" onClick={() => memberFileInputRef.current?.click()} className="w-[110px] h-[110px] rounded-full border-2 border-dashed border-zinc-800 bg-zinc-900/50 hover:bg-zinc-900 hover:border-[#ff5351]/50 transition-all flex flex-col items-center justify-center gap-1 group overflow-hidden relative shadow-inner">
-                      {memberForm.photoUrl ? (
-                         <img src={memberForm.photoUrl} alt="Preview" className="w-full h-full object-cover" />
-                      ) : (
-                        <>
-                          <Camera className="w-6 h-6 text-zinc-600 group-hover:text-[#ff5351] transition-colors" />
-                          <span className="text-[8px] font-black uppercase text-zinc-500 tracking-tighter">JPG/PNG<br/>2MB MÁX</span>
-                        </>
-                      )}
+                    <label className="text-[10px] uppercase font-black tracking-widest text-zinc-500 block text-center leading-none">Foto do Membro</label>
+                    <button type="button" onClick={() => memberFileInputRef.current?.click()} className="w-[110px] h-[110px] rounded-full border-2 border-dashed border-zinc-800 bg-zinc-900/50 hover:bg-zinc-900 transition-all flex flex-col items-center justify-center gap-1 group overflow-hidden relative shadow-inner">
+                      {memberForm.photoUrl ? <img src={memberForm.photoUrl} alt="Preview" className="w-full h-full object-cover" /> : <><Camera className="w-6 h-6 text-zinc-600 group-hover:text-[#ff5351]" /><span className="text-[8px] font-black uppercase text-zinc-500">2MB MÁX</span></>}
                     </button>
                     <input type="file" ref={memberFileInputRef} className="hidden" accept="image/*" onChange={handleMemberPhotoSelect} />
                   </div>
-
                   <div className="flex-1 space-y-6 w-full text-left">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                      <div className="space-y-2 text-left"><label className="text-[10px] uppercase font-black tracking-widest text-zinc-500 block text-left">NOME</label><input type="text" value={memberForm.firstName} onChange={e => setMemberForm({...memberForm, firstName: e.target.value.toUpperCase()})} placeholder="EX: JOÃO" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-4 text-white focus:border-[#ff5351] outline-none text-sm text-left uppercase font-bold"/></div>
-                      <div className="space-y-2 text-left"><label className="text-[10px] uppercase font-black tracking-widest text-zinc-500 block text-left">SOBRENOME</label><input type="text" value={memberForm.lastName} onChange={e => setMemberForm({...memberForm, lastName: e.target.value.toUpperCase()})} placeholder="EX: SILVA" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-4 text-white focus:border-[#ff5351] outline-none text-sm text-left uppercase font-bold"/></div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5 text-left text-left">
+                      <div className="space-y-2 text-left"><label className="text-[10px] uppercase font-black tracking-widest text-zinc-500 block text-left">NOME</label><input type="text" value={memberForm.firstName} onChange={e => setMemberForm({...memberForm, firstName: e.target.value.toUpperCase()})} placeholder="JOÃO" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-4 text-white focus:border-[#ff5351] outline-none text-sm text-left uppercase font-bold"/></div>
+                      <div className="space-y-2 text-left"><label className="text-[10px] uppercase font-black tracking-widest text-zinc-500 block text-left">SOBRENOME</label><input type="text" value={memberForm.lastName} onChange={e => setMemberForm({...memberForm, lastName: e.target.value.toUpperCase()})} placeholder="SILVA" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-4 text-white focus:border-[#ff5351] outline-none text-sm text-left uppercase font-bold"/></div>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                      <div className="space-y-2 text-left"><label className="text-[10px] uppercase font-black tracking-widest text-zinc-500 block text-left">E-MAIL</label><div className="relative"><input type="email" value={memberForm.email} onChange={e => setMemberForm({...memberForm, email: e.target.value.toLowerCase().trim()})} placeholder="joao.silva@empresa.com" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-4 pl-11 text-white focus:border-[#ff5351] outline-none text-sm text-left font-bold"/><Mail className="w-4 h-4 text-zinc-700 absolute left-4 top-1/2 -translate-y-1/2" /></div></div>
-                      <div className="space-y-2 text-left"><label className="text-[10px] uppercase font-black tracking-widest text-zinc-500 block text-left">TELEFONE</label><div className="relative"><input type="text" value={memberForm.phone} onChange={e => setMemberForm({...memberForm, phone: e.target.value})} placeholder="(00) 00000-0000" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-4 pl-11 text-white focus:border-[#ff5351] outline-none text-sm text-left font-bold"/><Phone className="w-4 h-4 text-zinc-700 absolute left-4 top-1/2 -translate-y-1/2" /></div></div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5 text-left text-left">
+                      <div className="space-y-2 text-left"><label className="text-[10px] uppercase font-black tracking-widest text-zinc-500 block text-left">E-MAIL</label><div className="relative"><input type="email" value={memberForm.email} onChange={e => setMemberForm({...memberForm, email: e.target.value.toLowerCase().trim()})} placeholder="joao.silva@empresa.com" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-4 pl-11 text-white focus:border-[#ff5351] outline-none text-sm text-left font-bold"/><Mail className="w-4 h-4 text-zinc-700 absolute left-4 top-1/2 -translate-y-1/2 text-left" /></div></div>
+                      <div className="space-y-2 text-left"><label className="text-[10px] uppercase font-black tracking-widest text-zinc-500 block text-left">TELEFONE</label><div className="relative"><input type="text" value={memberForm.phone} onChange={e => setMemberForm({...memberForm, phone: e.target.value})} placeholder="(00) 00000-0000" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-4 pl-11 text-white focus:border-[#ff5351] outline-none text-sm text-left font-bold"/><Phone className="w-4 h-4 text-zinc-700 absolute left-4 top-1/2 -translate-y-1/2 text-left" /></div></div>
                     </div>
                   </div>
                 </div>
               </section>
-
-              <section className="bg-[#1f1f1f] border border-zinc-800/80 rounded-3xl p-8 shadow-xl text-left">
-                <div className="flex items-center gap-3 mb-8 text-left"><Briefcase className="w-5 h-5 text-[#ff5351]" /><h3 className="text-lg font-bold text-white uppercase italic text-left leading-none">Informações Profissionais</h3></div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-6 text-left">
-                  <div className="space-y-2 text-left"><label className="text-[10px] uppercase font-black tracking-widest text-zinc-500 block text-left">CARGO</label><input type="text" value={memberForm.jobTitle} onChange={e => setMemberForm({...memberForm, jobTitle: e.target.value.toUpperCase()})} placeholder="EX: DESENVOLVEDOR SENIOR" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-4 text-white focus:border-[#ff5351] outline-none text-sm text-left uppercase font-bold"/></div>
-                  <div className="space-y-2 text-left"><label className="text-[10px] uppercase font-black tracking-widest text-zinc-500 block text-left">FUNÇÃO</label><div className="relative"><select value={memberForm.role} onChange={e => setMemberForm({...memberForm, role: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-4 text-white focus:border-[#ff5351] outline-none text-sm appearance-none cursor-pointer font-bold"><option value="" disabled>Selecione uma função</option><option value="equipe">Equipe Cliente</option></select><ChevronDown className="w-4 h-4 text-zinc-700 absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none" /></div></div>
-                </div>
-                <div className="space-y-3 text-left"><label className="text-[10px] uppercase font-black tracking-widest text-zinc-500 block text-left">NÍVEL DE ACESSO</label><div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-left">
-                    {[
-                      { id: 'aprovador', label: 'Aprovador Principal', desc: 'Aprovação final do conteúdo' },
-                      { id: 'validador', label: 'Validador', desc: 'Sugere correções no conteúdo' },
-                      { id: 'visualizador', label: 'Visualizador', desc: 'Apenas acompanha o projeto' }
-                    ].map(level => (
-                      <label key={level.id} className={cn("cursor-pointer border rounded-2xl p-5 flex items-start gap-3 transition-all", memberForm.accessLevel === level.id ? "bg-[#ff5351]/10 border-[#ff5351]" : "bg-zinc-900 border-zinc-800 hover:border-zinc-300")}><div className="pt-0.5"><div className={cn("w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all", memberForm.accessLevel === level.id ? "border-[#ff5351]" : "border-zinc-600")}>{memberForm.accessLevel === level.id && <div className="w-2 h-2 rounded-full bg-[#ff5351]" />}</div></div><div className="text-left"><input type="radio" name="accessLevel" value={level.id} checked={memberForm.accessLevel === level.id} onChange={e => setMemberForm({...memberForm, accessLevel: e.target.value})} className="hidden" /><p className="text-white font-bold text-sm text-left uppercase leading-none">{level.label}</p><p className="text-zinc-500 text-[10px] mt-2 uppercase text-left leading-tight">{level.desc}</p></div></label>
-                    ))}
-                  </div></div>
-              </section>
-              <div className="flex justify-end pt-4 text-left"><button type="submit" disabled={loading} className="px-10 py-5 bg-white text-black font-black uppercase tracking-widest text-xs rounded-2xl hover:bg-[#ff5351] hover:text-white transition-all shadow-2xl disabled:opacity-50 flex items-center gap-3"><UserPlus className="w-5 h-5" />{loading ? 'Aguarde...' : 'Salvar Novo Membro'}</button></div>
+              <div className="flex justify-end pt-4 text-left"><button type="submit" disabled={loading} className="px-10 py-5 bg-white text-black font-black uppercase tracking-widest text-xs rounded-2xl hover:bg-[#ff5351] hover:text-white transition-all shadow-2xl disabled:opacity-50 flex items-center gap-3"><UserPlus className="w-5 h-5 text-left" />{loading ? 'Aguarde...' : 'Salvar Novo Membro'}</button></div>
             </form>
           )}
+          <DataTable data={allTeamMembers.filter(m => (m as any).clienteId === selectedClient.id)} loading={loading} emptyMessage="Nenhum membro vinculado." columns={[{ header: 'Membro', accessor: (member) => <div className="text-left py-1 text-left"><div className="text-white font-bold text-base leading-tight mb-1 uppercase text-left">{member.name}</div><div className="text-zinc-500 text-xs flex items-center gap-2 leading-none uppercase text-left text-left text-left"><Mail className="w-3.5 h-3.5 text-left" />{member.email}</div></div> }, { header: 'Status', accessor: (member) => <span className={cn("inline-flex items-center gap-2 px-3 py-1 border rounded-full text-[10px] font-black uppercase tracking-widest", member.status === 'confirmed' ? "text-emerald-400 border-emerald-500/30 bg-emerald-500/10" : "text-amber-400 border-amber-500/30 bg-amber-500/10")}><div className={cn("w-1.5 h-1.5 rounded-full shadow-[0_0_8px_#10b981]", member.status === 'confirmed' ? "bg-emerald-500" : "bg-amber-500")} />{member.status === 'confirmed' ? '✓ OK, SENHA CRIADA' : '⏳ AGUARDANDO SENHA'}</span> }]} actions={(member) => (<><button onClick={(e) => { e.stopPropagation(); sendEmailInvite(member.name, member.email); }} disabled={sendingEmail === member.email} className="p-2 bg-zinc-800 border border-zinc-700 hover:bg-[#ff5351] hover:border-transparent rounded-xl text-zinc-300 hover:text-white transition-all shadow-lg text-left" title="Reenviar Convite"><Mail className="w-4 h-4 text-left" /></button><button onClick={(e) => { e.stopPropagation(); handleDeleteTeamMember(member.id!, member.email); }} className="p-2 bg-zinc-800/50 hover:bg-red-500/10 rounded-xl text-zinc-600 hover:text-red-500 transition-all shadow-lg text-left" title="Excluir Membro"><Trash2 className="w-4 h-4 text-left" /></button></>)} />
+        </div>
+      )}
+
+      {!isClientFormOpen && !isTeamViewOpen && (
+        <div className="space-y-4 text-left">
+          <div className="relative animate-in fade-in duration-300 text-left"><Search className="w-5 h-5 text-zinc-500 absolute left-5 top-1/2 -translate-y-1/2 text-left" /><input type="text" placeholder="Buscar cliente por nome ou e-mail..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full bg-[#1a1a1a] border border-zinc-800 rounded-2xl pl-13 pr-5 py-4 text-white focus:border-[#ff5351] outline-none transition-all placeholder:text-zinc-600 shadow-xl uppercase font-medium text-left"/></div>
+          <DataTable data={filteredClients} loading={loading} onRowClick={(client) => { if (client.id) navigate(`/clients/${client.id}`); }} emptyMessage={searchTerm ? 'Nenhum cliente encontrado.' : 'Nenhum cliente cadastrado.'} columns={[{ header: 'Cliente', accessor: (client) => (<div onClick={(e) => { e.stopPropagation(); if(client.id) navigate(`/clients/${client.id}`); }} className="text-left py-1 cursor-pointer group/name flex items-center gap-3 text-left"><div className="w-10 h-10 rounded-xl bg-zinc-900 overflow-hidden border border-zinc-800 shrink-0 flex items-center justify-center shadow-lg">{client.logoUrl ? <img src={client.logoUrl} alt="" className="w-full h-full object-contain" /> : <Building className="w-5 h-5 text-zinc-700" />}</div><div className="text-left"><div className="text-white font-black text-base leading-tight mb-1 uppercase italic group-hover/name:text-[#ff5351] transition-colors text-left text-left">{client.name}</div><div className="text-zinc-500 text-[10px] font-black uppercase tracking-widest flex items-center gap-2 text-left text-left"><Mail className="w-3.5 h-3.5 text-left" />{client.email}</div></div></div>) }, { header: 'Status', accessor: (client) => <span className={cn("inline-flex items-center gap-2 px-3 py-1 border rounded-full text-[10px] font-black uppercase tracking-widest", client.status === 'confirmed' ? "text-emerald-400 border-emerald-500/30 bg-emerald-500/10" : "text-amber-400 border-amber-500/30 bg-amber-500/10")}><div className={cn("w-1.5 h-1.5 rounded-full shadow-[0_0_8px_#10b981]", client.status === 'confirmed' ? "bg-emerald-500" : "bg-amber-500")} />{client.status === 'confirmed' ? '✓ OK, SENHA CRIADA' : '⏳ AGUARDANDO SENHA'}</span> }, { header: 'Membros', align: 'center', accessor: (client) => { const count = getClientTeamCount(client.id!); return count > 0 ? <div className="w-8 h-8 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center text-white text-[10px] font-black shadow-lg italic text-left">{count}</div> : <span className="text-zinc-700 text-xs font-medium text-left">-</span>; } }]} actions={(client) => (<><button onClick={(e) => { e.stopPropagation(); handleOpenTeamView(client); }} className="flex items-center gap-2 px-4 py-2 bg-zinc-800 border border-zinc-700 hover:bg-zinc-700 hover:border-transparent rounded-xl text-zinc-300 hover:text-white transition-all text-[10px] font-black uppercase tracking-widest shadow-lg text-left"><Users className="w-4 h-4 text-[#ff5351] text-left" />Equipe</button><button onClick={(e) => { e.stopPropagation(); handleOpenEditClient(client); }} className="p-2 bg-zinc-800 border border-zinc-700 hover:bg-zinc-700 rounded-xl text-zinc-400 hover:text-white transition-all shadow-lg text-left text-left"><Edit2 className="w-4 h-4 text-left" /></button><button onClick={(e) => { e.stopPropagation(); sendEmailInvite(client.name, client.email); }} disabled={sendingEmail === client.email} className="p-2 bg-zinc-800 border border-zinc-700 hover:bg-[#ff5351] hover:border-transparent rounded-xl text-zinc-300 hover:text-white transition-all disabled:opacity-50 shadow-lg text-left text-left"><Mail className="w-4 h-4 text-left" /></button><button onClick={(e) => { e.stopPropagation(); const inviteLink = `${window.location.origin}/register?email=${encodeURIComponent(client.email)}`; navigator.clipboard.writeText(`Seu conteúdo foi selecionado!\nAcesse pelo link abaixo e crie sua senha:\n\n${inviteLink}`); toast.success('Mensagem de convite copiada!'); }} className="p-2 bg-zinc-800 border border-zinc-700 hover:bg-[#25D366] hover:border-transparent rounded-xl text-zinc-300 hover:text-white transition-all shadow-lg text-left text-left"><ExternalLink className="w-4 h-4 text-left" /></button><button onClick={(e) => { e.stopPropagation(); handleDeleteClient(client.id!, client.email); }} className="p-2 bg-zinc-800/50 hover:bg-red-500/10 rounded-xl text-zinc-600 hover:text-red-500 transition-all shadow-lg text-left text-left"><Trash2 className="w-4 h-4 text-left" /></button></>)} />
         </div>
       )}
     </div>
