@@ -291,9 +291,9 @@ export default function Teleprompter() {
             </div>
           </div>
         ) : (
-          <div className="flex-1 flex flex-col gap-4 animate-in slide-in-from-bottom-4">
+          <div className="flex-1 flex flex-col gap-4 animate-in slide-in-from-bottom-4 text-left">
             <textarea value={state.texto} onChange={e => updateState({ texto: e.target.value })} placeholder="DIGITE OU COLE O ROTEIRO AQUI..." className="flex-1 min-h-[350px] bg-black border border-zinc-800 rounded-[32px] p-6 text-sm text-white resize-none outline-none focus:border-[#ff5351] leading-relaxed custom-scrollbar" />
-            <div className="grid grid-cols-2 gap-3 pb-12">
+            <div className="grid grid-cols-2 gap-3 pb-12 text-left">
               <label className="flex-1 py-5 bg-zinc-900 border border-zinc-800 rounded-[24px] flex items-center justify-center gap-3 cursor-pointer hover:bg-zinc-800 transition-all text-white font-black uppercase text-[10px]">
                 <Upload className="w-4 h-4 text-[#ff5351]" /> Carregar .TXT
                 <input type="file" accept=".txt" onChange={handleFileUpload} className="hidden" />
@@ -376,56 +376,56 @@ export default function Teleprompter() {
           </div>
         </div>
 
-        <div className=\"absolute top-1/2 left-0 right-0 h-[1.5px] bg-[#ff5351]/40 pointer-events-none z-10\" />
+        <div className="absolute top-1/2 left-0 right-0 h-[1.5px] bg-[#ff5351]/40 pointer-events-none z-10" />
         <div 
-          className=\"absolute top-1/2 w-4 h-4 rounded-full bg-[#ff5351] -translate-y-1/2 shadow-[0_0_15px_#ff5351] z-20 transition-all duration-300\"
+          className="absolute top-1/2 w-4 h-4 rounded-full bg-[#ff5351] -translate-y-1/2 shadow-[0_0_15px_#ff5351] z-20 transition-all duration-300"
           style={{ left: `calc(${calculateMargin(state.margem)}% - 8px)` }}
         />
         <div 
-          className=\"absolute top-1/2 w-4 h-4 rounded-full bg-[#ff5351] -translate-y-1/2 shadow-[0_0_15px_#ff5351] z-20 transition-all duration-300\"
+          className="absolute top-1/2 w-4 h-4 rounded-full bg-[#ff5351] -translate-y-1/2 shadow-[0_0_15px_#ff5351] z-20 transition-all duration-300"
           style={{ right: `calc(${calculateMargin(state.margem)}% - 8px)` }}
         />
         
-        <div className=\"absolute top-0 left-0 right-0 h-[35vh] bg-gradient-to-b from-black via-black/80 to-transparent z-0 pointer-events-none\" />
-        <div className=\"absolute bottom-0 left-0 right-0 h-[35vh] bg-gradient-to-t from-black via-black/80 to-transparent z-0 pointer-events-none\" />
+        <div className="absolute top-0 left-0 right-0 h-[35vh] bg-gradient-to-b from-black via-black/80 to-transparent z-0 pointer-events-none" />
+        <div className="absolute bottom-0 left-0 right-0 h-[35vh] bg-gradient-to-t from-black via-black/80 to-transparent z-0 pointer-events-none" />
       </main>
 
       <div className={cn(
-        \"fixed bottom-8 left-1/2 -translate-x-1/2 z-[400] w-[95%] max-w-5xl bg-zinc-900/95 backdrop-blur-3xl border border-white/5 rounded-[40px] p-4 flex items-center gap-6 shadow-[0_20px_50px_rgba(0,0,0,0.5)] transition-all duration-700\",
-        !showControls && \"opacity-0 translate-y-32\"
+        "fixed bottom-8 left-1/2 -translate-x-1/2 z-[400] w-[95%] max-w-5xl bg-zinc-900/95 backdrop-blur-3xl border border-white/5 rounded-[40px] p-4 flex items-center gap-6 shadow-[0_20px_50px_rgba(0,0,0,0.5)] transition-all duration-700",
+        !showControls && "opacity-0 translate-y-32"
       )}>
-        <div className=\"pl-4 pr-6 border-r border-white/10 shrink-0 text-left\">
-          <p className=\"text-[8px] font-black text-[#ff5351] uppercase tracking-[0.3em] mb-1\">Boranov</p>
-          <h2 className=\"text-lg font-black text-white uppercase italic leading-none\">TP Master</h2>
+        <div className="pl-4 pr-6 border-r border-white/10 shrink-0 text-left">
+          <p className="text-[8px] font-black text-[#ff5351] uppercase tracking-[0.3em] mb-1">Boranov</p>
+          <h2 className="text-lg font-black text-white uppercase italic leading-none">TP Master</h2>
         </div>
 
-        <div className=\"flex-1 grid grid-cols-3 gap-6 text-left\">
+        <div className="flex-1 grid grid-cols-3 gap-6 text-left">
           <PillSlider 
-            label=\"Velocidade\" value={state.velocidade} min={1} max={20} 
+            label="Velocidade" value={state.velocidade} min={1} max={20} 
             onChange={(v:any) => updateState({ velocidade: v })} 
             subLabels={{ left: 'Lento', right: 'Rápido' }}
           />
           <PillSlider 
-            label=\"Margem\" value={state.margem} min={0} max={40} 
+            label="Margem" value={state.margem} min={0} max={40} 
             onChange={(v:any) => updateState({ margem: v })} 
             subLabels={{ left: 'Estreito', right: 'Largo' }}
           />
           <PillSlider 
-            label=\"Fonte\" value={state.fonte} min={20} max={72} 
+            label="Fonte" value={state.fonte} min={20} max={72} 
             onChange={(v:any) => updateState({ fonte: v })} 
             subLabels={{ left: 'A', right: 'A Grande' }}
           />
         </div>
 
-        <div className=\"flex items-center gap-3 pr-2\">
-          <button onClick={() => updateState({ voltarInicio: true })} className=\"p-4 bg-zinc-800 text-zinc-400 hover:text-white rounded-2xl transition-all\" title=\"Reiniciar\"><RotateCcw className=\"w-5 h-5\" /></button>
-          <button onClick={() => updateState({ espelhado: !state.espelhado })} className={cn(\"p-4 rounded-2xl transition-all\", state.espelhado ? \"bg-[#ff5351] text-white\" : \"bg-zinc-800 text-zinc-400\")} title=\"Espelhar\"><FlipHorizontal className=\"w-5 h-5\" /></button>
-          <button onClick={() => updateState({ playing: !state.playing })} className=\"w-20 h-20 bg-[#ff5351] rounded-3xl flex items-center justify-center text-white shadow-xl shadow-[#ff5351]/30 hover:scale-105 active:scale-95 transition-all\">
-            {state.playing ? <Pause className=\"w-8 h-8 fill-current\" /> : <Play className=\"w-8 h-8 fill-current ml-1\" />}
+        <div className="flex items-center gap-3 pr-2 text-left">
+          <button onClick={() => updateState({ voltarInicio: true })} className="p-4 bg-zinc-800 text-zinc-400 hover:text-white rounded-2xl transition-all" title="Reiniciar"><RotateCcw className="w-5 h-5" /></button>
+          <button onClick={() => updateState({ espelhado: !state.espelhado })} className={cn("p-4 rounded-2xl transition-all", state.espelhado ? "bg-[#ff5351] text-white" : "bg-zinc-800 text-zinc-400")} title="Espelhar"><FlipHorizontal className="w-5 h-5" /></button>
+          <button onClick={() => updateState({ playing: !state.playing })} className="w-20 h-20 bg-[#ff5351] rounded-3xl flex items-center justify-center text-white shadow-xl shadow-[#ff5351]/30 hover:scale-105 active:scale-95 transition-all text-left">
+            {state.playing ? <Pause className="w-8 h-8 fill-current text-white" /> : <Play className="w-8 h-8 fill-current ml-1 text-white" />}
           </button>
-          <div className=\"flex items-center gap-2\">
-            <button onClick={toggleFullscreen} className=\"p-4 bg-zinc-800 text-zinc-400 hover:text-white rounded-2xl transition-all\">{isFullscreen ? <X className=\"w-5 h-5\" /> : <Maximize2 className=\"w-5 h-5\" />}</button>
-            <button onClick={() => { setSelectedMode(null); sessionStorage.removeItem('tp_selected_mode'); }} className=\"p-4 bg-zinc-900 border border-zinc-800 text-zinc-600 hover:text-white rounded-2xl transition-all\" title=\"Trocar Modo\"><Laptop className=\"w-5 h-5\" /></button>
+          <div className="flex items-center gap-2 text-left">
+            <button onClick={toggleFullscreen} className="p-4 bg-zinc-800 text-zinc-400 hover:text-white rounded-2xl transition-all">{isFullscreen ? <X className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}</button>
+            <button onClick={() => { setSelectedMode(null); sessionStorage.removeItem('tp_selected_mode'); }} className="p-4 bg-zinc-900 border border-zinc-800 text-zinc-600 hover:text-white rounded-2xl transition-all" title="Trocar Modo"><Laptop className="w-5 h-5" /></button>
           </div>
         </div>
       </div>
