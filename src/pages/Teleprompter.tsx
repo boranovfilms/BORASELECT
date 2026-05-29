@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Tv, Play, Pause, RotateCcw, ChevronUp, ChevronDown, Maximize2, FlipHorizontal, Settings2, Trash2, 
-  Smartphone, Laptop, MoveHorizontal, Type, Upload, X
+  Smartphone, Laptop, MoveHorizontal, Type, Upload, X, Minus, Plus
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { toast } from 'react-hot-toast';
@@ -148,7 +148,7 @@ export default function Teleprompter() {
 
   const calculateMargin = (val: number) => (val / 40) * 30;
 
-  const PillSlider = ({ label, value, min, max, onChange, icon: Icon }: any) => {
+  const PillSlider = ({ label, value, min, max, onChange, icon: Icon, subLabels }: any) => {
     const inputRef = useRef<HTMLInputElement>(null);
     const percentage = ((value - min) / (max - min)) * 100;
 
@@ -175,29 +175,55 @@ export default function Teleprompter() {
     }, [min, max, onChange]);
 
     return (
-      <div className="space-y-1.5 w-full select-none">
-        <div className="flex justify-between items-center px-1">
+      <div className="space-y-1 w-full select-none">
+        <div className="flex justify-between items-center px-1 mb-0.5">
           <span className="text-[8px] font-black text-zinc-500 uppercase tracking-widest flex items-center gap-1">
             {Icon && <Icon className="w-2.5 h-2.5" />} {label}
           </span>
           <span className="text-[10px] font-black text-white italic">{value}</span>
         </div>
-        <div className="relative h-[27px] w-full flex items-center">
-          <input 
-            ref={inputRef}
-            type="range" 
-            min={min} 
-            max={max} 
-            step="0.1"
-            value={value} 
-            onChange={e => onChange(Number(e.target.value))}
-            className="pill-range-input"
-            style={{ 
-              background: `linear-gradient(to right, #ff5351 ${percentage}%, #1f1f1f ${percentage}%)`,
-              touchAction: 'none'
-            } as any}
-          />
+        
+        <div className="flex items-center gap-2">
+          <button 
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onChange(Math.max(min, value - 1)); }}
+            className="w-7 h-7 shrink-0 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-white hover:text-[#ff5351] hover:border-[#ff5351] transition-all"
+          >
+            <Minus className="w-3.5 h-3.5" />
+          </button>
+
+          <div className="relative h-[27px] flex-1 flex items-center group">
+            <input 
+              ref={inputRef}
+              type="range" 
+              min={min} 
+              max={max} 
+              step="0.1"
+              value={value} 
+              onChange={e => onChange(Number(e.target.value))}
+              className="pill-range-input"
+              style={{ 
+                background: `linear-gradient(to right, #ff5351 ${percentage}%, #1f1f1f ${percentage}%)`,
+                touchAction: 'none'
+              } as any}
+            />
+          </div>
+
+          <button 
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onChange(Math.min(max, value + 1)); }}
+            className="w-7 h-7 shrink-0 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-white hover:text-[#ff5351] hover:border-[#ff5351] transition-all"
+          >
+            <Plus className="w-3.5 h-3.5" />
+          </button>
         </div>
+
+        {subLabels && (
+          <div className="flex justify-between px-9 text-[7px] font-black text-zinc-600 uppercase tracking-tighter">
+            <span>{subLabels.left}</span>
+            <span>{subLabels.right}</span>
+          </div>
+        )}
       </div>
     );
   };
@@ -258,12 +284,26 @@ export default function Teleprompter() {
             </button>
 
             <div className="bg-[#141414] border border-zinc-800 p-6 rounded-[32px] shadow-xl">
-              <PillSlider label="Velocidade" value={state.velocidade} min={1} max={20} onChange={(v:any) => updateState({ velocidade: v })} />
+              <PillSlider 
+                label="Velocidade" value={state.velocidade} min={1} max={20} 
+                onChange={(v:any) => updateState({ velocidade: v })} 
+                subLabels={{ left: 'Lento', right: 'Rápido' }}
+              />
             </div>
 
             <div className="bg-[#141414] border border-zinc-800 p-6 rounded-[32px] shadow-xl space-y-6">
-              <PillSlider label="Margem Lateral" value={state.margem} min={0} max={40} onChange={(v:any) => updateState({ margem: v })} icon={MoveHorizontal} />
-              <PillSlider label="Tamanho Fonte" value={state.fonte} min={20} max={72} onChange={(v:any) => updateState({ fonte: v })} icon={Type} />
+              <PillSlider 
+                label="Margem Lateral" value={state.margem} min={0} max={40} 
+                onChange={(v:any) => updateState({ margem: v })} 
+                icon={MoveHorizontal} 
+                subLabels={{ left: 'Estreito', right: 'Largo' }}
+              />
+              <PillSlider 
+                label="Tamanho Fonte" value={state.fonte} min={20} max={72} 
+                onChange={(v:any) => updateState({ fonte: v })} 
+                icon={Type} 
+                subLabels={{ left: 'Pequena', right: 'Grande' }}
+              />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -287,100 +327,4 @@ export default function Teleprompter() {
                 <Trash2 className="w-4 h-4" /> Limpar Texto
               </button>
             </div>
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  return (
-    <div className="fixed inset-0 z-[500] bg-black flex flex-col overflow-hidden select-none max-w-[100vw]" onClick={handleScreenTouch}>
-      <style>{`
-        .pill-range-input {
-          -webkit-appearance: none;
-          appearance: none;
-          width: 100%;
-          height: 27px;
-          border-radius: 999px;
-          outline: none;
-          cursor: pointer;
-          border: 1px solid rgba(255,255,255,0.05);
-        }
-        .pill-range-input::-webkit-slider-thumb {
-          -webkit-appearance: none;
-          width: 23px;
-          height: 23px;
-          border-radius: 50%;
-          background: white;
-          cursor: pointer;
-          box-shadow: 0 1px 4px rgba(0,0,0,.4);
-        }
-        .pill-range-input::-moz-range-thumb {
-          width: 23px;
-          height: 23px;
-          border-radius: 50%;
-          background: white;
-          cursor: pointer;
-          border: none;
-          box-shadow: 0 1px 4px rgba(0,0,0,.4);
-        }
-      `}</style>
-      <main className="flex-1 relative overflow-hidden flex flex-col">
-        <div ref={prompterRef} className={cn("flex-1 overflow-y-auto py-[50vh] text-center no-scrollbar transition-all duration-700", state.espelhado && "scale-x-[-1]")} style={{ scrollBehavior: 'auto' }}>
-          <div 
-            className="font-black leading-tight uppercase italic whitespace-pre-wrap transition-all tracking-tight mx-auto" 
-            style={{ 
-              fontSize: `${state.fonte}px`, 
-              color: '#fff', 
-              paddingLeft: `${calculateMargin(state.margem)}%`, 
-              paddingRight: `${calculateMargin(state.margem)}%` 
-            }}
-          >
-            {state.texto || 'O ROTEIRO SINCRONIZADO APARECERÁ AQUI...'}
-          </div>
-        </div>
-
-        <div className="absolute top-1/2 left-0 right-0 h-[1.5px] bg-[#ff5351]/40 pointer-events-none z-10" />
-        <div 
-          className="absolute top-1/2 w-4 h-4 rounded-full bg-[#ff5351] -translate-y-1/2 shadow-[0_0_15px_#ff5351] z-20 transition-all duration-300"
-          style={{ left: `calc(${calculateMargin(state.margem)}% - 8px)` }}
-        />
-        <div 
-          className="absolute top-1/2 w-4 h-4 rounded-full bg-[#ff5351] -translate-y-1/2 shadow-[0_0_15px_#ff5351] z-20 transition-all duration-300"
-          style={{ right: `calc(${calculateMargin(state.margem)}% - 8px)` }}
-        />
-        
-        <div className="absolute top-0 left-0 right-0 h-[35vh] bg-gradient-to-b from-black via-black/80 to-transparent z-0 pointer-events-none" />
-        <div className="absolute bottom-0 left-0 right-0 h-[35vh] bg-gradient-to-t from-black via-black/80 to-transparent z-0 pointer-events-none" />
-      </main>
-
-      <div className={cn(
-        "fixed bottom-8 left-1/2 -translate-x-1/2 z-[400] w-[95%] max-w-5xl bg-zinc-900/95 backdrop-blur-3xl border border-white/5 rounded-[40px] p-4 flex items-center gap-6 shadow-[0_20px_50px_rgba(0,0,0,0.5)] transition-all duration-700",
-        !showControls && "opacity-0 translate-y-32"
-      )}>
-        <div className="pl-4 pr-6 border-r border-white/10 shrink-0">
-          <p className="text-[8px] font-black text-[#ff5351] uppercase tracking-[0.3em] mb-1">Boranov</p>
-          <h2 className="text-lg font-black text-white uppercase italic leading-none">TP Master</h2>
-        </div>
-
-        <div className="flex-1 grid grid-cols-3 gap-6 text-left">
-          <PillSlider label="Velocidade" value={state.velocidade} min={1} max={20} onChange={(v:any) => updateState({ velocidade: v })} />
-          <PillSlider label="Margem" value={state.margem} min={0} max={40} onChange={(v:any) => updateState({ margem: v })} />
-          <PillSlider label="Fonte" value={state.fonte} min={20} max={72} onChange={(v:any) => updateState({ fonte: v })} />
-        </div>
-
-        <div className="flex items-center gap-3 pr-2">
-          <button onClick={() => updateState({ voltarInicio: true })} className="p-4 bg-zinc-800 text-zinc-400 hover:text-white rounded-2xl transition-all" title="Reiniciar"><RotateCcw className="w-5 h-5" /></button>
-          <button onClick={() => updateState({ espelhado: !state.espelhado })} className={cn("p-4 rounded-2xl transition-all", state.espelhado ? "bg-[#ff5351] text-white" : "bg-zinc-800 text-zinc-400")} title="Espelhar"><FlipHorizontal className="w-5 h-5" /></button>
-          <button onClick={() => updateState({ playing: !state.playing })} className="w-20 h-20 bg-[#ff5351] rounded-3xl flex items-center justify-center text-white shadow-xl shadow-[#ff5351]/30 hover:scale-105 active:scale-95 transition-all">
-            {state.playing ? <Pause className="w-8 h-8 fill-current" /> : <Play className="w-8 h-8 fill-current ml-1" />}
-          </button>
-          <div className="flex items-center gap-2">
-            <button onClick={toggleFullscreen} className="p-4 bg-zinc-800 text-zinc-400 hover:text-white rounded-2xl transition-all">{isFullscreen ? <X className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}</button>
-            <button onClick={() => { setSelectedMode(null); sessionStorage.removeItem('tp_selected_mode'); }} className="p-4 bg-zinc-900 border border-zinc-800 text-zinc-600 hover:text-white rounded-2xl transition-all" title="Trocar Modo"><Laptop className="w-5 h-5" /></button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
+          </div>\n        )}\n      </div>\n    );\n  }\n\n  return (\n    <div className=\"fixed inset-0 z-[500] bg-black flex flex-col overflow-hidden select-none max-w-[100vw]\" onClick={handleScreenTouch}>\n      <style>{`\n        .pill-range-input {\n          -webkit-appearance: none;\n          appearance: none;\n          width: 100%;\n          height: 27px;\n          border-radius: 999px;\n          outline: none;\n          cursor: pointer;\n          border: 1px solid rgba(255,255,255,0.05);\n        }\n        .pill-range-input::-webkit-slider-thumb {\n          -webkit-appearance: none;\n          width: 23px;\n          height: 23px;\n          border-radius: 50%;\n          background: white;\n          cursor: pointer;\n          box-shadow: 0 1px 4px rgba(0,0,0,.4);\n        }\n        .pill-range-input::-moz-range-thumb {\n          width: 23px;\n          height: 23px;\n          border-radius: 50%;\n          background: white;\n          cursor: pointer;\n          border: none;\n          box-shadow: 0 1px 4px rgba(0,0,0,.4);\n        }\n      `}</style>\n      <main className=\"flex-1 relative overflow-hidden flex flex-col\">\n        <div ref={prompterRef} className={cn(\"flex-1 overflow-y-auto py-[50vh] text-center no-scrollbar transition-all duration-700\", state.espelhado && \"scale-x-[-1]\")} style={{ scrollBehavior: 'auto' }}>\n          <div \n            className=\"font-black leading-tight uppercase italic whitespace-pre-wrap transition-all tracking-tight mx-auto\" \n            style={{ \n              fontSize: `${state.fonte}px`, \n              color: '#fff', \n              paddingLeft: `${calculateMargin(state.margem)}%`, \n              paddingRight: `${calculateMargin(state.margem)}%` \n            }}\n          >\n            {state.texto || 'O ROTEIRO SINCRONIZADO APARECERÁ AQUI...'}\n          </div>\n        </div>\n\n        <div className=\"absolute top-1/2 left-0 right-0 h-[1.5px] bg-[#ff5351]/40 pointer-events-none z-10\" />\n        <div \n          className=\"absolute top-1/2 w-4 h-4 rounded-full bg-[#ff5351] -translate-y-1/2 shadow-[0_0_15px_#ff5351] z-20 transition-all duration-300\"\n          style={{ left: `calc(${calculateMargin(state.margem)}% - 8px)` }}\n        />\n        <div \n          className=\"absolute top-1/2 w-4 h-4 rounded-full bg-[#ff5351] -translate-y-1/2 shadow-[0_0_15px_#ff5351] z-20 transition-all duration-300\"\n          style={{ right: `calc(${calculateMargin(state.margem)}% - 8px)` }}\n        />\n        \n        <div className=\"absolute top-0 left-0 right-0 h-[35vh] bg-gradient-to-b from-black via-black/80 to-transparent z-0 pointer-events-none\" />\n        <div className=\"absolute bottom-0 left-0 right-0 h-[35vh] bg-gradient-to-t from-black via-black/80 to-transparent z-0 pointer-events-none\" />\n      </main>\n\n      <div className={cn(\n        \"fixed bottom-8 left-1/2 -translate-x-1/2 z-[400] w-[95%] max-w-5xl bg-zinc-900/95 backdrop-blur-3xl border border-white/5 rounded-[40px] p-4 flex items-center gap-6 shadow-[0_20px_50px_rgba(0,0,0,0.5)] transition-all duration-700\",\n        !showControls && \"opacity-0 translate-y-32\"\n      )}>\n        <div className=\"pl-4 pr-6 border-r border-white/10 shrink-0\">\n          <p className=\"text-[8px] font-black text-[#ff5351] uppercase tracking-[0.3em] mb-1\">Boranov</p>\n          <h2 className=\"text-lg font-black text-white uppercase italic leading-none\">TP Master</h2>\n        </div>\n\n        <div className=\"flex-1 grid grid-cols-3 gap-6 text-left\">\n          <PillSlider \n            label=\"Velocidade\" value={state.velocidade} min={1} max={20} \n            onChange={(v:any) => updateState({ velocidade: v })} \n            subLabels={{ left: 'Lento', right: 'Rápido' }}\n          />\n          <PillSlider \n            label=\"Margem\" value={state.margem} min={0} max={40} \n            onChange={(v:any) => updateState({ margem: v })} \n            subLabels={{ left: 'Estreito', right: 'Largo' }}\n          />\n          <PillSlider \n            label=\"Fonte\" value={state.fonte} min={20} max={72} \n            onChange={(v:any) => updateState({ fonte: v })} \n            subLabels={{ left: 'A', right: 'A Grande' }}\n          />\n        </div>\n\n        <div className=\"flex items-center gap-3 pr-2\">\n          <button onClick={() => updateState({ voltarInicio: true })} className=\"p-4 bg-zinc-800 text-zinc-400 hover:text-white rounded-2xl transition-all\" title=\"Reiniciar\"><RotateCcw className=\"w-5 h-5\" /></button>\n          <button onClick={() => updateState({ espelhado: !state.espelhado })} className={cn(\"p-4 rounded-2xl transition-all\", state.espelhado ? \"bg-[#ff5351] text-white\" : \"bg-zinc-800 text-zinc-400\")} title=\"Espelhar\"><FlipHorizontal className=\"w-5 h-5\" /></button>\n          <button onClick={() => updateState({ playing: !state.playing })} className=\"w-20 h-20 bg-[#ff5351] rounded-3xl flex items-center justify-center text-white shadow-xl shadow-[#ff5351]/30 hover:scale-105 active:scale-95 transition-all\">\n            {state.playing ? <Pause className=\"w-8 h-8 fill-current\" /> : <Play className=\"w-8 h-8 fill-current ml-1\" />}\n          </button>\n          <div className=\"flex items-center gap-2\">\n            <button onClick={toggleFullscreen} className=\"p-4 bg-zinc-800 text-zinc-400 hover:text-white rounded-2xl transition-all\">{isFullscreen ? <X className=\"w-5 h-5\" /> : <Maximize2 className=\"w-5 h-5\" />}</button>\n            <button onClick={() => { setSelectedMode(null); sessionStorage.removeItem('tp_selected_mode'); }} className=\"p-4 bg-zinc-900 border border-zinc-800 text-zinc-600 hover:text-white rounded-2xl transition-all\" title=\"Trocar Modo\"><Laptop className=\"w-5 h-5\" /></button>\n          </div>\n        </div>\n      </div>\n    </div>\n  );\n}\n",path:
