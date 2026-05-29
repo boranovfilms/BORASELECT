@@ -59,7 +59,7 @@ export default function Teleprompter() {
       }
     });
 
-    const handleFsChange = () => setIsFullscreen(!!document.fullscreenElement || !!(document as any).webkitFullscreenElement);
+    const handleFsChange = () => setIsFullscreen(!!(document.fullscreenElement || (document as any).webkitFullscreenElement));
     document.addEventListener('fullscreenchange', handleFsChange);
     document.addEventListener('webkitfullscreenchange', handleFsChange);
 
@@ -152,28 +152,6 @@ export default function Teleprompter() {
     const inputRef = useRef<HTMLInputElement>(null);
     const percentage = ((value - min) / (max - min)) * 100;
 
-    useEffect(() => {
-      const slider = inputRef.current;
-      if (!slider) return;
-
-      const handleTouch = (e: TouchEvent) => {
-        if (e.cancelable) e.preventDefault();
-        const touch = e.touches[0];
-        const rect = slider.getBoundingClientRect();
-        const x = touch.clientX - rect.left;
-        const pct = Math.min(Math.max(x / rect.width, 0), 1);
-        const newValue = min + pct * (max - min);
-        onChange(Math.round(newValue * 10) / 10);
-      };
-
-      slider.addEventListener('touchstart', handleTouch, { passive: false });
-      slider.addEventListener('touchmove', handleTouch, { passive: false });
-      return () => {
-        slider.removeEventListener('touchstart', handleTouch);
-        slider.removeEventListener('touchmove', handleTouch);
-      };
-    }, [min, max, onChange]);
-
     return (
       <div className="space-y-1 w-full select-none text-left">
         <div className="flex justify-between items-center px-1 mb-0.5">
@@ -192,7 +170,7 @@ export default function Teleprompter() {
             <Minus className="w-3.5 h-3.5" />
           </button>
 
-          <div className="relative h-[27px] flex-1 flex items-center">
+          <div className="relative h-[27px] flex-1 flex items-center group">
             <input 
               ref={inputRef}
               type="range" 
@@ -259,10 +237,10 @@ export default function Teleprompter() {
     return (
       <div className="animate-in fade-in duration-700 min-h-[85vh] flex flex-col gap-6 max-w-lg mx-auto pb-10 px-4">
         <header className="bg-[#141414] border border-zinc-800 p-6 rounded-[32px] shadow-2xl flex items-center justify-between mt-4">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4 text-left">
             <Tv className="w-6 h-6 text-[#ff5351]" />
             <div>
-              <h1 className="text-lg font-black text-white uppercase italic leading-none mb-1 text-left">Boranov TP</h1>
+              <h1 className="text-lg font-black text-white uppercase italic leading-none mb-1">Boranov TP</h1>
               <div className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /><span className="text-[8px] font-black text-emerald-500 uppercase tracking-widest">Sincronizado</span></div>
             </div>
           </div>
@@ -291,7 +269,7 @@ export default function Teleprompter() {
               />
             </div>
 
-            <div className="bg-[#141414] border border-zinc-800 p-6 rounded-[32px] shadow-xl space-y-6">
+            <div className="bg-[#141414] border border-zinc-800 p-6 rounded-[32px] shadow-xl space-y-6 text-left">
               <PillSlider 
                 label="Margem Lateral" value={state.margem} min={0} max={40} 
                 onChange={(v:any) => updateState({ margem: v })} 
@@ -302,11 +280,11 @@ export default function Teleprompter() {
                 label="Tamanho Fonte" value={state.fonte} min={20} max={72} 
                 onChange={(v:any) => updateState({ fonte: v })} 
                 icon={Type} 
-                subLabels={{ left: 'A', right: 'A Grande' }}
+                subLabels={{ left: 'Pequena', right: 'Grande' }}
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-4 pb-12">
               <button onClick={() => updateState({ voltarInicio: true })} className="h-24 bg-zinc-900 border border-zinc-800 rounded-[32px] flex flex-col items-center justify-center gap-2 active:bg-zinc-800 transition-all text-zinc-300">
                 <RotateCcw className="w-6 h-6" /><span className="font-black uppercase tracking-widest text-[9px]">Reiniciar</span>
               </button>
@@ -318,7 +296,7 @@ export default function Teleprompter() {
         ) : (
           <div className="flex-1 flex flex-col gap-4 animate-in slide-in-from-bottom-4">
             <textarea value={state.texto} onChange={e => updateState({ texto: e.target.value })} placeholder="DIGITE OU COLE O ROTEIRO AQUI..." className="flex-1 min-h-[350px] bg-black border border-zinc-800 rounded-[32px] p-6 text-sm text-white resize-none outline-none focus:border-[#ff5351] leading-relaxed custom-scrollbar" />
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-3 pb-12">
               <label className="flex-1 py-5 bg-zinc-900 border border-zinc-800 rounded-[24px] flex items-center justify-center gap-3 cursor-pointer hover:bg-zinc-800 transition-all text-white font-black uppercase text-[10px]">
                 <Upload className="w-4 h-4 text-[#ff5351]" /> Carregar .TXT
                 <input type="file" accept=".txt" onChange={handleFileUpload} className="hidden" />
@@ -344,25 +322,46 @@ export default function Teleprompter() {
           border-radius: 999px;
           outline: none;
           cursor: pointer;
-          border: 1px solid rgba(255,255,255,0.05);
+          background: transparent;
         }
+        
+        .pill-range-input::-webkit-slider-container {
+          border-radius: 999px;
+        }
+
+        .pill-range-input::-webkit-slider-runnable-track {
+          height: 27px;
+          border-radius: 999px;
+          background: transparent;
+        }
+
         .pill-range-input::-webkit-slider-thumb {
           -webkit-appearance: none;
+          appearance: none;
           width: 23px;
           height: 23px;
           border-radius: 50%;
-          background: white;
+          background: white !important;
+          box-shadow: 0 1px 4px rgba(0,0,0,0.5);
+          margin-top: 2px;
           cursor: pointer;
-          box-shadow: 0 1px 4px rgba(0,0,0,.4);
+          border: none;
         }
+
+        .pill-range-input::-moz-range-track {
+          height: 27px;
+          border-radius: 999px;
+          background: transparent;
+        }
+
         .pill-range-input::-moz-range-thumb {
           width: 23px;
           height: 23px;
           border-radius: 50%;
-          background: white;
-          cursor: pointer;
+          background: white !important;
           border: none;
-          box-shadow: 0 1px 4px rgba(0,0,0,.4);
+          box-shadow: 0 1px 4px rgba(0,0,0,0.5);
+          cursor: pointer;
         }
       `}</style>
       <main className="flex-1 relative overflow-hidden flex flex-col">
