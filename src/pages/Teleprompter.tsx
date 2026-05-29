@@ -169,8 +169,8 @@ export default function Teleprompter() {
           <p className="text-zinc-500 text-xs font-bold uppercase tracking-widest">Escolha o modo de operação</p>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-2xl">
-          <button onClick={() => { setSelectedMode('prompter'); sessionStorage.setItem('tp_selected_mode', 'prompter'); }} className="p-10 bg-[#141414] border-2 border-zinc-800 rounded-[40px] hover:border-[#ff5351] transition-all flex flex-col items-center gap-4 shadow-2xl"><Tv className="w-12 h-12 text-[#ff5351]" /><span className="text-lg font-black text-white uppercase italic">Modo Teleprompter</span></button>
-          <button onClick={() => { setSelectedMode('remote'); sessionStorage.setItem('tp_selected_mode', 'remote'); }} className="p-10 bg-[#141414] border-2 border-zinc-800 rounded-[40px] hover:border-[#ff5351] transition-all flex flex-col items-center gap-4 shadow-2xl"><Smartphone className="w-12 h-12 text-[#ff5351]" /><span className="text-lg font-black text-white uppercase italic">Modo Controle</span></button>
+          <button onClick={() => { setSelectedMode('prompter'); selectMode('prompter'); }} className="p-10 bg-[#141414] border-2 border-zinc-800 rounded-[40px] hover:border-[#ff5351] transition-all flex flex-col items-center gap-4 shadow-2xl"><Tv className="w-12 h-12 text-[#ff5351]" /><span className="text-lg font-black text-white uppercase italic">Modo Teleprompter</span></button>
+          <button onClick={() => { setSelectedMode('remote'); selectMode('remote'); }} className="p-10 bg-[#141414] border-2 border-zinc-800 rounded-[40px] hover:border-[#ff5351] transition-all flex flex-col items-center gap-4 shadow-2xl"><Smartphone className="w-12 h-12 text-[#ff5351]" /><span className="text-lg font-black text-white uppercase italic">Modo Controle</span></button>
         </div>
       </div>
     );
@@ -188,7 +188,7 @@ export default function Teleprompter() {
         </header>
 
         <div className="flex bg-zinc-900/50 p-1 rounded-2xl border border-zinc-800">
-          <button onClick={() => setRemoteTab('control')} className={cn("flex-1 py-3 rounded-xl font-black text-[10px] uppercase transition-all", remoteTab === 'control' ? "bg-zinc-800 text-white shadow-lg" : "text-zinc-500")}>Painel</button>
+          <button onClick={() => setRemoteTab('control')} className={cn("flex-1 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all", remoteTab === 'control' ? "bg-zinc-800 text-white shadow-lg" : "text-zinc-500")}>Painel</button>
           <button onClick={() => setRemoteTab('text')} className={cn("flex-1 py-3 rounded-xl font-black text-[10px] uppercase transition-all", remoteTab === 'text' ? "bg-zinc-800 text-white shadow-lg" : "text-zinc-500")}>Roteiro</button>
         </div>
 
@@ -263,11 +263,11 @@ export default function Teleprompter() {
         </div>
         <div className="flex items-center gap-3 pr-2 text-left">
           <button onClick={() => updateState({ voltarInicio: true })} className="p-4 bg-zinc-800 text-zinc-400 rounded-2xl hover:text-white transition-all"><RotateCcw className="w-5 h-5" /></button>
-          <button onClick={() => updateState({ espelhado: !state.espelhado })} className={cn("p-4 rounded-2xl transition-all", state.espelhado ? \"bg-[#ff5351] text-white\" : \"bg-zinc-800 text-zinc-400\")} title=\"Espelhar\"><FlipHorizontal className=\"w-5 h-5\" /></button>
-          <button onClick={() => updateState({ playing: !state.playing })} className=\"w-20 h-20 bg-[#ff5351] rounded-3xl flex items-center justify-center text-white shadow-xl shadow-[#ff5351]/30 hover:scale-105 active:scale-95 transition-all\">{state.playing ? <Pause className=\"w-8 h-8 fill-current text-white\" /> : <Play className=\"w-8 h-8 fill-current ml-1 text-white\" />}</button>
-          <div className=\"flex items-center gap-2\">
-            <button onClick={toggleFullscreen} className=\"p-4 bg-zinc-800 text-zinc-400 hover:text-white rounded-2xl transition-all\">{isFullscreen ? <X className=\"w-5 h-5\" /> : <Maximize2 className=\"w-5 h-5\" />}</button>
-            <button onClick={() => { setSelectedMode(null); sessionStorage.removeItem('tp_selected_mode'); }} className=\"p-4 bg-zinc-900 border border-zinc-800 text-zinc-600 hover:text-white rounded-2xl transition-all\" title=\"Trocar Modo\"><Laptop className=\"w-5 h-5\" /></button>
+          <button onClick={() => updateState({ espelhado: !state.espelhado })} className={cn("p-4 rounded-2xl transition-all", state.espelhado ? "bg-[#ff5351] text-white" : "bg-zinc-800 text-zinc-400")} title="Espelhar"><FlipHorizontal className="w-5 h-5" /></button>
+          <button onClick={() => updateState({ playing: !state.playing })} className="w-20 h-20 bg-[#ff5351] rounded-3xl flex items-center justify-center text-white shadow-xl shadow-[#ff5351]/30 hover:scale-105 active:scale-95 transition-all text-left">{state.playing ? <Pause className="w-8 h-8 fill-current text-white" /> : <Play className="w-8 h-8 fill-current ml-1 text-white" />}</button>
+          <div className="flex items-center gap-2 text-left">
+            <button onClick={toggleFullscreen} className="p-4 bg-zinc-800 text-zinc-400 hover:text-white rounded-2xl transition-all">{isFullscreen ? <X className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}</button>
+            <button onClick={() => { setSelectedMode(null); sessionStorage.removeItem('tp_selected_mode'); }} className="p-4 bg-zinc-900 border border-zinc-800 text-zinc-600 hover:text-white rounded-2xl transition-all" title="Trocar Modo"><Laptop className="w-5 h-5" /></button>
           </div>
         </div>
       </div>
