@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Tv, Play, Pause, RotateCcw, ChevronUp, ChevronDown, Maximize2, FlipHorizontal, Settings2, Trash2, 
-  Smartphone, Laptop, MoveHorizontal, Type, Upload, X, Sliders, FileText
+  Smartphone, Laptop, MoveHorizontal, Type, Upload, X
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { toast } from 'react-hot-toast';
@@ -33,6 +33,7 @@ export default function Teleprompter() {
   const [remoteTab, setRemoteTab] = useState<'control' | 'text'>('control');
   const [state, setState] = useState<TeleprompterState>(DEFAULT_STATE);
   const [showControls, setShowControls] = useState(true);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   
   const prompterRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -57,7 +58,15 @@ export default function Teleprompter() {
       }
     });
 
-    return () => unsubscribe();
+    const handleFsChange = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', handleFsChange);
+    document.addEventListener('webkitfullscreenchange', handleFsChange);
+
+    return () => {
+      unsubscribe();
+      document.removeEventListener('fullscreenchange', handleFsChange);
+      document.removeEventListener('webkitfullscreenchange', handleFsChange);
+    };
   }, []);
 
   const selectMode = (mode: 'prompter' | 'remote') => {
@@ -94,20 +103,26 @@ export default function Teleprompter() {
     if (selectedMode === 'prompter') {
       setShowControls(true);
       if (controlTimeout.current) clearTimeout(controlTimeout.current);
-      if (document.fullscreenElement) {
+      if (isFullscreen) {
         controlTimeout.current = setTimeout(() => setShowControls(false), 4000);
       }
     }
   };
 
   const toggleFullscreen = () => {
-    if (!containerRef.current) return;
-    if (!document.fullscreenElement) {
-      containerRef.current.requestFullscreen();
-      setShowControls(false);
-    } else {
-      document.exitFullscreen();
-      setShowControls(true);
+    const el = document.documentElement as any;
+    try {
+      if (!document.fullscreenElement && !(document as any).webkitFullscreenElement) {
+        if (el.requestFullscreen) el.requestFullscreen();
+        else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+        setShowControls(false);
+      } else {
+        if (document.exitFullscreen) document.exitFullscreen();
+        else if ((document as any).webkitExitFullscreen) (document as any).webkitExitFullscreen();
+        setShowControls(true);
+      }
+    } catch (e) {
+      toast.error('Tela cheia não suportada');
     }
   };
 
@@ -142,8 +157,8 @@ export default function Teleprompter() {
       if (newValue !== value) onChange(newValue);
     };
 
-    const onTouchMove = (e: React.TouchEvent) => {
-      e.preventDefault();
+    const onTouch = (e: React.TouchEvent) => {
+      if (e.cancelable) e.preventDefault();
       handleUpdate(e.touches[0].clientX);
     };
 
@@ -169,8 +184,9 @@ export default function Teleprompter() {
         <div 
           ref={sliderRef}
           onMouseDown={onMouseDown}
-          onTouchMove={onTouchMove}
-          onTouchStart={onTouchMove}
+          onTouchMove={onTouch}
+          onTouchStart={onTouch}
+          style={{ touchAction: 'none' }}
           className="relative h-[27px] w-full bg-zinc-800 rounded-full flex items-center px-0.5 border border-white/5 cursor-pointer"
         >
           <div 
@@ -324,14 +340,14 @@ export default function Teleprompter() {
         </div>
 
         <div className="flex items-center gap-3 pr-2">
-          <button onClick={() => updateState({ voltarInicio: true })} className="p-4 bg-zinc-800 text-zinc-400 hover:text-white rounded-2xl transition-all"><RotateCcw className="w-5 h-5" /></button>
-          <button onClick={() => updateState({ espelhado: !state.espelhado })} className={cn("p-4 rounded-2xl transition-all", state.espelhado ? "bg-[#ff5351] text-white" : "bg-zinc-800 text-zinc-400")}><FlipHorizontal className="w-5 h-5" /></button>
+          <button onClick={() => updateState({ voltarInicio: true })} className="p-4 bg-zinc-800 text-zinc-400 hover:text-white rounded-2xl transition-all" title="Reiniciar"><RotateCcw className="w-5 h-5" /></button>
+          <button onClick={() => updateState({ espelhado: !state.espelhado })} className={cn("p-4 rounded-2xl transition-all", state.espelhado ? "bg-[#ff5351] text-white" : "bg-zinc-800 text-zinc-400")} title="Espelhar"><FlipHorizontal className="w-5 h-5" /></button>
           <button onClick={() => updateState({ playing: !state.playing })} className="w-20 h-20 bg-[#ff5351] rounded-3xl flex items-center justify-center text-white shadow-xl shadow-[#ff5351]/30 hover:scale-105 active:scale-95 transition-all">
             {state.playing ? <Pause className="w-8 h-8 fill-current" /> : <Play className="w-8 h-8 fill-current ml-1" />}
           </button>
           <div className="flex items-center gap-2">
-            <button onClick={toggleFullscreen} className="p-4 bg-zinc-800 text-zinc-400 hover:text-white rounded-2xl transition-all">{document.fullscreenElement ? <X className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}</button>
-            <button onClick={() => { setSelectedMode(null); sessionStorage.removeItem('tp_selected_mode'); }} className="p-4 bg-zinc-800 text-zinc-600 hover:text-white rounded-2xl transition-all" title="Trocar Modo"><Laptop className="w-5 h-5" /></button>
+            <button onClick={toggleFullscreen} className="p-4 bg-zinc-800 text-zinc-400 hover:text-white rounded-2xl transition-all">{isFullscreen ? <X className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}</button>
+            <button onClick={() => { setSelectedMode(null); sessionStorage.removeItem('tp_selected_mode'); }} className="p-4 bg-zinc-900 border border-zinc-800 text-zinc-600 hover:text-white rounded-2xl transition-all" title="Trocar Modo"><Laptop className="w-5 h-5" /></button>
           </div>
         </div>
       </div>
