@@ -18,7 +18,7 @@ export default {
 
     const url = new URL(request.url);
 
-    // 2. Rota para gerar a URL de upload (METADADOS APENAS)
+    // 2. Rota para gerar a URL de upload (METADADOS APENAsS)
     if (url.pathname === "/api/upload" && (request.method === "POST" || request.method === "GET")) {
       try {
         const accountId = env.CLOUDFLARE_ACCOUNT_ID;
