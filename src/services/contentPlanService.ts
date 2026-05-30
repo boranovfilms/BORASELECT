@@ -130,12 +130,13 @@ export function parsePostsFromText(text: string): ContentPost[] {
 export const contentPlanService = {
   // Criar novo planejamento
   async createPlan(data: Partial<ContentPlan>) {
-    const posts = data.currentText ? parsePostsFromText(data.currentText) : [];
-    
     const docRef = await addDoc(collection(db, 'content_plans'), {
-      ...data,
-      posts,
-      status: 'rascunho',
+      clientId: data.clientId,
+      name: data.name,
+      monthReference: data.monthReference || '',
+      currentText: data.currentText || '',
+      posts: data.posts || [],
+      status: data.status || 'rascunho',
       history: [],
       validations: [],
       createdAt: serverTimestamp(),
