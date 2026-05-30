@@ -26,7 +26,7 @@ export const config = {
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Método não permitido' });
 
-  const { image, clientId } = req.body;
+  const { image, clientId, path: customPath } = req.body;
   if (!image || !clientId) return res.status(400).json({ error: 'Imagem e ClientID são obrigatórios' });
 
   try {
@@ -37,7 +37,7 @@ export default async function handler(req: any, res: any) {
     const base64Data = image.replace(/^data:image\/\w+;base64,/, "");
     const buffer = Buffer.from(base64Data, 'base64');
     
-    const fileName = `clientes/${clientId}/logo`;
+    const fileName = customPath || `clientes/${clientId}/logo`;
     const file = bucket.file(fileName);
 
     await file.save(buffer, {
