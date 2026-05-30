@@ -54,7 +54,6 @@ export default function DebugTable() {
       const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       
       if (docs.length > 0) {
-        // Para a coleção de planejamentos, vamos fixar as colunas solicitadas para melhor visualização
         if (selectedCollection === 'content_plans') {
           setColumns([
             { header: 'ID', accessor: 'id' },
@@ -69,13 +68,12 @@ export default function DebugTable() {
             { 
               header: 'CRIADO EM', 
               accessor: (item: any) => {
-                const date = item.createdAt?.toDate ? item.createdAt.toDate() : new Date(item.createdAt);
-                return isNaN(date.getTime()) ? '-' : date.toLocaleString('pt-BR');
+                const date = item.createdAt?.toDate ? item.createdAt.toDate() : (item.createdAt ? new Date(item.createdAt) : null);
+                return date && !isNaN(date.getTime()) ? date.toLocaleString('pt-BR') : '-';
               } 
             }
           ]);
         } else {
-          // Lógica dinâmica para as outras coleções
           const allKeys = new Set<string>();
           docs.forEach(doc => Object.keys(doc).forEach(key => allKeys.add(key)));
           
@@ -147,4 +145,231 @@ export default function DebugTable() {
         const response = await fetch('/api/cloudflare-stream', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token: cfToken, action: 'delete', videoId })\n        });\n        if (response.ok) successCount++;\n      } catch (error) {}\n      setDeleteProgress(prev => ({ ...prev, current: i + 1 }));\n    }\n\n    toast.success(`${successCount} vídeos removidos com sucesso`);\n    setIsDeleting(false);\n    fetchCloudflareVideos();\n  };\n\n  const toggleSelectAll = () => {\n    if (selectedVideos.size === cfVideos.length) {\n      setSelectedVideos(new Set());\n    } else {\n      setSelectedVideos(new Set(cfVideos.map(v => v.uid)));\n    }\n  };\n\n  const toggleVideoSelection = (id: string) => {\n    const newSet = new Set(selectedVideos);\n    if (newSet.has(id)) newSet.delete(id);\n    else newSet.add(id);\n    setSelectedVideos(newSet);\n  };\n\n  const formatDuration = (seconds: number) => {\n    const mins = Math.floor(seconds / 60);\n    const secs = Math.floor(seconds % 60);\n    return `${mins}:${secs.toString().padStart(2, '0')}`;\n  };\n\n  const copyToClipboard = () => {\n    if (data.length === 0) {\n      toast.error('Não há dados para copiar');\n      return;\n    }\n    try {\n      const jsonString = JSON.stringify(data, null, 2);\n      navigator.clipboard.writeText(jsonString);\n      setCopied(true);\n      toast.success('Dados copiados para a área de transferência!');\n      setTimeout(() => setCopied(false), 3000);\n    } catch (err) {\n      toast.error('Falha ao copiar dados');\n    }\n  };\n\n  return (\n    <div className=\"space-y-8 pb-20 text-left\">\n      <header className=\"flex flex-col md:flex-row md:items-end justify-between gap-6\">\n        <div>\n          <h1 className=\"text-4xl font-black text-white uppercase italic flex items-center gap-3\">\n            <Database className=\"w-8 h-8 text-[#ff5351]\" />\n            Diagnóstico de Dados\n          </h1>\n          <p className=\"text-zinc-500 text-sm mt-2\">Auditoria técnica e gestão de infraestrutura externa.</p>\n        </div>\n        \n        <div className=\"flex gap-3\">\n          {selectedCollection !== 'cloudflare' && (\n            <button \n              onClick={copyToClipboard}\n              className={cn(\n                \"h-12 px-6 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 shadow-xl\",\n                copied ? \"bg-emerald-500 text-white\" : \"bg-white text-black hover:bg-[#ff5351] hover:text-white\"\n              )}\n            >\n              {copied ? <Check className=\"w-4 h-4\" /> : <Copy className=\"w-4 h-4\" />}\n              {copied ? 'Copiado!' : 'Copiar JSON para Auditoria'}\n            </button>\n          )}\n          \n          <button \n            onClick={selectedCollection === 'cloudflare' ? fetchCloudflareVideos : fetchData} \n            className=\"h-12 px-4 bg-zinc-900 border border-zinc-800 rounded-xl text-zinc-400 hover:text-white transition-all flex items-center gap-2\"\n          >\n            <RefreshCw className={cn(\"w-4 h-4\", loading && \"animate-spin\")} />\n            Atualizar\n          </button>\n        </div>\n      </header>\n\n      <div className=\"bg-[#1a1a1a] border border-zinc-800 rounded-3xl p-6 shadow-xl space-y-6\">\n        <div className=\"flex flex-wrap gap-2 pb-4 border-b border-zinc-800/50\">\n          {collections.map((col) => (\n            <button\n              key={col.id}\n              onClick={() => setSelectedCollection(col.id)}\n              className={cn(\n                \"px-4 py-2.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all border\",\n                selectedCollection === col.id \n                ? 'bg-[#ff5351]/10 border-[#ff5351] text-[#ff5351]' \n                : 'bg-zinc-900 border border-zinc-800 text-zinc-600 hover:text-zinc-300'\n              )}\n            >\n              {col.label}\n            </button>\n          ))}\n        </div>\n\n        {selectedCollection === 'cloudflare' ? (\n          <div className=\"space-y-6\">\n            <div className=\"grid grid-cols-1 md:grid-cols-2 gap-4\">\n              <div className=\"space-y-2\">\n                <label className=\"text-[10px] font-black uppercase text-zinc-500 tracking-widest flex items-center gap-2\">\n                  <Key className=\"w-3 h-3 text-[#ff5351]\" /> API Token do Cloudflare (Sessão)\n                </label>\n                <div className=\"flex gap-3\">\n                  <input \n                    type=\"password\" \n                    value={cfToken}\n                    onChange={e => setCfToken(e.target.value)}\n                    placeholder=\"Cole seu token aqui...\"\n                    className=\"flex-1 bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-white focus:border-[#ff5351] outline-none\"\n                  />\n                  <button \n                    onClick={fetchCloudflareVideos}\n                    disabled={loading}\n                    className=\"px-6 bg-[#ff5351] text-white rounded-xl font-black uppercase tracking-widest text-[10px] hover:brightness-110 disabled:opacity-50\"\n                  >\n                    {loading ? <Loader2 className=\"w-4 h-4 animate-spin\" /> : 'Carregar Vídeos'}\n                  </button>\n                </div>\n              </div>\n              <div className=\"flex items-end justify-end gap-3\">\n                {selectedVideos.size > 0 && (\n                  <button \n                    onClick={deleteSelectedVideos}\n                    disabled={isDeleting}\n                    className=\"h-12 px-6 bg-red-500/10 border border-red-500/20 text-red-500 rounded-xl font-black uppercase tracking-widest text-[10px] hover:bg-red-500 hover:text-white transition-all flex items-center gap-2\"\n                  >\n                    {isDeleting ? (\n                      <span className=\"flex items-center gap-2\">\n                        <Loader2 className=\"w-4 h-4 animate-spin\" />\n                        {deleteProgress.current}/{deleteProgress.total} APAGANDO...\n                      </span>\n                    ) : (\n                      <>\n                        <Trash2 className=\"w-4 h-4\" />\n                        Apagar {selectedVideos.size} selecionados\n                      </>\n                    )}\n                  </button>\n                )}\n              </div>\n            </div>\n\n            {cfVideos.length > 0 ? (\n              <DataTable \n                data={cfVideos.map(v => ({ id: v.uid, ...v }))}\n                loading={loading}\n                columns={[\n                  { \n                    header: (\n                      <button onClick={toggleSelectAll} className=\"w-5 h-5 rounded border-2 border-zinc-700 flex items-center justify-center\">\n                        {selectedVideos.size === cfVideos.length && <Check className=\"w-3 h-3 text-[#ff5351]\" strokeWidth={4} />}\n                      </button>\n                    ) as any,\n                    accessor: (video: any) => (\n                      <button \n                        onClick={() => toggleVideoSelection(video.uid)}\n                        className={cn(\n                          \"w-5 h-5 rounded border-2 transition-all flex items-center justify-center\",\n                          selectedVideos.has(video.uid) ? \"bg-[#ff5351] border-[#ff5351]\" : \"border-zinc-700 bg-zinc-900\"\n                        )}\n                      >\n                        {selectedVideos.has(video.uid) && <Check className=\"w-3 h-3 text-white\" strokeWidth={4} />}\n                      </button>\n                    ),\n                    className: 'w-10'\n                  },\n                  {\n                    header: 'Thumbnail',\n                    accessor: (video: any) => (\n                      <div className=\"w-16 h-10 rounded-lg bg-zinc-900 overflow-hidden border border-zinc-800\">\n                        <img src={video.thumbnail} alt=\"\" className=\"w-full h-full object-cover\" />\n                      </div>\n                    )\n                  },\n                  {\n                    header: 'Nome do Vídeo',\n                    accessor: (video: any) => <span className=\"font-bold text-white uppercase\">{video.meta?.name || 'Sem nome'}</span>\n                  },\n                  {\n                    header: 'Duração',\n                    accessor: (video: any) => <span className=\"text-zinc-500 font-mono\">{formatDuration(video.duration)}</span>\n                  },\n                  {\n                    header: 'Status',\n                    accessor: (video: any) => (\n                      <span className={cn(\n                        \"px-2 py-1 rounded text-[8px] font-black uppercase tracking-widest\",\n                        video.status?.state === 'ready' ? \"bg-emerald-500/10 text-emerald-500\" : \"bg-amber-500/10 text-amber-500\"\n                      )}>\n                        {video.status?.state || 'unknown'}\n                      </span>\n                    )\n                  }\n                ]}\n              />\n            ) : !loading && (\n              <div className=\"py-20 text-center border border-dashed border-zinc-800 rounded-3xl bg-zinc-900/30\">\n                <Video className=\"w-12 h-12 text-zinc-800 mx-auto mb-4\" />\n                <p className=\"text-zinc-600 font-bold uppercase text-[10px] tracking-widest\">Nenhum vídeo carregado do Cloudflare</p>\n              </div>\n            )}\n          </div>\n        ) : data.length > 0 ? (\n          <DataTable \n            columns={columns} \n            data={data} \n            loading={loading}\n            emptyMessage=\"Nenhum dado encontrado nesta coleção.\"\n          />\n        ) : (\n          <div className=\"py-20 text-center border border-dashed border-zinc-800 rounded-3xl\">\n            <Search className=\"w-12 h-12 text-zinc-900 mx-auto mb-4\" />\n            <p className=\"text-zinc-600 font-black uppercase text-[10px] tracking-widest\">\n              {loading ? 'Carregando banco de dados...' : 'Selecione uma coleção ou aguarde'}\n            </p>\n          </div>\n        )}\n      </div>\n    </div>\n  );\n}\n
+          body: JSON.stringify({ token: cfToken, action: 'delete', videoId })
+        });
+        if (response.ok) successCount++;
+      } catch (error) {}
+      setDeleteProgress(prev => ({ ...prev, current: i + 1 }));
+    }
+
+    toast.success(`${successCount} vídeos removidos com sucesso`);
+    setIsDeleting(false);
+    fetchCloudflareVideos();
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedVideos.size === cfVideos.length) {
+      setSelectedVideos(new Set());
+    } else {
+      setSelectedVideos(new Set(cfVideos.map(v => v.uid)));
+    }
+  };
+
+  const toggleVideoSelection = (id: string) => {
+    const newSet = new Set(selectedVideos);
+    if (newSet.has(id)) newSet.delete(id);
+    else newSet.add(id);
+    setSelectedVideos(newSet);
+  };
+
+  const formatDuration = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const copyToClipboard = () => {
+    if (data.length === 0) {
+      toast.error('Não há dados para copiar');
+      return;
+    }
+    try {
+      const jsonString = JSON.stringify(data, null, 2);
+      navigator.clipboard.writeText(jsonString);
+      setCopied(true);
+      toast.success('Dados copiados para a área de transferência!');
+      setTimeout(() => setCopied(false), 3000);
+    } catch (err) {
+      toast.error('Falha ao copiar dados');
+    }
+  };
+
+  return (
+    <div className="space-y-8 pb-20 text-left">
+      <header className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+        <div>
+          <h1 className="text-4xl font-black text-white uppercase italic flex items-center gap-3">
+            <Database className="w-8 h-8 text-[#ff5351]" />
+            Diagnóstico de Dados
+          </h1>
+          <p className="text-zinc-500 text-sm mt-2">Auditoria técnica e gestão de infraestrutura externa.</p>
+        </div>
+        
+        <div className="flex gap-3">
+          {selectedCollection !== 'cloudflare' && (
+            <button 
+              onClick={copyToClipboard}
+              className={cn(
+                "h-12 px-6 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 shadow-xl",
+                copied ? "bg-emerald-500 text-white" : "bg-white text-black hover:bg-[#ff5351] hover:text-white"
+              )}
+            >
+              {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+              {copied ? 'Copiado!' : 'Copiar JSON para Auditoria'}
+            </button>
+          )}
+          
+          <button 
+            onClick={selectedCollection === 'cloudflare' ? fetchCloudflareVideos : fetchData} 
+            className="h-12 px-4 bg-zinc-900 border border-zinc-800 rounded-xl text-zinc-400 hover:text-white transition-all flex items-center gap-2"
+          >
+            <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
+            Atualizar
+          </button>
+        </div>
+      </header>
+
+      <div className="bg-[#1a1a1a] border border-zinc-800 rounded-3xl p-6 shadow-xl space-y-6">
+        <div className="flex flex-wrap gap-2 pb-4 border-b border-zinc-800/50">
+          {collections.map((col) => (
+            <button
+              key={col.id}
+              onClick={() => setSelectedCollection(col.id)}
+              className={cn(
+                "px-4 py-2.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all border",
+                selectedCollection === col.id 
+                ? 'bg-[#ff5351]/10 border-[#ff5351] text-[#ff5351]' 
+                : 'bg-zinc-900 border border-zinc-800 text-zinc-600 hover:text-zinc-300'
+              )}
+            >
+              {col.label}
+            </button>
+          ))}
+        </div>
+
+        {selectedCollection === 'cloudflare' ? (
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase text-zinc-500 tracking-widest flex items-center gap-2">
+                  <Key className="w-3 h-3 text-[#ff5351]" /> API Token do Cloudflare (Sessão)
+                </label>
+                <div className="flex gap-3">
+                  <input 
+                    type="password" 
+                    value={cfToken}
+                    onChange={e => setCfToken(e.target.value)}
+                    placeholder="Cole seu token aqui..."
+                    className="flex-1 bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-white focus:border-[#ff5351] outline-none"
+                  />
+                  <button 
+                    onClick={fetchCloudflareVideos}
+                    disabled={loading}
+                    className="px-6 bg-[#ff5351] text-white rounded-xl font-black uppercase tracking-widest text-[10px] hover:brightness-110 disabled:opacity-50"
+                  >
+                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Carregar Vídeos'}
+                  </button>
+                </div>
+              </div>
+              <div className="flex items-end justify-end gap-3">
+                {selectedVideos.size > 0 && (
+                  <button 
+                    onClick={deleteSelectedVideos}
+                    disabled={isDeleting}
+                    className="h-12 px-6 bg-red-500/10 border border-red-500/20 text-red-500 rounded-xl font-black uppercase tracking-widest text-[10px] hover:bg-red-500 hover:text-white transition-all flex items-center gap-2"
+                  >
+                    {isDeleting ? (
+                      <span className="flex items-center gap-2">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        {deleteProgress.current}/{deleteProgress.total} APAGANDO...
+                      </span>
+                    ) : (
+                      <>
+                        <Trash2 className="w-4 h-4" />
+                        Apagar {selectedVideos.size} selecionados
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {cfVideos.length > 0 ? (
+              <DataTable 
+                data={cfVideos.map(v => ({ id: v.uid, ...v }))}
+                loading={loading}
+                columns={[
+                  { 
+                    header: (
+                      <button onClick={toggleSelectAll} className="w-5 h-5 rounded border-2 border-zinc-700 flex items-center justify-center">
+                        {selectedVideos.size === cfVideos.length && <Check className="w-3 h-3 text-[#ff5351]" strokeWidth={4} />}
+                      </button>
+                    ) as any,
+                    accessor: (video: any) => (
+                      <button 
+                        onClick={() => toggleVideoSelection(video.uid)}
+                        className={cn(
+                          "w-5 h-5 rounded border-2 transition-all flex items-center justify-center",
+                          selectedVideos.has(video.uid) ? "bg-[#ff5351] border-[#ff5351]" : "border-zinc-700 bg-zinc-900"
+                        )}
+                      >
+                        {selectedVideos.has(video.uid) && <Check className="w-3 h-3 text-white" strokeWidth={4} />}
+                      </button>
+                    ),
+                    className: 'w-10'
+                  },
+                  {
+                    header: 'Thumbnail',
+                    accessor: (video: any) => (
+                      <div className="w-16 h-10 rounded-lg bg-zinc-900 overflow-hidden border border-zinc-800">
+                        <img src={video.thumbnail} alt="" className="w-full h-full object-cover" />
+                      </div>
+                    )
+                  },
+                  {
+                    header: 'Nome do Vídeo',
+                    accessor: (video: any) => <span className="font-bold text-white uppercase">{video.meta?.name || 'Sem nome'}</span>
+                  },
+                  {
+                    header: 'Duração',
+                    accessor: (video: any) => <span className="text-zinc-500 font-mono">{formatDuration(video.duration)}</span>
+                  },
+                  {
+                    header: 'Status',
+                    accessor: (video: any) => (
+                      <span className={cn(
+                        "px-2 py-1 rounded text-[8px] font-black uppercase tracking-widest",
+                        video.status?.state === 'ready' ? "bg-emerald-500/10 text-emerald-500" : "bg-amber-500/10 text-amber-500"
+                      )}>
+                        {video.status?.state || 'unknown'}
+                      </span>
+                    )
+                  }
+                ]}
+              />
+            ) : !loading && (
+              <div className="py-20 text-center border border-dashed border-zinc-800 rounded-3xl bg-zinc-900/30">
+                <Video className="w-12 h-12 text-zinc-800 mx-auto mb-4" />
+                <p className="text-zinc-600 font-bold uppercase text-[10px] tracking-widest">Nenhum vídeo carregado do Cloudflare</p>
+              </div>
+            )}
+          </div>
+        ) : data.length > 0 ? (
+          <DataTable 
+            columns={columns} 
+            data={data} 
+            loading={loading}
+            emptyMessage="Nenhum dado encontrado nesta coleção."
+          />
+        ) : (
+          <div className="py-20 text-center border border-dashed border-zinc-800 rounded-3xl">
+            <Search className="w-12 h-12 text-zinc-900 mx-auto mb-4" />
+            <p className="text-zinc-600 font-black uppercase text-[10px] tracking-widest">
+              {loading ? 'Carregando banco de dados...' : 'Selecione uma coleção ou aguarde'}
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
