@@ -12,9 +12,21 @@ import {
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 
+export type StageType = 
+  | 'upload_arquivos'
+  | 'aprovacao_admin'
+  | 'aprovacao_cliente'
+  | 'aprovacao_equipe_cliente'
+  | 'producao'
+  | 'selecao'
+  | 'revisao'
+  | 'programar_postagem'
+  | 'concluido';
+
 export type Stage = {
   id: string;
   name: string;
+  type: StageType;
   duration: string;
   assignee: string;
   requiresApproval: boolean;
