@@ -345,4 +345,344 @@ export default function ProjetoFluxo() {
           <h1 className="text-4xl md:text-5xl font-black tracking-tight text-white uppercase italic">Vincular Fluxo</h1>
         </header>
 
-        {!selectedModel ? (\n          <div className=\"grid grid-cols-1 md:grid-cols-2 gap-4\">\n            {availableModels.length === 0 ? (\n              <div className=\"col-span-2 p-8 text-center border border-zinc-800 rounded-3xl bg-[#141414]\"><LayoutTemplate className=\"w-12 h-12 text-zinc-700 mx-auto mb-4\" /><p className=\"text-zinc-400 font-medium\">Nenhum modelo cadastrado.</p><button onClick={() => navigate('/modelos')} className=\"mt-4 text-[#ff5351] text-sm font-black uppercase tracking-widest hover:underline\">Ir para Modelos</button></div>\n            ) : (\n              availableModels.map(model => (\n                <button key={model.id} onClick={() => handleSelectModel(model)} className=\"p-6 text-left border border-zinc-800 bg-[#141414] rounded-3xl hover:border-[#ff5351] hover:bg-zinc-900/50 transition-all group\">\n                  <h3 className=\"text-xl font-black text-white uppercase group-hover:text-[#ff5351] transition-colors\">{model.name}</h3><p className=\"text-zinc-500 mt-2 text-sm\">{model.description || 'Sem descrição'}</p><div className=\"mt-6 flex items-center gap-2 text-[10px] uppercase font-black tracking-widest text-zinc-600\"><CheckCircle2 className=\"w-4 h-4\" /> {(model.stages || []).length} etapas</div>\n                </button>\n              ))\n            )}\n          </div>\n        ) : (\n          <div className=\"space-y-6\">\n            <div className=\"flex items-center gap-4 py-4 border-b border-zinc-800\"><button onClick={() => setSelectedModel(null)} className=\"text-zinc-500 hover:text-white\"><ArrowLeft className=\"w-5 h-5\"/></button><h2 className=\"text-xl font-black text-white uppercase\">Personalizar: {selectedModel.name}</h2></div>\n            <div className=\"space-y-4\">\n              {setupStages.map((stage, idx) => (\n                <div key={stage.id} className=\"p-5 bg-[#141414] border border-zinc-800 rounded-3xl flex flex-col md:flex-row md:items-center gap-4\">\n                  <div className=\"w-12 h-12 rounded-2xl bg-zinc-900 flex items-center justify-center text-zinc-500 font-black border border-zinc-800 shrink-0\">{idx + 1}</div>\n                  <div className=\"flex-1 min-w-0\"><p className=\"text-white font-black uppercase text-sm truncate\">{stage.name}</p><p className=\"text-zinc-500 text-xs mt-1 truncate\">{stage.description || 'Sem descrição'}</p></div>\n                  \n                  <div className=\"w-full md:w-64 space-y-2 shrink-0\">\n                    <label className=\"text-[10px] uppercase font-black text-[#ff5351] tracking-widest ml-1\">Responsável (Neste Projeto)</label>\n                    <div className=\"relative\">\n                      <select \n                        value={stage.assignee}\n                        onChange={(e) => updateSetupStage(idx, 'assignee', e.target.value)}\n                        className=\"w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-xs font-bold text-white focus:border-[#ff5351] outline-none appearance-none cursor-pointer\"\n                      >\n                        {teamMembers.map(m => (\n                          <option key={m.id} value={m.name}>{m.name}</option>\n                        ))}\n                      </select>\n                      <ChevronDown className=\"absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 pointer-events-none\" />\n                    </div>\n                  </div>\n                </div>\n              ))}\n            </div>\n            <div className=\"flex justify-end pt-4\">\n              <button \n                onClick={handleStartWorkflow}\n                disabled={isInitializing}\n                className=\"px-10 h-14 bg-[#ff5351] text-white rounded-2xl font-black uppercase tracking-widest text-xs hover:brightness-110 transition-all flex items-center gap-3 shadow-xl shadow-[#ff5351]/20\"\n              >\n                {isInitializing ? <Loader2 className=\"w-5 h-5 animate-spin\" /> : <Save className=\"w-5 h-5\" />}\n                Vincular e Iniciar Fluxo\n              </button>\n            </div>\n          </div>\n        )}\n      </div>\n    );\n  }\n\n  return (\n    <div className=\"space-y-8 pb-16\">\n      <header className=\"flex flex-col md:flex-row md:items-start justify-between gap-8\">\n        <div className=\"flex-1 min-w-0\">\n          <div className=\"flex items-center gap-3 mb-3\">\n            <button onClick={() => navigate(-1)} className=\"p-2 hover:bg-zinc-800 rounded-xl transition-all text-zinc-500 hover:text-white\">\n               <ArrowLeft className=\"w-5 h-5\" />\n            </button>\n            <span className=\"px-3 py-1 bg-zinc-900 border border-zinc-800 rounded-lg text-[10px] font-black uppercase text-[#ff5351] tracking-[0.2em]\">\n              {workflow.modelName}\n            </span>\n          </div>\n          <h1 className=\"text-4xl md:text-5xl font-black text-white uppercase italic tracking-tighter truncate\">\n            {projectData?.title || 'Projeto'}\n          </h1>\n        </div>\n\n        <div className=\"flex flex-col items-end gap-2\">\n          <div className=\"text-[10px] font-black uppercase text-zinc-500 tracking-widest mb-1\">Progresso do Fluxo</div>\n          <div className=\"flex items-center gap-2\">\n            {workflow.stages.map((s, idx) => (\n              <div \n                key={s.id} \n                className={cn(\n                  \"w-8 h-1.5 rounded-full transition-all\",\n                  idx <= workflow.currentStageIndex ? \"bg-[#ff5351]\" : \"bg-zinc-800\"\n                )}\n              />\n            ))}\n          </div>\n          <div className=\"text-[10px] font-bold text-zinc-400 mt-1 uppercase\">\n             Etapa {workflow.currentStageIndex + 1} de {workflow.stages.length}\n          </div>\n        </div>\n      </header>\n\n      <div className=\"grid grid-cols-1 lg:grid-cols-12 gap-8\">\n        <div className=\"lg:col-span-4\">\n          <div className=\"bg-[#1a1a1a] border border-zinc-800 rounded-[32px] p-2 sticky top-8\">\n            <div className=\"space-y-1\">\n              {workflow.stages.map((stage, idx) => {\n                const isActive = idx === workflow.currentStageIndex;\n                const isPast = idx < workflow.currentStageIndex;\n                \n                return (\n                  <div \n                    key={stage.id}\n                    className={cn(\n                      \"flex items-center gap-4 p-4 rounded-3xl transition-all\",\n                      isActive ? \"bg-[#ff5351] shadow-xl shadow-[#ff5351]/20 scale-[1.02]\" : \"hover:bg-zinc-800/50\"\n                    )}\n                  >\n                    <div className={cn(\n                      \"w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 font-black text-sm\",\n                      isActive ? \"bg-white text-[#ff5351]\" : isPast ? \"bg-emerald-500/10 text-emerald-500\" : \"bg-zinc-900 text-zinc-600\"\n                    )}>\n                      {isPast ? <Check className=\"w-5 h-5\" /> : idx + 1}\n                    </div>\n                    <div className=\"flex-1 min-w-0\">\n                      <p className={cn(\n                        \"text-xs font-black uppercase tracking-tight truncate\",\n                        isActive ? \"text-white\" : isPast ? \"text-zinc-300\" : \"text-zinc-600\"\n                      )}>{stage.name}</p>\n                      <p className={cn(\n                        \"text-[9px] font-bold uppercase tracking-widest mt-0.5\",\n                        isActive ? \"text-white/70\" : \"text-zinc-500\"\n                      )}>\n                        {stage.status === 'completed' ? 'Finalizada' : stage.status === 'in_progress' ? 'Em andamento' : stage.status === 'waiting_approval' ? 'Aguard. Cliente' : 'Pendente'}\n                      </p>\n                    </div>\n                  </div>\n                )\n              })}\n            </div>\n          </div>\n        </div>\n\n        <div className=\"lg:col-span-8 space-y-8\">\n          <section className=\"bg-[#1a1a1a] border border-zinc-800 rounded-[40px] p-10 shadow-2xl relative overflow-hidden\">\n            <div className=\"absolute top-0 right-0 p-10 opacity-5\">\n               <LayoutTemplate className=\"w-32 h-32 text-white\" />\n            </div>\n\n            <header className=\"mb-10 relative z-10\">\n              <p className=\"text-[10px] font-black uppercase text-[#ff5351] tracking-[0.3em] mb-3\">Detalhes da Etapa Atual</p>\n              <h2 className=\"text-4xl md:text-5xl font-black text-white uppercase italic tracking-tight\">{currentStage.name}</h2>\n              <div className=\"flex flex-wrap gap-4 mt-6\">\n                <span className=\"px-4 py-2 bg-[#1a1a1a] border border-zinc-800 rounded-full text-xs font-black text-zinc-300 uppercase tracking-widest flex items-center gap-2\"><UserCircle className=\"w-4 h-4 text-[#ff5351]\"/> {currentStage.assignee || 'Não definido'}</span>\n                <span className=\"px-4 py-2 bg-[#1a1a1a] border border-zinc-800 rounded-full text-xs font-black text-zinc-300 uppercase tracking-widest flex items-center gap-2\"><Clock className=\"w-4 h-4 text-[#ff5351]\"/> Prazo: {currentStage.durationDays} dias</span>\n              </div>\n            </header>\n\n            <div className=\"space-y-4\">\n              <h3 className=\"text-sm font-black uppercase text-zinc-500 tracking-widest\">Controle de Status</h3>\n              <div className=\"grid grid-cols-2 md:grid-cols-4 gap-3\">\n                {[\n                  { id: 'pending', label: 'Pendente', color: 'border-zinc-700 text-zinc-500', dateField: 'pendingAt' },\n                  { id: 'in_progress', label: 'Em Andamento', color: 'border-blue-500 text-blue-400', dateField: 'startedAt' },\n                  { id: 'waiting_approval', label: 'Aguard. Cliente', color: 'border-amber-500 text-amber-400', dateField: 'waitingApprovalAt' },\n                  { id: 'completed', label: 'Concluído', color: 'border-emerald-500 text-emerald-400', dateField: 'completedAt' }\n                ].map(status => {\n                  const isActive = currentStage.status === status.id;\n                  const stageDate = (currentStage as any)[status.dateField];\n                  \n                  return (\n                    <button key={status.id} onClick={() => handleUpdateStatus(status.id as ProjectStageStatus)} className={cn(\"px-2 py-3 rounded-2xl border flex flex-col items-center justify-center transition-all\", isActive ? cn(\"bg-[#1a1a1a]\", status.color) : \"bg-[#111] border-zinc-800 text-zinc-600 hover:border-zinc-600\")}>\n                      <span className=\"text-[11px] font-black uppercase tracking-widest text-center\">{status.label}</span>\n                      {stageDate && (\n                         <span className={cn(\"text-[9px] font-mono mt-1 opacity-80\", isActive ? \"text-current\" : \"text-zinc-500\")}>\n                            {formatStageDate(stageDate)}\n                         </span>\n                      )}\n                    </button>\n                  )\n                })}\n              </div>\n\n              {isUploadStage && currentStage.status !== 'completed' && media.length === 0 && (\n                <p className=\"text-[#ff5351] text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5 animate-in fade-in mt-3 ml-1\">\n                  <Info className=\"w-3 h-3\" />\n                  Carregue pelo menos um arquivo para poder concluir a etapa\n                </p>\n              )}\n            </div>\n\n            {isUploadStage ? (\n              <div className=\"space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 pt-8 border-t border-zinc-800\">\n                <div className=\"flex items-center justify-between mb-4\">\n                  <h3 className=\"text-2xl font-black uppercase text-white tracking-tight\">Upload e Configuração de Cliente</h3>\n                  <button onClick={handleSaveMediaConfig} disabled={saving} className=\"px-6 py-3 rounded-xl bg-[#ff5351] text-white font-black uppercase tracking-widest hover:brightness-110 transition-all text-xs shadow-lg shadow-[#ff5351]/20 flex items-center gap-2\">\n                    {saving ? <Loader2 className=\"w-4 h-4 animate-spin\" /> : <Save className=\"w-4 h-4\" />} Salvar Regras\n                  </button>\n                </div>\n\n                <div className=\"grid grid-cols-1 lg:grid-cols-12 gap-8\">\n                  <div className=\"lg:col-span-12 space-y-8\">\n                    <div className=\"bg-[#1a1a1a] border border-zinc-800 rounded-3xl p-6\">\n                      <div className=\"flex justify-between items-center border-b border-zinc-800 pb-4 mb-6\">\n                        <h4 className=\"text-lg font-bold text-white uppercase\">Upload de Mídia</h4>\n                      </div>\n                      \n                      <input type=\"file\" multiple className=\"hidden\" ref={fileInputRef} onChange={(e) => handleFileUpload(e.target.files)} accept=\"image/*,video/*\" />\n                      \n                      <div onClick={() => fileInputRef.current?.click()} onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }} onDrop={(e) => { e.preventDefault(); e.stopPropagation(); handleFileUpload(e.dataTransfer.files); }} className=\"group py-6 flex flex-col items-center justify-center bg-zinc-900/50 rounded-2xl border-2 border-dashed border-zinc-800 hover:border-[#ff5351]/50 cursor-pointer transition-all\">\n                        <CloudUpload className=\"w-6 h-6 text-zinc-600 mb-2 group-hover:text-[#ff5351]\" />\n                        <p className=\"text-zinc-400 text-[11px] font-bold uppercase tracking-widest\">Arraste arquivos ou clique aqui para buscar</p>\n                      </div>\n\n                      {Object.keys(uploads).length > 0 && (\n                        <div className=\"mt-6 space-y-4 pt-6 border-t border-zinc-800\">\n                          <div className=\"flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4\">\n                            <div className=\"flex items-center gap-3\">\n                              <h5 className=\"text-[10px] font-black uppercase tracking-widest text-zinc-500 flex items-center gap-2\">\n                                <Loader2 className={cn(\"w-3 h-3\", Object.values(uploads).some(u => u.status === 'uploading') && \"animate-spin\")} />\n                                Fila de Arquivos ({Object.keys(uploads).length})\n                              </h5>\n                              \n                              <div className=\"flex items-center gap-2\">\n                                {Object.values(uploads).some(u => u.status === 'completed') && (\n                                  <button onClick={clearCompletedUploads} className=\"text-[10px] uppercase font-black tracking-widest text-emerald-500 hover:text-emerald-400 transition-all border border-emerald-500/30 px-2 py-1 rounded\">Limpar Concluídos</button>\n                                )}\n                                <button onClick={clearAllUploads} className=\"text-[10px] uppercase font-black tracking-widest text-zinc-600 hover:text-red-500 transition-all\">Limpar Fila</button>\n                              </div>\n                            </div>\n\n                            {Object.values(uploads).some(u => u.status === 'pending' || u.status === 'error') && (\n                              <button onClick={startAllUploads} className=\"px-4 py-2 bg-[#ff5351] text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:brightness-110 transition-all flex items-center justify-center gap-2 shadow-xl shadow-[#ff5351]/20\">\n                                <Play className=\"w-3 h-3 fill-current\" /> Enviar Todos da Fila\n                              </button>\n                            )}\n                          </div>\n\n                          <div className=\"grid grid-cols-1 md:grid-cols-2 gap-4\">\n                            {Object.entries(uploads).map(([id, upload]) => (\n                              <div key={id} className=\"group/item bg-black/40 rounded-2xl p-4 border border-zinc-800/50 hover:border-[#ff5351]/30 transition-all\">\n                                <div className=\"flex items-center justify-between gap-4 mb-3\">\n                                  <div className=\"flex items-center gap-3 overflow-hidden\">\n                                    <div className={cn(\"w-8 h-8 rounded-lg flex items-center justify-center shrink-0\", upload.status === 'completed' ? \"bg-emerald-500/10 text-emerald-500\" : upload.status === 'error' ? \"bg-red-500/10 text-red-500\" : upload.status === 'uploading' ? \"bg-[#ff5351]/10 text-[#ff5351]\" : \"bg-zinc-800 text-zinc-500\")}>\n                                      {upload.status === 'completed' ? <CheckCircle2 className=\"w-4 h-4\" /> : upload.status === 'error' ? <Info className=\"w-4 h-4\" /> : upload.status === 'uploading' ? <Loader2 className=\"w-4 h-4 animate-spin\" /> : <Clock className=\"w-4 h-4\" />}\n                                    </div>\n                                    <div className=\"overflow-hidden\">\n                                      <p className=\"text-[10px] font-black uppercase tracking-tight text-white truncate\">{upload.fileName}</p>\n                                      <p className=\"text-[8px] font-bold text-zinc-500 uppercase tracking-widest mt-0.5\">{upload.status === 'pending' ? 'Pendente' : upload.status === 'uploading' ? 'Enviando...' : upload.status === 'completed' ? 'Concluído' : 'Erro no envio'}</p>\n                                    </div>\n                                  </div>\n                                  <div className=\"flex items-center gap-1\">\n                                    {upload.status === 'pending' && <button onClick={() => startUpload(id)} className=\"p-1.5 text-zinc-400 hover:text-[#ff5351] hover:bg-[#ff5351]/10 rounded-lg transition-all\" title=\"Iniciar\"><Play className=\"w-3.5 h-3.5 fill-current\" /></button>}\n                                    {upload.status === 'error' && <button onClick={() => retryUpload(id)} className=\"p-1.5 text-zinc-400 hover:text-[#ff5351] hover:bg-[#ff5351]/10 rounded-lg transition-all\" title=\"Tentar novamente\"><RotateCcw className=\"w-3.5 h-3.5\" /></button>}\n                                    <button onClick={() => cancelUpload(id)} className=\"p-1.5 text-zinc-400 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-all\" title=\"Cancelar\"><X className=\"w-3.5 h-3.5\" /></button>\n                                  </div>\n                                </div>\n                                <div className=\"flex items-center gap-3\">\n                                  <div className=\"flex-1 h-1 bg-zinc-800 rounded-full overflow-hidden\">\n                                    <div className={cn(\"h-full transition-all duration-300 rounded-full\", upload.status === 'completed' ? \"bg-emerald-500\" : upload.status === 'error' ? \"bg-red-500\" : \"bg-[#ff5351]\")} style={{ width: `${upload.progress}%` }} />\n                                  </div>\n                                  <span className=\"text-[8px] font-mono font-bold text-zinc-600 w-6\">{upload.progress}%</span>\n                                </div>\n                              </div>\n                            ))}\n                          </div>\n                        </div>\n                      )}\n                      \n                      <div className=\"mt-6 pt-6 border-t border-zinc-800\">\n                        <button onClick={() => setMediaLink(mediaLink ? '' : ' ')} className=\"text-[10px] uppercase font-black tracking-widest text-zinc-600 hover:text-zinc-400 flex items-center gap-2 transition-all\">\n                          <RefreshCw className=\"w-3 h-3\" /> {mediaLink ? \"Ocultar sincronização manual\" : \"Mostrar sincronização por link (Legacy)\"}\n                        </button>\n                        {mediaLink && (\n                          <div className=\"mt-4 space-y-4 animate-in fade-in slide-in-from-top-2 duration-300\">\n                            <div className=\"relative group\">\n                              <LinkIcon className=\"absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600 group-focus-within:text-[#ff5351]\" />\n                              <input type=\"text\" value={mediaLink.trim()} onChange={(e) => setMediaLink(e.target.value)} placeholder=\"Link do R2 ou Drive...\" className=\"w-full bg-zinc-900/50 border border-zinc-800 rounded-xl pl-12 pr-12 py-3 text-xs text-white focus:border-[#ff5351] outline-none\" />\n                              <div className=\"absolute right-3 top-1/2 -translate-y-1/2\"><button onClick={handleSyncMedia} disabled={fetchingDrive || !mediaLink.trim()} className=\"p-1.5 bg-zinc-800 text-white rounded hover:bg-[#ff5351] transition-all disabled:opacity-50\"><RefreshCw className={cn(\"w-3 h-3\", fetchingDrive && \"animate-spin\")} /></button></div>\n                            </div>\n                          </div>\n                        )}\n                      </div>\n                    </div>\n\n                    <div className=\"bg-[#1a1a1a] border border-zinc-800 rounded-3xl p-6\">\n                      <h4 className=\"text-lg font-bold text-white uppercase mb-6 border-b border-zinc-800 pb-4\">Regras e Cliente</h4>\n                      <div className=\"grid grid-cols-1 md:grid-cols-2 gap-6\">\n                        <div className=\"space-y-4\">\n                          <div><label className=\"text-[10px] text-zinc-500 uppercase font-bold tracking-widest mb-1 block\">E-mail do Cliente</label><input type=\"email\" value={clientEmail} onChange={e => setClientEmail(e.target.value)} className=\"w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-white text-sm\" /></div>\n                          <div><label className=\"text-[10px] text-zinc-500 uppercase font-bold tracking-widest mb-1 block\">Link Drive (Arquivos Limpos)</label><input type=\"text\" value={originalDriveLink} onChange={e => setOriginalDriveLink(e.target.value)} className=\"w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-white text-sm\" /></div>\n                        </div>\n                        <div className=\"space-y-4\">\n                           <div className=\"flex gap-4\">\n                             <div className=\"flex-1\"><label className=\"text-[10px] text-zinc-500 uppercase font-bold tracking-widest mb-1 block\">Qtd Inclusa</label><input type=\"number\" value={includedItems} onChange={e => setIncludedItems(parseInt(e.target.value))} className=\"w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-white text-sm\" /></div>\n                             <div className=\"flex-1\"><label className=\"text-[10px] text-zinc-500 uppercase font-bold tracking-widest mb-1 block\">Preço Extra (R$)</label><input type=\"text\" value={extraPrice} onChange={e => setExtraPrice(e.target.value)} className=\"w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-white text-sm\" /></div>\n                           </div>\n                           <div className=\"pt-2 flex items-center justify-between bg-black/20 p-4 rounded-xl border border-zinc-800\">\n                             <div><p className=\"text-sm text-white font-bold\">Download Alta Res.</p><p className=\"text-[10px] text-zinc-500 uppercase\">Liberar arquivo original</p></div>\n                             <div onClick={() => setAllowHighRes(!allowHighRes)} className={cn(\"w-12 h-7 rounded-full cursor-pointer p-1 transition-all\", allowHighRes ? \"bg-[#ff5351]\" : \"bg-zinc-800\")}><div className={cn(\"w-5 h-5 bg-white rounded-full transition-all\", allowHighRes ? \"translate-x-5\" : \"translate-x-0\")} /></div>\n                           </div>\n                        </div>\n                      </div>\n                    </div>\n\n                    <div className=\"bg-[#1a1a1a] border border-zinc-800 rounded-3xl p-6\">\n                      <div className=\"flex justify-between items-center mb-6\">\n                        <h4 className=\"text-lg font-bold text-white uppercase\">Mídias ({media.length})</h4>\n                        {media.length > 0 && <button onClick={handleClearMedia} className=\"text-[10px] text-zinc-500 hover:text-red-500 uppercase font-bold flex items-center gap-1\"><Trash2 className=\"w-3 h-3\"/> Limpar Catálogo</button>}\n                      </div>\n                      \n                      {media.length === 0 ? (\n                         <div className=\"py-12 text-center text-zinc-600 text-sm border-2 border-dashed border-zinc-800 rounded-2xl\"><ImageIcon className=\"w-8 h-8 mx-auto mb-2 opacity-50\"/> Sem mídias carregadas</div>\n                      ) : (\n                         <div className=\"grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3\">\n                           {media.map((item, idx) => (\n                             <div key={item.id || idx} className=\"aspect-[9/16] bg-zinc-900 rounded-xl overflow-hidden relative border border-zinc-800\">\n                               <img src={getThumbnailUrl(item)} className=\"w-full h-full object-cover\" alt=\"\" />\n                               {item.type === 'video' && <div className=\"absolute inset-0 flex items-center justify-center\"><Play className=\"w-6 h-6 text-white bg-[#ff5351]/80 rounded-full p-1.5\" /></div>}\n                               {item.isSelected && <div className=\"absolute top-2 right-2 w-5 h-5 bg-[#ff5351] rounded-full flex items-center justify-center\"><Check className=\"w-3 h-3 text-white\" /></div>}\n                             </div>\n                           ))}\n                         </div>\n                      )}\n                    </div>\n\n                  </div>\n                </div>\n              </div>\n            ) : (\n              <div className=\"space-y-4 pt-4\">\n                <div className=\"flex items-center justify-between\">\n                  <h3 className=\"text-sm font-black uppercase text-zinc-500 tracking-widest\">Anotações Internas (Log)</h3>\n                  <button onClick={handleSaveNotes} className=\"px-4 py-2 bg-[#1a1a1a] hover:bg-zinc-800 border border-zinc-800 text-white rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2\"><Save className=\"w-4 h-4 text-[#ff5351]\" /> Salvar</button>\n                </div>\n                <textarea value={stageNotes} onChange={(e) => setStageNotes(e.target.value)} placeholder=\"Ex: Link do drive, observações da gravação...\" className=\"w-full h-40 bg-[#111] border border-zinc-800 rounded-3xl p-5 text-white placeholder:text-zinc-600 focus:border-[#ff5351] outline-none resize-none transition-all leading-relaxed\" />\n              </div>\n            )}\n\n            {currentStage.status === 'completed' && (\n              <div className=\"pt-8 border-t border-zinc-800 flex justify-end animate-in fade-in slide-in-from-bottom-4\">\n                <button onClick={handleNextStage} className=\"h-14 px-8 bg-[#ff5351] text-white rounded-2xl text-sm font-black uppercase tracking-widest hover:bg-[#ff4240] transition-all flex items-center gap-3 shadow-[0_0_40px_rgba(255,83,81,0.2)]\">\n                  Avançar para Próxima Etapa <ChevronRight className=\"w-5 h-5\" />\n                </button>\n              </div>\n            )}\n          </div>\n        )}\n      </div>\n    </div>\n  );\n}\n
+        {!selectedModel ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {availableModels.length === 0 ? (
+              <div className="col-span-2 p-8 text-center border border-zinc-800 rounded-3xl bg-[#141414]"><LayoutTemplate className="w-12 h-12 text-zinc-700 mx-auto mb-4" /><p className="text-zinc-400 font-medium">Nenhum modelo cadastrado.</p><button onClick={() => navigate('/modelos')} className="mt-4 text-[#ff5351] text-sm font-black uppercase tracking-widest hover:underline">Ir para Modelos</button></div>
+            ) : (
+              availableModels.map(model => (
+                <button key={model.id} onClick={() => handleSelectModel(model)} className="p-6 text-left border border-zinc-800 bg-[#141414] rounded-3xl hover:border-[#ff5351] hover:bg-zinc-900/50 transition-all group">
+                  <h3 className="text-xl font-black text-white uppercase group-hover:text-[#ff5351] transition-colors">{model.name}</h3><p className="text-zinc-500 mt-2 text-sm">{model.description || 'Sem descrição'}</p><div className="mt-6 flex items-center gap-2 text-[10px] uppercase font-black tracking-widest text-zinc-600"><CheckCircle2 className="w-4 h-4" /> {(model.stages || []).length} etapas</div>
+                </button>
+              ))
+            )}
+          </div>
+        ) : (
+          <div className="space-y-6">
+            <div className="flex items-center gap-4 py-4 border-b border-zinc-800"><button onClick={() => setSelectedModel(null)} className="text-zinc-500 hover:text-white"><ArrowLeft className="w-5 h-5"/></button><h2 className="text-xl font-black text-white uppercase">Personalizar: {selectedModel.name}</h2></div>
+            <div className="space-y-4">
+              {setupStages.map((stage, idx) => (
+                <div key={stage.id} className="p-5 bg-[#141414] border border-zinc-800 rounded-3xl flex flex-col md:flex-row md:items-center gap-4">
+                  <div className="w-12 h-12 rounded-2xl bg-zinc-900 flex items-center justify-center text-zinc-500 font-black border border-zinc-800 shrink-0">{idx + 1}</div>
+                  <div className="flex-1 min-w-0"><p className="text-white font-black uppercase text-sm truncate">{stage.name}</p><p className="text-zinc-500 text-xs mt-1 truncate">{stage.description || 'Sem descrição'}</p></div>
+                  
+                  <div className="w-full md:w-64 space-y-2 shrink-0">
+                    <label className="text-[10px] uppercase font-black text-[#ff5351] tracking-widest ml-1">Responsável (Neste Projeto)</label>
+                    <div className="relative">
+                      <select 
+                        value={stage.assignee}
+                        onChange={(e) => updateSetupStage(idx, 'assignee', e.target.value)}
+                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-xs font-bold text-white focus:border-[#ff5351] outline-none appearance-none cursor-pointer"
+                      >
+                        {teamMembers.map(m => (
+                          <option key={m.id} value={m.name}>{m.name}</option>
+                        ))}
+                      </select>
+                      <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 pointer-events-none" />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="flex justify-end pt-4">
+              <button 
+                onClick={handleStartWorkflow}
+                disabled={isInitializing}
+                className="px-10 h-14 bg-[#ff5351] text-white rounded-2xl font-black uppercase tracking-widest text-xs hover:brightness-110 transition-all flex items-center gap-3 shadow-xl shadow-[#ff5351]/20"
+              >
+                {isInitializing ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+                Vincular e Iniciar Fluxo
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-8 pb-20">
+      <header className="flex flex-col md:flex-row md:items-start justify-between gap-8">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-3 mb-3">
+            <button onClick={() => navigate(-1)} className="p-2 hover:bg-zinc-800 rounded-xl transition-all text-zinc-500 hover:text-white">
+               <ArrowLeft className="w-5 h-5" />
+            </button>
+            <span className="px-3 py-1 bg-zinc-900 border border-zinc-800 rounded-lg text-[10px] font-black uppercase text-[#ff5351] tracking-[0.2em]">
+              {workflow.modelName}
+            </span>
+          </div>
+          <h1 className="text-4xl md:text-5xl font-black text-white uppercase italic tracking-tighter truncate">
+            {projectData?.title || 'Projeto'}
+          </h1>
+        </div>
+
+        <div className="flex flex-col items-end gap-2">
+          <div className="text-[10px] font-black uppercase text-zinc-500 tracking-widest mb-1">Progresso do Fluxo</div>
+          <div className="flex items-center gap-2">
+            {workflow.stages.map((s, idx) => (
+              <div 
+                key={s.id} 
+                className={cn(
+                  "w-8 h-1.5 rounded-full transition-all",
+                  idx <= workflow.currentStageIndex ? "bg-[#ff5351]" : "bg-zinc-800"
+                )}
+              />
+            ))}
+          </div>
+          <div className="text-[10px] font-bold text-zinc-400 mt-1 uppercase">
+             Etapa {workflow.currentStageIndex + 1} de {workflow.stages.length}
+          </div>
+        </div>
+      </header>
+
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        <div className="lg:col-span-4">
+          <div className="bg-[#1a1a1a] border border-zinc-800 rounded-[32px] p-2 sticky top-8">
+            <div className="space-y-1">
+              {workflow.stages.map((stage, idx) => {
+                const isActive = idx === workflow.currentStageIndex;
+                const isPast = idx < workflow.currentStageIndex;
+                
+                return (
+                  <div 
+                    key={stage.id}
+                    className={cn(
+                      "flex items-center gap-4 p-4 rounded-3xl transition-all",
+                      isActive ? "bg-[#ff5351] shadow-xl shadow-[#ff5351]/20 scale-[1.02]" : "hover:bg-zinc-800/50"
+                    )}
+                  >
+                    <div className={cn(
+                      "w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 font-black text-sm",
+                      isActive ? "bg-white text-[#ff5351]" : isPast ? "bg-emerald-500/10 text-emerald-500" : "bg-zinc-900 text-zinc-600"
+                    )}>
+                      {isPast ? <Check className="w-5 h-5" /> : idx + 1}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className={cn(
+                        "text-xs font-black uppercase tracking-tight truncate",
+                        isActive ? "text-white" : isPast ? "text-zinc-300" : "text-zinc-600"
+                      )}>{stage.name}</p>
+                      <p className={cn(
+                        "text-[9px] font-bold uppercase tracking-widest mt-0.5",
+                        isActive ? "text-white/70" : "text-zinc-500"
+                      )}>
+                        {stage.status === 'completed' ? 'Finalizada' : stage.status === 'in_progress' ? 'Em andamento' : stage.status === 'waiting_approval' ? 'Aguard. Cliente' : 'Pendente'}
+                      </p>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+
+        <div className="lg:col-span-8 space-y-8">
+          <section className="bg-[#1a1a1a] border border-zinc-800 rounded-[40px] p-10 shadow-2xl relative overflow-hidden">
+            <div className="absolute top-0 right-0 p-10 opacity-5">
+               <LayoutTemplate className="w-32 h-32 text-white" />
+            </div>
+
+            <header className="mb-10 relative z-10">
+              <p className="text-[10px] font-black uppercase text-[#ff5351] tracking-[0.3em] mb-3">Detalhes da Etapa Atual</p>
+              <h2 className="text-4xl md:text-5xl font-black text-white uppercase italic tracking-tight">{currentStage.name}</h2>
+              <div className="flex flex-wrap gap-4 mt-6">
+                <span className="px-4 py-2 bg-[#1a1a1a] border border-zinc-800 rounded-full text-xs font-black text-zinc-300 uppercase tracking-widest flex items-center gap-2"><UserCircle className="w-4 h-4 text-[#ff5351]"/> {currentStage.assignee || 'Não definido'}</span>
+                <span className="px-4 py-2 bg-[#1a1a1a] border border-zinc-800 rounded-full text-xs font-black text-zinc-300 uppercase tracking-widest flex items-center gap-2"><Clock className="w-4 h-4 text-[#ff5351]"/> Prazo: {currentStage.durationDays} dias</span>
+              </div>
+            </header>
+
+            <div className="space-y-4">
+              <h3 className="text-sm font-black uppercase text-zinc-500 tracking-widest">Controle de Status</h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {[
+                  { id: 'pending', label: 'Pendente', color: 'border-zinc-700 text-zinc-500', dateField: 'pendingAt' },
+                  { id: 'in_progress', label: 'Em Andamento', color: 'border-blue-500 text-blue-400', dateField: 'startedAt' },
+                  { id: 'waiting_approval', label: 'Aguard. Cliente', color: 'border-amber-500 text-amber-400', dateField: 'waitingApprovalAt' },
+                  { id: 'completed', label: 'Concluído', color: 'border-emerald-500 text-emerald-400', dateField: 'completedAt' }
+                ].map(status => {
+                  const isActive = currentStage.status === status.id;
+                  const stageDate = (currentStage as any)[status.dateField];
+                  
+                  return (
+                    <button key={status.id} onClick={() => handleUpdateStatus(status.id as ProjectStageStatus)} className={cn("px-2 py-3 rounded-2xl border flex flex-col items-center justify-center transition-all", isActive ? cn("bg-[#1a1a1a]", status.color) : "bg-[#111] border-zinc-800 text-zinc-600 hover:border-zinc-600")}>
+                      <span className="text-[11px] font-black uppercase tracking-widest text-center">{status.label}</span>
+                      {stageDate && (
+                         <span className={cn("text-[9px] font-mono mt-1 opacity-80", isActive ? "text-current" : "text-zinc-500")}>
+                            {formatStageDate(stageDate)}
+                         </span>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+
+              {isUploadStage && currentStage.status !== 'completed' && media.length === 0 && (
+                <p className="text-[#ff5351] text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5 animate-in fade-in mt-3 ml-1">
+                  <Info className="w-3 h-3" />
+                  Carregue pelo menos um arquivo para poder concluir a etapa
+                </p>
+              )}
+            </div>
+
+            {isUploadStage ? (
+              <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 pt-8 border-t border-zinc-800">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-2xl font-black uppercase text-white tracking-tight">Upload e Configuração de Cliente</h3>
+                  <button onClick={handleSaveMediaConfig} disabled={saving} className="px-6 py-3 rounded-xl bg-[#ff5351] text-white font-black uppercase tracking-widest hover:brightness-110 transition-all text-xs shadow-lg shadow-[#ff5351]/20 flex items-center gap-2">
+                    {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Salvar Regras
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                  <div className="lg:col-span-12 space-y-8">
+                    <div className="bg-[#1a1a1a] border border-zinc-800 rounded-3xl p-6">
+                      <div className="flex justify-between items-center border-b border-zinc-800 pb-4 mb-6">
+                        <h4 className="text-lg font-bold text-white uppercase">Upload de Mídia</h4>
+                      </div>
+                      
+                      <input type="file" multiple className="hidden" ref={fileInputRef} onChange={(e) => handleFileUpload(e.target.files)} accept="image/*,video/*" />
+                      
+                      <div onClick={() => fileInputRef.current?.click()} onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }} onDrop={(e) => { e.preventDefault(); e.stopPropagation(); handleFileUpload(e.dataTransfer.files); }} className="group py-6 flex flex-col items-center justify-center bg-zinc-900/50 rounded-2xl border-2 border-dashed border-zinc-800 hover:border-[#ff5351]/50 cursor-pointer transition-all">
+                        <CloudUpload className="w-6 h-6 text-zinc-600 mb-2 group-hover:text-[#ff5351]" />
+                        <p className="text-zinc-400 text-[11px] font-bold uppercase tracking-widest">Arraste arquivos ou clique aqui para buscar</p>
+                      </div>
+
+                      {Object.keys(uploads).length > 0 && (
+                        <div className="mt-6 space-y-4 pt-6 border-t border-zinc-800">
+                          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
+                            <div className="flex items-center gap-3">
+                              <h5 className="text-[10px] font-black uppercase tracking-widest text-zinc-500 flex items-center gap-2">
+                                <Loader2 className={cn("w-3 h-3", Object.values(uploads).some(u => u.status === 'uploading') && "animate-spin")} />
+                                Fila de Arquivos ({Object.keys(uploads).length})
+                              </h5>
+                              
+                              <div className="flex items-center gap-2">
+                                {Object.values(uploads).some(u => u.status === 'completed') && (
+                                  <button onClick={clearCompletedUploads} className="text-[10px] uppercase font-black tracking-widest text-emerald-500 hover:text-emerald-400 transition-all border border-emerald-500/30 px-2 py-1 rounded">Limpar Concluídos</button>
+                                )}
+                                <button onClick={clearAllUploads} className="text-[10px] uppercase font-black tracking-widest text-zinc-600 hover:text-red-500 transition-all">Limpar Fila</button>
+                              </div>
+                            </div>
+
+                            {Object.values(uploads).some(u => u.status === 'pending' || u.status === 'error') && (
+                              <button onClick={startAllUploads} className="px-4 py-2 bg-[#ff5351] text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:brightness-110 transition-all flex items-center justify-center gap-2 shadow-xl shadow-[#ff5351]/20">
+                                <Play className="w-3 h-3 fill-current" /> Enviar Todos da Fila
+                              </button>
+                            )}
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {Object.entries(uploads).map(([id, upload]) => (
+                              <div key={id} className="group/item bg-black/40 rounded-2xl p-4 border border-zinc-800/50 hover:border-[#ff5351]/30 transition-all">
+                                <div className="flex items-center justify-between gap-4 mb-3">
+                                  <div className="flex items-center gap-3 overflow-hidden">
+                                    <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center shrink-0", upload.status === 'completed' ? "bg-emerald-500/10 text-emerald-500" : upload.status === 'error' ? "bg-red-500/10 text-red-500" : upload.status === 'uploading' ? "bg-[#ff5351]/10 text-[#ff5351]" : "bg-zinc-800 text-zinc-500")}>
+                                      {upload.status === 'completed' ? <CheckCircle2 className="w-4 h-4" /> : upload.status === 'error' ? <Info className="w-4 h-4" /> : upload.status === 'uploading' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Clock className="w-4 h-4" />}
+                                    </div>
+                                    <div className="overflow-hidden">
+                                      <p className="text-[10px] font-black uppercase tracking-tight text-white truncate">{upload.fileName}</p>
+                                      <p className="text-[8px] font-bold text-zinc-500 uppercase tracking-widest mt-0.5">{upload.status === 'pending' ? 'Pendente' : upload.status === 'uploading' ? 'Enviando...' : upload.status === 'completed' ? 'Concluído' : 'Erro no envio'}</p>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    {upload.status === 'pending' && <button onClick={() => startUpload(id)} className="p-1.5 text-zinc-400 hover:text-[#ff5351] hover:bg-[#ff5351]/10 rounded-lg transition-all" title="Iniciar"><Play className="w-3.5 h-3.5 fill-current" /></button>}
+                                    {upload.status === 'error' && <button onClick={() => retryUpload(id)} className="p-1.5 text-zinc-400 hover:text-[#ff5351] hover:bg-[#ff5351]/10 rounded-lg transition-all" title="Tentar novamente"><RotateCcw className="w-3.5 h-3.5" /></button>}
+                                    <button onClick={() => cancelUpload(id)} className="p-1.5 text-zinc-400 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-all" title="Cancelar"><X className="w-3.5 h-3.5" /></button>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                  <div className="flex-1 h-1 bg-zinc-800 rounded-full overflow-hidden">
+                                    <div className={cn("h-full transition-all duration-300 rounded-full", upload.status === 'completed' ? "bg-emerald-500" : upload.status === 'error' ? "bg-red-500" : "bg-[#ff5351]")} style={{ width: `${upload.progress}%` }} />
+                                  </div>
+                                  <span className="text-[8px] font-mono font-bold text-zinc-600 w-6">{upload.progress}%</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      
+                      <div className="mt-6 pt-6 border-t border-zinc-800">
+                        <button onClick={() => setMediaLink(mediaLink ? '' : ' ')} className="text-[10px] uppercase font-black tracking-widest text-zinc-600 hover:text-zinc-400 flex items-center gap-2 transition-all">
+                          <RefreshCw className="w-3 h-3" /> {mediaLink ? "Ocultar sincronização manual" : "Mostrar sincronização por link (Legacy)"}
+                        </button>
+                        {mediaLink && (
+                          <div className="mt-4 space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                            <div className="relative group">
+                              <LinkIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600 group-focus-within:text-[#ff5351]" />
+                              <input type="text" value={mediaLink.trim()} onChange={(e) => setMediaLink(e.target.value)} placeholder="Link do R2 ou Drive..." className="w-full bg-zinc-900/50 border border-zinc-800 rounded-xl pl-12 pr-12 py-3 text-xs text-white focus:border-[#ff5351] outline-none" />
+                              <div className="absolute right-3 top-1/2 -translate-y-1/2"><button onClick={handleSyncMedia} disabled={fetchingDrive || !mediaLink.trim()} className="p-1.5 bg-zinc-800 text-white rounded hover:bg-[#ff5351] transition-all disabled:opacity-50"><RefreshCw className={cn("w-3 h-3", fetchingDrive && "animate-spin")} /></button></div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="bg-[#1a1a1a] border border-zinc-800 rounded-3xl p-6">
+                      <h4 className="text-lg font-bold text-white uppercase mb-6 border-b border-zinc-800 pb-4">Regras e Cliente</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="space-y-4">
+                          <div><label className="text-[10px] text-zinc-500 uppercase font-bold tracking-widest mb-1 block">E-mail do Cliente</label><input type="email" value={clientEmail} onChange={e => setClientEmail(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-white text-sm" /></div>
+                          <div><label className="text-[10px] text-zinc-500 uppercase font-bold tracking-widest mb-1 block">Link Drive (Arquivos Limpos)</label><input type="text" value={originalDriveLink} onChange={e => setOriginalDriveLink(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-white text-sm" /></div>
+                        </div>
+                        <div className="space-y-4">
+                           <div className="flex gap-4">
+                             <div className="flex-1"><label className="text-[10px] text-zinc-500 uppercase font-bold tracking-widest mb-1 block">Qtd Inclusa</label><input type="number" value={includedItems} onChange={e => setIncludedItems(parseInt(e.target.value))} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-white text-sm" /></div>
+                             <div className="flex-1"><label className="text-[10px] text-zinc-500 uppercase font-bold tracking-widest mb-1 block">Preço Extra (R$)</label><input type="text" value={extraPrice} onChange={e => setExtraPrice(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-white text-sm" /></div>
+                           </div>
+                           <div className="pt-2 flex items-center justify-between bg-black/20 p-4 rounded-xl border border-zinc-800">
+                             <div><p className="text-sm text-white font-bold">Download Alta Res.</p><p className="text-[10px] text-zinc-500 uppercase">Liberar arquivo original</p></div>
+                             <div onClick={() => setAllowHighRes(!allowHighRes)} className={cn("w-12 h-7 rounded-full cursor-pointer p-1 transition-all", allowHighRes ? "bg-[#ff5351]" : "bg-zinc-800")}><div className={cn("w-5 h-5 bg-white rounded-full transition-all", allowHighRes ? "translate-x-5" : "translate-x-0")} /></div>
+                           </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="bg-[#1a1a1a] border border-zinc-800 rounded-3xl p-6">
+                      <div className="flex justify-between items-center mb-6">
+                        <h4 className="text-lg font-bold text-white uppercase">Mídias ({media.length})</h4>
+                        {media.length > 0 && <button onClick={handleClearMedia} className="text-[10px] text-zinc-500 hover:text-red-500 uppercase font-bold flex items-center gap-1"><Trash2 className="w-3 h-3"/> Limpar Catálogo</button>}
+                      </div>
+                      
+                      {media.length === 0 ? (
+                         <div className="py-12 text-center text-zinc-600 text-sm border-2 border-dashed border-zinc-800 rounded-2xl"><ImageIcon className="w-8 h-8 mx-auto mb-2 opacity-50"/> Sem mídias carregadas</div>
+                      ) : (
+                         <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                           {media.map((item, idx) => (
+                             <div key={item.id || idx} className="aspect-[9/16] bg-zinc-900 rounded-xl overflow-hidden relative border border-zinc-800">
+                               <img src={getThumbnailUrl(item)} className="w-full h-full object-cover" alt="" />
+                               {item.type === 'video' && <div className="absolute inset-0 flex items-center justify-center"><Play className="w-6 h-6 text-white bg-[#ff5351]/80 rounded-full p-1.5" /></div>}
+                               {item.isSelected && <div className="absolute top-2 right-2 w-5 h-5 bg-[#ff5351] rounded-full flex items-center justify-center"><Check className="w-3 h-3 text-white" /></div>}
+                             </div>
+                           ))}
+                         </div>
+                      )}
+                    </div>
+
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4 pt-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-black uppercase text-zinc-500 tracking-widest">Anotações Internas (Log)</h3>
+                  <button onClick={handleSaveNotes} className="px-4 py-2 bg-[#1a1a1a] hover:bg-zinc-800 border border-zinc-800 text-white rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2"><Save className="w-4 h-4 text-[#ff5351]" /> Salvar</button>
+                </div>
+                <textarea value={stageNotes} onChange={(e) => setStageNotes(e.target.value)} placeholder="Ex: Link do drive, observações da gravação..." className="w-full h-40 bg-[#111] border border-zinc-800 rounded-3xl p-5 text-white placeholder:text-zinc-600 focus:border-[#ff5351] outline-none resize-none transition-all leading-relaxed" />
+              </div>
+            )}
+
+            {currentStage.status === 'completed' && (
+              <div className="pt-8 border-t border-zinc-800 flex justify-end animate-in fade-in slide-in-from-bottom-4">
+                <button onClick={handleNextStage} className="h-14 px-8 bg-[#ff5351] text-white rounded-2xl text-sm font-black uppercase tracking-widest hover:bg-[#ff4240] transition-all flex items-center gap-3 shadow-[0_0_40px_rgba(255,83,81,0.2)]">
+                  Avançar para Próxima Etapa <ChevronRight className="w-5 h-5" />
+                </button>
+              </div>
+            )}
+          </section>
+        </div>
+      </div>
+    </div>
+  );
+}
