@@ -18,6 +18,7 @@ import ProjectReview from './pages/ProjectReview';
 import ProjectDownload from './pages/ProjectDownload';
 import ClientAccess from './pages/ClientAccess';
 import ClientDetails from './pages/ClientDetails'; 
+import NovaDemanda from './pages/NovaDemanda';
 import NewContentPlan from './pages/NewContentPlan'; 
 import ContentPlanDetails from './pages/ContentPlanDetails';
 import Packages from './pages/Packages';
@@ -98,38 +99,4 @@ export default function App() {
   const isAdmin = internalRoles.includes(userRole);
 
   return (
-    <BrowserRouter>
-      <Toaster position="top-right" />
-      <Routes>
-        <Route path="/login" element={!user ? <Login /> : <Navigate to="/" />} />
-        <Route path="/register" element={!user ? <Register /> : <Navigate to="/" />} />
-        
-        <Route path="/" element={user ? wrapLayout(<Dashboard />) : <Navigate to="/login" />} />
-        <Route path="/projetos" element={user ? wrapLayout(<Projetos />) : <Navigate to="/login" />} />
-        <Route path="/review/:id" element={user ? wrapLayout(<ProjectReview />) : <Navigate to="/login" />} />
-        <Route path="/download/:id" element={user ? wrapLayout(<ProjectDownload />) : <Navigate to="/login" />} />
-        
-        {/* Rotas de Gestão (Protegidas por isAdmin) */}
-        <Route path="/projects/:id/config" element={user && isAdmin ? wrapLayout(<ProjectConfig />) : <Navigate to="/" />} />
-        <Route path="/clients" element={user && isAdmin ? wrapLayout(<ClientAccess />) : <Navigate to="/" />} />
-        <Route path="/clients/:id" element={user && isAdmin ? wrapLayout(<ClientDetails />) : <Navigate to="/" />} />
-        <Route path="/clients/:id/novo-planejamento" element={user && isAdmin ? wrapLayout(<NewContentPlan />) : <Navigate to="/" />} />
-        
-        <Route path="/planejamento/:id" element={user ? wrapLayout(<ContentPlanDetails />) : <Navigate to="/login" />} />
-        <Route path="/packages" element={user && isAdmin ? wrapLayout(<Packages />) : <Navigate to="/" />} />
-        <Route path="/credits" element={user && isAdmin ? wrapLayout(<Credits />) : <Navigate to="/" />} />
-        <Route path="/modelos" element={user && isAdmin ? wrapLayout(<ModelosFluxo />) : <Navigate to="/" />} />
-        <Route path="/modelos/:id" element={user && isAdmin ? wrapLayout(<ModelosEdicao />) : <Navigate to="/" />} />
-        <Route path="/projetos/:id/fluxo" element={user && isAdmin ? wrapLayout(<ProjetoFluxo />) : <Navigate to="/" />} />
-        
-        <Route path="/equipe" element={user ? wrapLayout(<EquipeAccess />) : <Navigate to="/login" />} />
-        <Route path="/painel-master" element={user ? wrapLayout(<PainelMaster />) : <Navigate to="/login" />} />
-        <Route path="/tarefas" element={user ? wrapLayout(<Tarefas />) : <Navigate to="/login" />} />
-        <Route path="/teleprompter" element={user ? wrapLayout(<Teleprompter />) : <Navigate to="/login" />} />
-        <Route path="/diagnostico" element={user && isAdmin ? wrapLayout(<DebugTable />) : <Navigate to="/" />} />
-
-        <Route path="*" element={<Navigate to="/" />} />
-      </Routes>
-    </BrowserRouter>
-  );
-}
+    <BrowserRouter>\n      <Toaster position=\"top-right\" />\n      <Routes>\n        <Route path=\"/login\" element={!user ? <Login /> : <Navigate to=\"/\" />} />\n        <Route path=\"/register\" element={!user ? <Register /> : <Navigate to=\"/\" />} />\n        \n        <Route path=\"/\" element={user ? wrapLayout(<Dashboard />) : <Navigate to=\"/login\" />} />\n        <Route path=\"/projetos\" element={user ? wrapLayout(<Projetos />) : <Navigate to=\"/login\" />} />\n        <Route path=\"/review/:id\" element={user ? wrapLayout(<ProjectReview />) : <Navigate to=\"/login\" />} />\n        <Route path=\"/download/:id\" element={user ? wrapLayout(<ProjectDownload />) : <Navigate to=\"/login\" />} />\n        \n        {/* Rotas de Gestão (Protegidas por isAdmin) */}\n        <Route path=\"/projects/:id/config\" element={user && isAdmin ? wrapLayout(<ProjectConfig />) : <Navigate to=\"/\" />} />\n        <Route path=\"/clients\" element={user && isAdmin ? wrapLayout(<ClientAccess />) : <Navigate to=\"/\" />} />\n        <Route path=\"/clients/:id\" element={user && isAdmin ? wrapLayout(<ClientDetails />) : <Navigate to=\"/\" />} />\n        <Route path=\"/clients/:id/nova-demanda\" element={user && isAdmin ? wrapLayout(<NovaDemanda />) : <Navigate to=\"/\" />} />\n        <Route path=\"/clients/:id/novo-planejamento\" element={user && isAdmin ? wrapLayout(<NewContentPlan />) : <Navigate to=\"/\" />} />\n        \n        <Route path=\"/planejamento/:id\" element={user ? wrapLayout(<ContentPlanDetails />) : <Navigate to=\"/login\" />} />\n        <Route path=\"/packages\" element={user && isAdmin ? wrapLayout(<Packages />) : <Navigate to=\"/\" />} />\n        <Route path=\"/credits\" element={user && isAdmin ? wrapLayout(<Credits />) : <Navigate to=\"/\" />} />\n        <Route path=\"/modelos\" element={user && isAdmin ? wrapLayout(<ModelosFluxo />) : <Navigate to=\"/\" />} />\n        <Route path=\"/modelos/:id\" element={user && isAdmin ? wrapLayout(<ModelosEdicao />) : <Navigate to=\"/\" />} />\n        <Route path=\"/projetos/:id/fluxo\" element={user && isAdmin ? wrapLayout(<ProjetoFluxo />) : <Navigate to=\"/\" />} />\n        \n        <Route path=\"/equipe\" element={user ? wrapLayout(<EquipeAccess />) : <Navigate to=\"/login\" />} />\n        <Route path=\"/painel-master\" element={user ? wrapLayout(<PainelMaster />) : <Navigate to=\"/login\" />} />\n        <Route path=\"/tarefas\" element={user ? wrapLayout(<Tarefas />) : <Navigate to=\"/login\" />} />\n        <Route path=\"/teleprompter\" element={user ? wrapLayout(<Teleprompter />) : <Navigate to=\"/login\" />} />\n        <Route path=\"/diagnostico\" element={user && isAdmin ? wrapLayout(<DebugTable />) : <Navigate to=\"/\" />} />\n\n        <Route path=\"*\" element={<Navigate to=\"/\" />} />\n      </Routes>\n    </BrowserRouter>\n  );\n}\n
