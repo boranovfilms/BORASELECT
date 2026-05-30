@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { 
   ArrowLeft, Plus, FileText, Calendar, Clock, ChevronRight, 
-  User, Mail, BadgeCheck, AlertCircle, Loader2, X, Save, Trash2, GitBranch, ChevronDown, Users, Check, Activity, CheckCircle, Clock3
+  User, Mail, BadgeCheck, AlertCircle, Loader2, X, Save, Trash2, GitBranch, ChevronDown, Users, Check, Activity, CheckCircle, Clock3, Settings
 } from 'lucide-react';
 import { db } from '../lib/firebase';
 import { doc, getDoc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore';
@@ -29,6 +29,7 @@ export default function ClientDetails() {
   const [teamMembers, setTeamMembers] = useState<any[]>([]);
   const [workflowApprovers, setWorkflowApprovers] = useState<Record<string, string[]>>({});
   const [savingApprovers, setSavingApprovers] = useState(false);
+  const [showApprovers, setShowApprovers] = useState(false);
 
   useEffect(() => {
     if (clientId) loadData();
@@ -198,21 +199,33 @@ export default function ClientDetails() {
                 <span className="flex items-center gap-1.5 text-xs text-zinc-500 font-medium"><Mail className="w-3.5 h-3.5" /> {client.email}</span>
                 <span className="text-zinc-800">•</span>
                 
-                <div className="flex items-center gap-2">
-                  <GitBranch className="w-3.5 h-3.5 text-zinc-500" />
-                  <div className="relative">
-                    <select 
-                      value={client.workflowModelId || ''} 
-                      onChange={(e) => handleUpdateWorkflowModel(e.target.value)}
-                      className="bg-zinc-900 border border-zinc-800 rounded-lg pl-2 pr-8 py-1 text-[10px] font-black uppercase tracking-widest text-zinc-300 focus:border-[#ff5351] outline-none appearance-none cursor-pointer"
-                    >
-                      <option value="">Nenhum modelo vinculado</option>
-                      {availableModels.map(model => (
-                        <option key={model.id} value={model.id}>{model.name}</option>
-                      ))}
-                    </select>
-                    <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-zinc-600 pointer-events-none" />
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <GitBranch className="w-3.5 h-3.5 text-zinc-500" />
+                    <div className="relative">
+                      <select 
+                        value={client.workflowModelId || ''} 
+                        onChange={(e) => handleUpdateWorkflowModel(e.target.value)}
+                        className="bg-zinc-900 border border-zinc-800 rounded-lg pl-2 pr-8 py-1 text-[10px] font-black uppercase tracking-widest text-zinc-300 focus:border-[#ff5351] outline-none appearance-none cursor-pointer"
+                      >
+                        <option value="">Nenhum modelo vinculado</option>
+                        {availableModels.map(model => (
+                          <option key={model.id} value={model.id}>{model.name}</option>
+                        ))}
+                      </select>
+                      <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-zinc-600 pointer-events-none" />
+                    </div>
                   </div>
+
+                  {client.workflowModelId && (
+                    <button 
+                      onClick={() => setShowApprovers(!showApprovers)}
+                      className="flex items-center gap-2 px-3 py-1.5 bg-zinc-900 border border-zinc-800 hover:border-zinc-600 rounded-lg text-[10px] font-black uppercase tracking-widest text-zinc-500 hover:text-white transition-all"
+                    >
+                      <Settings className="w-3.5 h-3.5" />
+                      Configurar Fluxo
+                    </button>
+                  )}
                 </div>
 
                 <span className="text-zinc-800">•</span>
@@ -304,14 +317,9 @@ export default function ClientDetails() {
         />
       </section>
 
-      {/* SEÇÃO DE APROVADORES NO FINAL */}
-      {client.workflowModelId && (
-        <section className="animate-in fade-in duration-500 pt-10 border-t border-zinc-900">
-          <div className="flex items-center gap-3 mb-6">
-            <h2 className="text-sm font-black uppercase tracking-[0.3em] text-zinc-600 shrink-0">Configuração de Aprovadores</h2>
-            <div className="h-px flex-1 bg-zinc-800/50" />
-          </div>
-
+      {/* SEÇÃO DE APROVADORES NO FINAL (OCULTA POR PADRÃO) */}
+      {client.workflowModelId && showApprovers && (
+        <section className="animate-in fade-in duration-300 pt-10 border-t border-zinc-900">
           <div className="bg-[#1f1f1f] border border-zinc-800 rounded-[32px] p-8">
             <div className="flex items-center justify-between mb-8">
               <div className="flex items-center gap-3">
@@ -323,14 +331,22 @@ export default function ClientDetails() {
                   <p className="text-zinc-500 text-xs font-bold uppercase tracking-wider mt-2">Defina quais membros podem validar cada fase do projeto.</p>
                 </div>
               </div>
-              <button 
-                onClick={handleSaveApprovers}
-                disabled={savingApprovers}
-                className="px-6 h-12 bg-[#ff5351] text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:brightness-110 transition-all flex items-center gap-2 shadow-lg shadow-[#ff5351]/20 disabled:opacity-50"
-              >
-                {savingApprovers ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                Salvar Configuração
-              </button>
+              <div className="flex items-center gap-3">
+                <button 
+                  onClick={() => setShowApprovers(false)}
+                  className="px-6 h-12 bg-zinc-900 text-zinc-500 text-[10px] font-black uppercase tracking-widest rounded-xl border border-zinc-800 hover:text-white transition-all"
+                >
+                  Fechar
+                </button>
+                <button 
+                  onClick={handleSaveApprovers}
+                  disabled={savingApprovers}
+                  className="px-6 h-12 bg-[#ff5351] text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:brightness-110 transition-all flex items-center gap-2 shadow-lg shadow-[#ff5351]/20 disabled:opacity-50"
+                >
+                  {savingApprovers ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                  Salvar Configuração
+                </button>
+              </div>
             </div>
 
             {teamMembers.length === 0 ? (
@@ -377,7 +393,7 @@ export default function ClientDetails() {
                             )}
                           >
                             <div className="flex items-center gap-3 overflow-hidden">
-                              <div className="w-8 h-8 rounded-full bg-zinc-900 border border-zinc-700 flex items-center justify-center overflow-hidden shrink-0">
+                              <div className="w-8 h-8 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center overflow-hidden shrink-0">
                                 {member.photoUrl ? (
                                   <img src={member.photoUrl} className="w-full h-full object-cover" alt="" />
                                 ) : (
