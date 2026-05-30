@@ -1,18 +1,22 @@
-import { initializeApp, cert, getApps } from 'firebase-admin/app';
-import { getStorage } from 'firebase-admin/storage';
+import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 
-if (!getApps().length) {
-  const envVar = process.env.FIREBASE_SERVICE_ACCOUNT_JSON || process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
-  if (envVar) {
-    initializeApp({
-      credential: cert(JSON.parse(envVar)),
-      storageBucket: 'bora-select.firebasestorage.app'
-    });
-  } else {
-    initializeApp({
-      storageBucket: 'bora-select.firebasestorage.app'
-    });
+function getR2Client() {
+  let endpoint = (process.env.CLOUDFLARE_R2_ENDPOINT || "").trim();
+  const accessKeyId = (process.env.CLOUDFLARE_R2_ACCESS_KEY_ID || "").trim();
+  const secretAccessKey = (process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY || "").trim();
+  const bucket = (process.env.CLOUDFLARE_R2_BUCKET || "").trim();
+
+  if (!accessKeyId || !secretAccessKey || !endpoint) return null;
+
+  if (bucket && endpoint.endsWith(`/${bucket}`)) {
+    endpoint = endpoint.replace(`/${bucket}`, "");
   }
+
+  return new S3Client({
+    region: "auto",
+    endpoint,
+    credentials: { accessKeyId, secretAccessKey }
+  });
 }
 
 export const config = {
@@ -30,27 +34,35 @@ export default async function handler(req: any, res: any) {
   if (!image || !clientId) return res.status(400).json({ error: 'Imagem e ClientID são obrigatórios' });
 
   try {
-    const storage = getStorage();
-    const bucket = storage.bucket();
-    
+    const s3 = getR2Client();
+    const bucket = (process.env.CLOUDFLARE_R2_BUCKET || "").trim();
+    const publicUrlBase = (process.env.CLOUDFLARE_R2_PUBLIC_URL || "").trim().replace(/\/$/, "");
+
+    if (!s3 || !bucket || !publicUrlBase) {
+      throw new Error('Configuração Cloudflare R2 incompleta no servidor');
+    }
+
     // Remove cabeçalho data:image/...;base64,
     const base64Data = image.replace(/^data:image\/\w+;base64,/, "");
     const buffer = Buffer.from(base64Data, 'base64');
     
     const fileName = customPath || `clientes/${clientId}/logo`;
-    const file = bucket.file(fileName);
-
-    await file.save(buffer, {
-      metadata: { contentType: 'image/png' },
-      public: true
+    
+    const command = new PutObjectCommand({
+      Bucket: bucket,
+      Key: fileName,
+      Body: buffer,
+      ContentType: 'image/png'
     });
 
-    // Gera a URL pública padrão do Firebase Storage
-    const publicUrl = `https://storage.googleapis.com/${bucket.name}/${fileName}`;
+    await s3.send(command);
 
-    return res.status(200).json({ url: publicUrl });
+    // Gera a URL pública baseada no domínio configurado
+    const fileUrl = `${publicUrlBase}/${fileName}`;
+
+    return res.status(200).json({ url: fileUrl });
   } catch (error: any) {
-    console.error('Upload Error:', error);
+    console.error('R2 Upload Error:', error);
     return res.status(500).json({ error: error.message });
   }
 }
