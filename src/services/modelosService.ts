@@ -27,10 +27,7 @@ export type Stage = {
   id: string;
   name: string;
   type: StageType;
-  duration: string;
-  assignee: string;
   requiresApproval: boolean;
-  isBlocked: boolean;
   order: number;
 };
 
