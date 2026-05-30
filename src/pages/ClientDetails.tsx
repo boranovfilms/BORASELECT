@@ -280,10 +280,10 @@ export default function ClientDetails() {
                     <div className="flex items-center justify-between mb-6">
                       <div>
                         <h4 className="text-white font-black uppercase text-sm">{stage.name}</h4>
-                        <span className="text-[9px] font-bold text-[#ff5351] uppercase tracking-widest mt-1 block opacity-70">{stage.type.replace('_', ' ')}</span>
+                        <span className="text-[9px] font-bold text-[#ff5351] uppercase tracking-widest mt-1 block opacity-70">{(stage.type || 'sem tipo').replace(/_/g, ' ')}</span>
                       </div>
                       <div className="w-8 h-8 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center text-[10px] font-black text-zinc-500">
-                        {stage.order + 1}
+                        {(stage.order || 0) + 1}
                       </div>
                     </div>
 
