@@ -2,8 +2,8 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { 
-  ArrowLeft, Plus, LayoutTemplate, GripVertical, Clock, 
-  UserCircle, ShieldAlert, CheckCircle2, Settings2,
+  ArrowLeft, Plus, LayoutTemplate, GripVertical, 
+  CheckCircle2, Settings2,
   PlayCircle, Save, Loader2, Camera, Video, Mic,
   MonitorPlay, Image as ImageIcon, Trash2, X, Edit2, ChevronDown
 } from 'lucide-react';
@@ -42,6 +42,18 @@ const PRESET_COLORS = [
   { id: 'rose', color: 'text-rose-400', bg: 'bg-rose-400/10', border: 'border-rose-400/20', icon: 'MonitorPlay' },
 ];
 
+const STAGE_TYPES: { id: StageType; label: string }[] = [
+  { id: 'upload_arquivos', label: '📁 Upload de Arquivos' },
+  { id: 'aprovacao_admin', label: '✅ Aprovação Admin' },
+  { id: 'aprovacao_cliente', label: '👤 Aprovação Cliente' },
+  { id: 'aprovacao_equipe_cliente', label: '👥 Aprovação Equipe do Cliente' },
+  { id: 'producao', label: '🎬 Produção' },
+  { id: 'selecao', label: '🎯 Seleção' },
+  { id: 'revisao', label: '✏️ Revisão de Texto' },
+  { id: 'programar_postagem', label: '📅 Programar Postagem' },
+  { id: 'concluido', label: '🏁 Concluído' },
+];
+
 // COMPONENTE DA ETAPA ARRASTÁVEL
 function SortableStageItem({ stage, index, onEdit, onRemove }: { stage: Stage; index: number; onEdit: (s: Stage) => void; onRemove: (id: string) => void }) {
   const {
@@ -59,6 +71,8 @@ function SortableStageItem({ stage, index, onEdit, onRemove }: { stage: Stage; i
     zIndex: isDragging ? 100 : 1,
     opacity: isDragging ? 0.8 : 1,
   };
+
+  const typeLabel = STAGE_TYPES.find(t => t.id === stage.type)?.label || stage.type;
 
   return (
     <div 
@@ -84,16 +98,8 @@ function SortableStageItem({ stage, index, onEdit, onRemove }: { stage: Stage; i
           </div>
           <div>
             <h4 className="text-white font-black uppercase text-base">{stage.name}</h4>
-            <div className="flex items-center gap-4 mt-2 text-xs">
-              <span className="flex items-center gap-1.5 text-zinc-400 font-medium">
-                <Clock className="w-4 h-4 text-zinc-500" />
-                Duração: <strong className="text-white">{stage.duration}</strong>
-              </span>
-              <span className="text-zinc-700">•</span>
-              <span className="flex items-center gap-1.5 text-zinc-400 font-medium">
-                <UserCircle className="w-4 h-4 text-zinc-500" />
-                Resp: <strong className="text-white">{stage.assignee}</strong>
-              </span>
+            <div className="flex items-center gap-4 mt-2 text-[10px] uppercase font-bold tracking-widest text-zinc-500">
+              <span>{typeLabel}</span>
             </div>
           </div>
         </div>
@@ -102,13 +108,7 @@ function SortableStageItem({ stage, index, onEdit, onRemove }: { stage: Stage; i
           {stage.requiresApproval && (
             <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-[10px] font-black uppercase tracking-widest">
               <CheckCircle2 className="w-3.5 h-3.5" />
-              Aprovação
-            </span>
-          )}
-          {stage.isBlocked && (
-            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-500 text-[10px] font-black uppercase tracking-widest">
-              <ShieldAlert className="w-3.5 h-3.5" />
-              Bloqueia Avanço
+              Requer Aprovação
             </span>
           )}
           
@@ -244,10 +244,7 @@ export default function ModelosEdicao() {
       id: `stage_${Date.now()}`,
       name: '',
       type: 'producao',
-      duration: '1 dia',
-      assignee: teamMembers[0]?.name || 'Produção',
       requiresApproval: false,
-      isBlocked: false,
       order: stages.length
     });
     setIsStageModalOpen(true);
@@ -285,6 +282,20 @@ export default function ModelosEdicao() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleTypeChange = (type: StageType) => {
+    if (!editingStage) return;
+    
+    let requiresApproval = editingStage.requiresApproval;
+    
+    if (['aprovacao_cliente', 'aprovacao_equipe_cliente', 'aprovacao_admin'].includes(type)) {
+      requiresApproval = true;
+    } else if (['upload_arquivos', 'concluido'].includes(type)) {
+      requiresApproval = false;
+    }
+
+    setEditingStage({ ...editingStage, type, requiresApproval });
   };
 
   if (loading || !modelData) {
@@ -466,77 +477,41 @@ export default function ModelosEdicao() {
                     <select 
                       required
                       value={editingStage.type} 
-                      onChange={e => setEditingStage({...editingStage, type: e.target.value as StageType})}
+                      onChange={e => handleTypeChange(e.target.value as StageType)}
                       className="w-full h-12 bg-zinc-800 border border-transparent rounded-xl px-4 text-white focus:border-[#ff5351] outline-none appearance-none cursor-pointer font-bold text-xs"
                     >
-                      <option value="upload_arquivos">📁 Upload de Arquivos</option>
-                      <option value="aprovacao_admin">✅ Aprovação Admin</option>
-                      <option value="aprovacao_cliente">👤 Aprovação Cliente</option>
-                      <option value="aprovacao_equipe_cliente">👥 Aprovação Equipe do Cliente</option>
-                      <option value="producao">🎬 Produção</option>
-                      <option value="selecao">🎯 Seleção</option>
-                      <option value="revisao">✏️ Revisão de Texto</option>
-                      <option value="programar_postagem">📅 Programar Postagem</option>
-                      <option value="concluido">🏁 Concluído</option>
+                      {STAGE_TYPES.map(type => (
+                        <option key={type.id} value={type.id}>{type.label}</option>
+                      ))}
                     </select>
                     <ChevronDown className="w-4 h-4 text-zinc-500 absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none" />
                   </div>
                 </div>
-                
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <label className="text-[10px] uppercase font-black tracking-widest text-zinc-500 ml-1">Duração Média</label>
-                    <input type="text" placeholder="Ex: 2 dias" value={editingStage.duration} onChange={e => setEditingStage({...editingStage, duration: e.target.value})} className="w-full h-12 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white focus:border-[#ff5351] outline-none" />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-[10px] uppercase font-black tracking-widest text-zinc-500 ml-1">Responsável Padrão</label>
-                    <div className="relative">
-                      <select 
-                        value={editingStage.assignee} 
-                        onChange={e => setEditingStage({...editingStage, assignee: e.target.value})}
-                        className="w-full h-12 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white focus:border-[#ff5351] outline-none appearance-none cursor-pointer"
-                      >
-                        {teamMembers.length === 0 ? (
-                          <option value="Produção">Produção</option>
-                        ) : (
-                          teamMembers.map(member => (
-                            <option key={member.id} value={member.name}>{member.name}</option>
-                          ))
-                        )}
-                      </select>
-                      <ChevronDown className="w-4 h-4 text-zinc-500 absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none" />
-                    </div>
-                  </div>
-                </div>
 
                 <div className="pt-2">
-                  <label className="flex items-center gap-3 cursor-pointer p-4 rounded-xl border border-zinc-800 bg-zinc-900/50 hover:bg-zinc-900 transition-colors">
+                  <label className={cn(
+                    "flex items-center gap-3 p-4 rounded-xl border transition-colors",
+                    ['aprovacao_cliente', 'aprovacao_equipe_cliente', 'aprovacao_admin', 'upload_arquivos', 'concluido'].includes(editingStage.type) 
+                      ? "opacity-50 cursor-not-allowed bg-zinc-900/30 border-zinc-800" 
+                      : "cursor-pointer bg-zinc-900/50 border-zinc-800 hover:bg-zinc-900"
+                  )}>
                     <div className="relative flex items-center justify-center w-6 h-6">
-                      <input type="checkbox" className="peer sr-only" checked={editingStage.requiresApproval} onChange={e => setEditingStage({...editingStage, requiresApproval: e.target.checked})} />
+                      <input 
+                        type="checkbox" 
+                        className="peer sr-only" 
+                        disabled={['aprovacao_cliente', 'aprovacao_equipe_cliente', 'aprovacao_admin', 'upload_arquivos', 'concluido'].includes(editingStage.type)}
+                        checked={editingStage.requiresApproval} 
+                        onChange={e => setEditingStage({...editingStage, requiresApproval: e.target.checked})} 
+                      />
                       <div className="w-5 h-5 rounded border border-zinc-600 bg-zinc-800 peer-checked:bg-[#ff5351] peer-checked:border-[#ff5351] transition-colors" />
                       <CheckCircle2 className="absolute w-3.5 h-3.5 text-white opacity-0 peer-checked:opacity-100 transition-opacity" />
                     </div>
                     <div>
-                      <p className="text-white text-sm font-bold">Aprovação do Cliente Obrigatória</p>
-                      <p className="text-zinc-500 text-xs mt-0.5">Fluxo trava até o cliente validar esta etapa.</p>
+                      <p className="text-white text-sm font-bold uppercase tracking-widest">Requer Aprovação</p>
+                      <p className="text-zinc-500 text-[10px] mt-0.5 uppercase">O fluxo trava nesta etapa até uma validação ser realizada.</p>
                     </div>
                   </label>
                 </div>
-                
-                <div className="pt-0">
-                  <label className="flex items-center gap-3 cursor-pointer p-4 rounded-xl border border-zinc-800 bg-zinc-900/50 hover:bg-zinc-900 transition-colors">
-                    <div className="relative flex items-center justify-center w-6 h-6">
-                      <input type="checkbox" className="peer sr-only" checked={editingStage.isBlocked} onChange={e => setEditingStage({...editingStage, isBlocked: e.target.checked})} />
-                      <div className="w-5 h-5 rounded border border-zinc-600 bg-zinc-800 peer-checked:bg-zinc-500 peer-checked:border-zinc-500 transition-colors" />
-                      <ShieldAlert className="absolute w-3 h-3 text-black opacity-0 peer-checked:opacity-100 transition-opacity" />
-                    </div>
-                    <div>
-                      <p className="text-white text-sm font-bold">Bloqueia Avanço Automatico</p>
-                      <p className="text-zinc-500 text-xs mt-0.5">Esta etapa precisa estar 100% finalizada para abrir a próxima.</p>
-                    </div>
-                  </label>
-                </div>
-
               </div>
               <footer className="p-6 bg-zinc-900/50 border-t border-zinc-800 flex gap-3">
                 <button type="button" onClick={() => setIsStageModalOpen(false)} className="flex-1 h-12 text-xs font-black uppercase tracking-widest text-zinc-500 hover:text-white transition-all bg-zinc-900 rounded-xl border border-zinc-800">Cancelar</button>
