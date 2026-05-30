@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { 
   ArrowLeft, Plus, FileText, Calendar, Clock, ChevronRight, 
-  User, Mail, BadgeCheck, AlertCircle, Loader2, X, Save, Trash2, GitBranch, ChevronDown
+  User, Mail, BadgeCheck, AlertCircle, Loader2, X, Save, Trash2, GitBranch, ChevronDown, Users, Check
 } from 'lucide-react';
 import { db } from '../lib/firebase';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { contentPlanService, ContentPlan } from '../services/contentPlanService';
-import { modelosService, WorkflowModel } from '../services/modelosService';
+import { modelosService, WorkflowModel, Stage } from '../services/modelosService';
 import { DataTable } from '../components/ui/DataTable';
 import { cn } from '../lib/utils';
 import { toast } from 'react-hot-toast';
@@ -24,6 +24,12 @@ export default function ClientDetails() {
   const [newPlan, setNewPlan] = useState({ name: '', month: '', text: '' });
   const [saving, setSaving] = useState(false);
 
+  // Estados para Aprovadores
+  const [linkedModel, setLinkedModel] = useState<WorkflowModel | null>(null);
+  const [teamMembers, setTeamMembers] = useState<any[]>([]);
+  const [workflowApprovers, setWorkflowApprovers] = useState<Record<string, string[]>>({});
+  const [savingApprovers, setSavingApprovers] = useState(false);
+
   useEffect(() => {
     if (clientId) loadData();
   }, [clientId]);
@@ -39,7 +45,23 @@ export default function ClientDetails() {
       ]);
       
       if (clientSnap.exists()) {
-        setClient({ id: clientSnap.id, ...clientSnap.data() });
+        const cData = { id: clientSnap.id, ...clientSnap.data() };
+        setClient(cData);
+        setWorkflowApprovers(cData.workflowApprovers || {});
+
+        // Se tiver modelo vinculado, carregar detalhes dele
+        if (cData.workflowModelId) {
+          const mData = await modelosService.getModelo(cData.workflowModelId);
+          setLinkedModel(mData);
+        } else {
+          setLinkedModel(null);
+        }
+
+        // Carregar membros da equipe do cliente
+        const q = query(collection(db, 'clients'), where('clienteId', '==', clientId), where('role', '==', 'equipe'));
+        const teamSnap = await getDocs(q);
+        setTeamMembers(teamSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+
       } else {
         toast.error('Cliente não encontrado no banco de dados.');
       }
@@ -64,9 +86,44 @@ export default function ClientDetails() {
         updatedAt: new Date().toISOString()
       });
       setClient((prev: any) => ({ ...prev, workflowModelId: modelId }));
+      
+      if (modelId) {
+        const mData = await modelosService.getModelo(modelId);
+        setLinkedModel(mData);
+      } else {
+        setLinkedModel(null);
+      }
+      
       toast.success('Modelo de fluxo vinculado!');
     } catch (error) {
       toast.error('Erro ao vincular modelo.');
+    }
+  };
+
+  const toggleApprover = (stageId: string, email: string) => {
+    setWorkflowApprovers(prev => {
+      const current = prev[stageId] || [];
+      const updated = current.includes(email) 
+        ? current.filter(e => e !== email) 
+        : [...current, email];
+      return { ...prev, [stageId]: updated };
+    });
+  };
+
+  const handleSaveApprovers = async () => {
+    if (!clientId) return;
+    setSavingApprovers(true);
+    try {
+      const clientRef = doc(db, 'clients', clientId);
+      await updateDoc(clientRef, {
+        workflowApprovers,
+        updatedAt: new Date().toISOString()
+      });
+      toast.success('Configuração de aprovadores salva!');
+    } catch (error) {
+      toast.error('Erro ao salvar aprovadores.');
+    } finally {
+      setSavingApprovers(false);
     }
   };
 
@@ -121,8 +178,10 @@ export default function ClientDetails() {
   if (loading) return <div className="min-h-[60vh] flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-[#ff5351]" /></div>;
   if (!client) return <div className="p-8 text-center text-white"><p className="mb-4">Cliente não encontrado.</p><button onClick={() => navigate('/clients')} className="text-[#ff5351] font-bold underline">Voltar para a lista</button></div>;
 
+  const approvalStages = linkedModel?.stages?.filter(s => s.requiresApproval) || [];
+
   return (
-    <div className="space-y-8 pb-20">
+    <div className="space-y-12 pb-20 text-left">
       <header>
         <button onClick={() => navigate('/clients')} className="mb-4 flex items-center gap-2 text-zinc-500 hover:text-white transition-all text-xs font-bold uppercase tracking-widest">
           <ArrowLeft className="w-4 h-4" /> Voltar para Gestão
@@ -138,7 +197,6 @@ export default function ClientDetails() {
                 <span className="flex items-center gap-1.5 text-xs text-zinc-500 font-medium"><Mail className="w-3.5 h-3.5" /> {client.email}</span>
                 <span className="text-zinc-800">•</span>
                 
-                {/* SELETOR DE MODELO DE FLUXO */}
                 <div className="flex items-center gap-2">
                   <GitBranch className="w-3.5 h-3.5 text-zinc-500" />
                   <div className="relative">
@@ -168,6 +226,109 @@ export default function ClientDetails() {
           </button>
         </div>
       </header>
+
+      {/* SEÇÃO DE APROVADORES */}
+      {client.workflowModelId && (
+        <section className="animate-in fade-in duration-500">
+          <div className="flex items-center gap-3 mb-6">
+            <h2 className="text-sm font-black uppercase tracking-[0.3em] text-zinc-600 shrink-0">Configuração de Aprovadores</h2>
+            <div className="h-px flex-1 bg-zinc-800/50" />
+          </div>
+
+          <div className="bg-[#1f1f1f] border border-zinc-800 rounded-[32px] p-8">
+            <div className="flex items-center justify-between mb-8">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-[#ff5351]/10 rounded-xl border border-[#ff5351]/20">
+                  <Users className="w-5 h-5 text-[#ff5351]" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black text-white uppercase italic">Aprovadores por Etapa</h3>
+                  <p className="text-zinc-500 text-xs font-bold uppercase tracking-wider mt-1">Defina quais membros podem validar cada fase do projeto.</p>
+                </div>
+              </div>
+              <button 
+                onClick={handleSaveApprovers}
+                disabled={savingApprovers}
+                className="px-6 h-12 bg-[#ff5351] text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:brightness-110 transition-all flex items-center gap-2 shadow-lg shadow-[#ff5351]/20 disabled:opacity-50"
+              >
+                {savingApprovers ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                Salvar Configuração
+              </button>
+            </div>
+
+            {teamMembers.length === 0 ? (
+              <div className="py-12 text-center border-2 border-dashed border-zinc-800 rounded-3xl">
+                <Users className="w-12 h-12 text-zinc-800 mx-auto mb-4" />
+                <p className="text-zinc-500 text-sm font-bold uppercase tracking-widest max-w-xs mx-auto mb-6">
+                  Adicione membros à equipe deste cliente para configurar aprovadores
+                </p>
+                <Link to="/clients" className="px-6 py-3 bg-zinc-800 text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-zinc-700 transition-all">
+                  Ir para Gestão de Equipe
+                </Link>
+              </div>
+            ) : approvalStages.length === 0 ? (
+              <div className="py-12 text-center border-2 border-dashed border-zinc-800 rounded-3xl">
+                <AlertCircle className="w-12 h-12 text-zinc-800 mx-auto mb-4" />
+                <p className="text-zinc-500 text-sm font-bold uppercase tracking-widest">
+                  O modelo vinculado não possui etapas que requerem aprovação.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {approvalStages.map(stage => (
+                  <div key={stage.id} className="bg-black/20 border border-zinc-800/50 rounded-3xl p-6 hover:border-zinc-700 transition-all">
+                    <div className="flex items-center justify-between mb-6">
+                      <div>
+                        <h4 className="text-white font-black uppercase text-sm">{stage.name}</h4>
+                        <span className="text-[9px] font-bold text-[#ff5351] uppercase tracking-widest mt-1 block opacity-70">{stage.type.replace('_', ' ')}</span>
+                      </div>
+                      <div className="w-8 h-8 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center text-[10px] font-black text-zinc-500">
+                        {stage.order + 1}
+                      </div>
+                    </div>
+
+                    <div className="space-y-3">
+                      {teamMembers.map(member => {
+                        const isSelected = (workflowApprovers[stage.id] || []).includes(member.email);
+                        return (
+                          <div 
+                            key={member.id}
+                            onClick={() => toggleApprover(stage.id, member.email)}
+                            className={cn(
+                              "flex items-center justify-between p-3 rounded-2xl border transition-all cursor-pointer group",
+                              isSelected ? "bg-[#ff5351]/5 border-[#ff5351]/30" : "bg-zinc-900/50 border-zinc-800 hover:border-zinc-700"
+                            )}
+                          >
+                            <div className="flex items-center gap-3 overflow-hidden">
+                              <div className="w-8 h-8 rounded-full bg-zinc-900 border border-zinc-700 flex items-center justify-center overflow-hidden shrink-0">
+                                {member.photoUrl ? (
+                                  <img src={member.photoUrl} className="w-full h-full object-cover" />
+                                ) : (
+                                  <User className="w-4 h-4 text-zinc-600" />
+                                )}
+                              </div>
+                              <div className="overflow-hidden">
+                                <p className={cn("text-[10px] font-black uppercase truncate", isSelected ? "text-white" : "text-zinc-400")}>{member.name}</p>
+                                <p className="text-[8px] font-bold text-zinc-600 truncate uppercase">{member.email}</p>
+                              </div>
+                            </div>
+                            <div className={cn(
+                              "w-5 h-5 rounded-lg border-2 flex items-center justify-center transition-all",
+                              isSelected ? "bg-[#ff5351] border-[#ff5351]" : "border-zinc-800 group-hover:border-zinc-600"
+                            )}>
+                              {isSelected && <Check className="w-3 h-3 text-white" />}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
+      )}
 
       <section className="space-y-4">
         <div className="flex items-center gap-3">
