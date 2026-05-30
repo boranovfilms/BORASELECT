@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { 
   ArrowLeft, Plus, FileText, Calendar, Clock, ChevronRight, 
-  User, Mail, BadgeCheck, AlertCircle, Loader2, X, Save, Trash2, GitBranch, ChevronDown, Users, Check
+  User, Mail, BadgeCheck, AlertCircle, Loader2, X, Save, Trash2, GitBranch, ChevronDown, Users, Check, Activity, CheckCircle, Clock3
 } from 'lucide-react';
 import { db } from '../lib/firebase';
 import { doc, getDoc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore';
@@ -49,7 +49,6 @@ export default function ClientDetails() {
         setClient(cData);
         setWorkflowApprovers(cData.workflowApprovers || {});
 
-        // Se tiver modelo vinculado, carregar detalhes dele
         if (cData.workflowModelId) {
           const mData = await modelosService.getModelo(cData.workflowModelId);
           setLinkedModel(mData);
@@ -57,7 +56,6 @@ export default function ClientDetails() {
           setLinkedModel(null);
         }
 
-        // Carregar membros da equipe do cliente
         const q = query(collection(db, 'clients'), where('clienteId', '==', clientId), where('role', '==', 'equipe'));
         const teamSnap = await getDocs(q);
         setTeamMembers(teamSnap.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -166,24 +164,27 @@ export default function ClientDetails() {
   const getStatusBadge = (status: string) => {
     const configs: any = {
       rascunho: { label: 'Rascunho', class: 'bg-zinc-800 text-zinc-400 border-zinc-700' },
-      aguardando_cliente: { label: 'Aguard. Cliente', class: 'bg-amber-500/10 text-amber-400 border-amber-500/20' },
+      aguardando_cliente: { label: 'Aguardando Cliente', class: 'bg-amber-500/10 text-amber-400 border-amber-500/20' },
       aguardando_validacao_equipe: { label: 'Validação Equipe', class: 'bg-blue-500/10 text-blue-400 border-blue-500/20' },
       aprovado: { label: 'Aprovado', class: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' },
       devolvido: { label: 'Devolvido', class: 'bg-red-500/10 text-red-400 border-red-500/20' },
+      em_producao: { label: 'Em Produção', class: 'bg-purple-500/10 text-purple-400 border-purple-500/20' },
     };
     const config = configs[status] || configs.rascunho;
-    return <span className={cn("px-2 py-1 rounded-full border text-[9px] font-black uppercase tracking-widest", config.class)}>{config.label}</span>;
+    return <span className={cn("px-3 py-1 rounded-full border text-[9px] font-black uppercase tracking-widest", config.class)}>{config.label}</span>;
   };
 
   if (loading) return <div className="min-h-[60vh] flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-[#ff5351]" /></div>;
   if (!client) return <div className="p-8 text-center text-white"><p className="mb-4">Cliente não encontrado.</p><button onClick={() => navigate('/clients')} className="text-[#ff5351] font-bold underline">Voltar para a lista</button></div>;
 
   const approvalStages = linkedModel?.stages?.filter(s => s.requiresApproval) || [];
+  const awaitingAction = plans.filter(p => p.status === 'aguardando_cliente' || p.status === 'devolvido').length;
+  const approvedCount = plans.filter(p => p.status === 'aprovado').length;
 
   return (
-    <div className="space-y-12 pb-20 text-left">
+    <div className="space-y-10 pb-20 text-left">
       <header>
-        <button onClick={() => navigate('/clients')} className="mb-4 flex items-center gap-2 text-zinc-500 hover:text-white transition-all text-xs font-bold uppercase tracking-widest">
+        <button onClick={() => navigate('/clients')} className="mb-4 flex items-center gap-2 text-zinc-500 hover:text-white transition-all text-xs font-bold uppercase tracking-widest leading-none">
           <ArrowLeft className="w-4 h-4" /> Voltar para Gestão
         </button>
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
@@ -227,9 +228,85 @@ export default function ClientDetails() {
         </div>
       </header>
 
-      {/* SEÇÃO DE APROVADORES */}
+      {/* CARDS DE RESUMO */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="bg-[#1f1f1f] border border-zinc-800 rounded-3xl p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-2 bg-zinc-900 rounded-lg border border-zinc-800"><Activity className="w-4 h-4 text-white" /></div>
+            <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Total de Demandas</span>
+          </div>
+          <p className="text-4xl font-black text-white italic">{plans.length}</p>
+        </div>
+        <div className="bg-[#1f1f1f] border border-zinc-800 rounded-3xl p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-2 bg-zinc-900 rounded-lg border border-zinc-800"><Clock3 className="w-4 h-4 text-amber-500" /></div>
+            <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Aguardando Ação</span>
+          </div>
+          <p className="text-4xl font-black text-white italic">{awaitingAction}</p>
+        </div>
+        <div className="bg-[#1f1f1f] border border-zinc-800 rounded-3xl p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-2 bg-zinc-900 rounded-lg border border-zinc-800"><CheckCircle className="w-4 h-4 text-emerald-500" /></div>
+            <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Aprovadas</span>
+          </div>
+          <p className="text-4xl font-black text-white italic">{approvedCount}</p>
+        </div>
+      </div>
+
+      <section className="space-y-4">
+        <div className="flex items-center gap-3">
+          <h2 className="text-sm font-black uppercase tracking-[0.3em] text-zinc-600 shrink-0">Demandas Ativas</h2>
+          <div className="h-px flex-1 bg-zinc-800/50" />
+        </div>
+
+        <DataTable 
+          data={plans}
+          onRowClick={(plan) => navigate(`/planejamento/${plan.id}`)}
+          emptyMessage="Nenhum planejamento de conteúdo criado para este cliente."
+          columns={[
+            {
+              header: 'Demanda',
+              accessor: (plan) => (
+                <div className="flex items-center gap-3 py-1">
+                  <div className="p-2 bg-zinc-900 rounded-lg border border-zinc-800"><FileText className="w-4 h-4 text-[#ff5351]" /></div>
+                  <p className="text-white font-black uppercase text-sm">{plan.name}</p>
+                </div>
+              )
+            },
+            { 
+              header: 'Tipo', 
+              accessor: () => <span className="px-2 py-0.5 rounded bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[9px] font-black uppercase tracking-widest">Planejamento</span>,
+              align: 'center'
+            },
+            { header: 'Status', accessor: (plan) => getStatusBadge(plan.status), align: 'center' },
+            { 
+              header: 'Última Atualização', 
+              accessor: (plan) => {
+                const date = plan.updatedAt?.toDate ? plan.updatedAt.toDate() : new Date(plan.updatedAt);
+                return <span className="text-zinc-500 text-xs">{new Intl.DateTimeFormat('pt-BR').format(date)}</span>;
+              }
+            }
+          ]}
+          actions={(plan) => (
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={(e) => handleDeletePlan(e, plan.id!)}
+                className="p-2 bg-zinc-800/50 border border-zinc-700 hover:bg-red-500/10 rounded-xl text-zinc-500 hover:text-red-500 transition-all"
+                title="Excluir"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+              <button className="p-2 bg-zinc-800 border border-zinc-700 hover:bg-zinc-700 rounded-xl text-zinc-500 hover:text-white transition-all">
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+        />
+      </section>
+
+      {/* SEÇÃO DE APROVADORES NO FINAL */}
       {client.workflowModelId && (
-        <section className="animate-in fade-in duration-500">
+        <section className="animate-in fade-in duration-500 pt-10 border-t border-zinc-900">
           <div className="flex items-center gap-3 mb-6">
             <h2 className="text-sm font-black uppercase tracking-[0.3em] text-zinc-600 shrink-0">Configuração de Aprovadores</h2>
             <div className="h-px flex-1 bg-zinc-800/50" />
@@ -242,8 +319,8 @@ export default function ClientDetails() {
                   <Users className="w-5 h-5 text-[#ff5351]" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-black text-white uppercase italic">Aprovadores por Etapa</h3>
-                  <p className="text-zinc-500 text-xs font-bold uppercase tracking-wider mt-1">Defina quais membros podem validar cada fase do projeto.</p>
+                  <h3 className="text-lg font-black text-white uppercase italic leading-none">Aprovadores por Etapa</h3>
+                  <p className="text-zinc-500 text-xs font-bold uppercase tracking-wider mt-2">Defina quais membros podem validar cada fase do projeto.</p>
                 </div>
               </div>
               <button 
@@ -302,7 +379,7 @@ export default function ClientDetails() {
                             <div className="flex items-center gap-3 overflow-hidden">
                               <div className="w-8 h-8 rounded-full bg-zinc-900 border border-zinc-700 flex items-center justify-center overflow-hidden shrink-0">
                                 {member.photoUrl ? (
-                                  <img src={member.photoUrl} className="w-full h-full object-cover" />
+                                  <img src={member.photoUrl} className="w-full h-full object-cover" alt="" />
                                 ) : (
                                   <User className="w-4 h-4 text-zinc-600" />
                                 )}
@@ -329,53 +406,6 @@ export default function ClientDetails() {
           </div>
         </section>
       )}
-
-      <section className="space-y-4">
-        <div className="flex items-center gap-3">
-          <h2 className="text-sm font-black uppercase tracking-[0.3em] text-zinc-600 shrink-0">Planejamentos de Conteúdo</h2>
-          <div className="h-px flex-1 bg-zinc-800/50" />
-        </div>
-
-        <DataTable 
-          data={plans}
-          onRowClick={(plan) => navigate(`/planejamento/${plan.id}`)}
-          emptyMessage="Nenhum planejamento de conteúdo criado para este cliente."
-          columns={[
-            {
-              header: 'Planejamento',
-              accessor: (plan) => (
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-zinc-900 rounded-lg border border-zinc-800"><FileText className="w-4 h-4 text-[#ff5351]" /></div>
-                  <p className="text-white font-black uppercase text-sm">{plan.name}</p>
-                </div>
-              )
-            },
-            { header: 'Mês Referência', accessor: 'monthReference', className: 'text-zinc-400 font-bold' },
-            { header: 'Status', accessor: (plan) => getStatusBadge(plan.status), align: 'center' },
-            { 
-              header: 'Última Atualização', 
-              accessor: (plan) => {
-                const date = plan.updatedAt?.toDate ? plan.updatedAt.toDate() : new Date(plan.updatedAt);
-                return <span className="text-zinc-500 text-xs">{new Intl.DateTimeFormat('pt-BR').format(date)}</span>;
-              }
-            }
-          ]}
-          actions={(plan) => (
-            <div className="flex items-center gap-2">
-              <button 
-                onClick={(e) => handleDeletePlan(e, plan.id!)}
-                className="p-2 bg-zinc-800/50 border border-zinc-700 hover:bg-red-500/10 rounded-xl text-zinc-500 hover:text-red-500 transition-all"
-                title="Excluir Planejamento"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-              <button className="p-2 bg-zinc-800 border border-zinc-700 hover:bg-zinc-700 rounded-xl text-zinc-500 hover:text-white transition-all">
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
-          )}
-        />
-      </section>
 
       {isModalOpen && (
         <div className="fixed inset-0 z-[300] flex items-center justify-center p-4">
