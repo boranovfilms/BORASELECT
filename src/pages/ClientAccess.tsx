@@ -129,65 +129,54 @@ export default function ClientAccess() {
     if (!clientForm.name || !clientForm.email) return toast.error('Preencha nome e e-mail');
     setSaving(true);
     try {
-      let finalClientId = clientForm.id;
-      let isNew = !isEditingClient;
-      
-      if (isNew) {
-        const newDocRef = await clientService.createClient({ 
-          ...clientForm, 
-          name: clientForm.name.toUpperCase(), 
-          email: clientForm.email.toLowerCase().trim(), 
-          role: 'cliente' 
-        });
-        finalClientId = newDocRef.id;
-      }
-
       let currentLogoUrl = clientForm.logoUrl;
-      
+
       if (logoPreview && logoPreview.startsWith('data:image')) {
         try {
-          const upResponse = await fetch('/api/upload-logo', { 
-            method: 'POST', 
-            headers: { 'Content-Type': 'application/json' }, 
-            body: JSON.stringify({ image: logoPreview, clientId: finalClientId }) 
+          const tempId = clientForm.id || clientForm.email.replace(/[^a-z0-9]/gi, '_');
+          const upResponse = await fetch('/api/upload-logo', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ image: logoPreview, clientId: tempId })
           });
-          
-          if (upResponse.ok) { 
-            const upResult = await upResponse.json(); 
-            currentLogoUrl = upResult.url; 
+          if (upResponse.ok) {
+            const upResult = await upResponse.json();
+            currentLogoUrl = upResult.url;
           }
         } catch (uploadError) {
           console.error('Erro no upload:', uploadError);
         }
       }
 
-      await (clientService as any).updateClient(finalClientId, { 
-        ...clientForm, 
-        id: finalClientId, 
-        logoUrl: currentLogoUrl, 
-        name: clientForm.name.toUpperCase(), 
-        email: clientForm.email.toLowerCase().trim() 
-      });
+      const clientData = {
+        ...clientForm,
+        name: clientForm.name.toUpperCase(),
+        email: clientForm.email.toLowerCase().trim(),
+        role: 'cliente',
+        logoUrl: currentLogoUrl,
+      };
 
-      if (isNew) {
+      if (!isEditingClient) {
+        await clientService.createClient(clientData);
         try {
-          const inviteLink = `${window.location.origin}/register?email=${encodeURIComponent(clientForm.email.toLowerCase().trim())}`;
-          await emailService.sendInvite(clientForm.email.toLowerCase().trim(), clientForm.name.toUpperCase(), inviteLink);
+          const inviteLink = `${window.location.origin}/register?email=${encodeURIComponent(clientData.email)}`;
+          await emailService.sendInvite(clientData.email, clientData.name, inviteLink);
           toast.success('Cliente adicionado!');
-        } catch (e) { 
-          toast.error('Cliente salvo, mas convite falhou.'); 
+        } catch (e) {
+          toast.error('Cliente salvo, mas convite falhou.');
         }
-      } else { 
-        toast.success('Cliente atualizado!'); 
+      } else {
+        await (clientService as any).updateClient(clientForm.id, clientData);
+        toast.success('Cliente atualizado!');
       }
 
       setLogoPreview('');
       setIsClientFormOpen(false);
       loadAllData();
-    } catch (error) { 
-      toast.error('Erro ao salvar cliente'); 
-    } finally { 
-      setSaving(false); 
+    } catch (error) {
+      toast.error('Erro ao salvar cliente');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -197,11 +186,34 @@ export default function ClientAccess() {
     try {
       setLoading(true);
       const fullName = `${memberForm.firstName} ${memberForm.lastName}`.trim().toUpperCase();
-      
+
       let currentStatus = 'pending';
       if (isEditingMember && editingMemberId) {
         const existingMember = allTeamMembers.find(m => m.id === editingMemberId);
         if (existingMember) currentStatus = existingMember.status || 'pending';
+      }
+
+      let finalPhotoUrl = memberForm.photoUrl;
+
+      if (memberForm.photoUrl && memberForm.photoUrl.startsWith('data:image')) {
+        try {
+          const memberId = editingMemberId || memberForm.email.replace(/[^a-z0-9]/gi, '_');
+          const upResponse = await fetch('/api/upload-logo', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              image: memberForm.photoUrl,
+              clientId: memberId,
+              path: `membros/${memberId}/foto`
+            })
+          });
+          if (upResponse.ok) {
+            const upResult = await upResponse.json();
+            finalPhotoUrl = upResult.url;
+          }
+        } catch (uploadError) {
+          console.error('Erro no upload da foto:', uploadError);
+        }
       }
 
       const normalizedMember = {
@@ -212,7 +224,7 @@ export default function ClientAccess() {
         jobTitle: memberForm.jobTitle.toUpperCase(),
         accessLevel: memberForm.accessLevel,
         clienteId: selectedClient?.id,
-        photoUrl: memberForm.photoUrl,
+        photoUrl: finalPhotoUrl,
         photoConfig: photoConfig,
         status: currentStatus
       };
@@ -228,13 +240,17 @@ export default function ClientAccess() {
           toast.success('Membro adicionado!');
         } catch (e) { toast.error('Membro salvo, mas convite falhou.'); }
       }
-      
+
       setMemberForm({ firstName: '', lastName: '', email: '', phone: '', password: '', jobTitle: '', role: 'equipe', accessLevel: 'validador', photoUrl: '' });
       setIsAddingTeamMember(false);
       setIsEditingMember(false);
       setEditingMemberId(null);
       await loadAllData();
-    } catch (error) { toast.error('Erro ao salvar membro'); } finally { setLoading(false); }
+    } catch (error) {
+      toast.error('Erro ao salvar membro');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleOpenEditMember = (member: TeamMember) => {
@@ -415,14 +431,14 @@ export default function ClientAccess() {
               <div className="flex justify-end pt-4 text-left"><button type="submit" disabled={loading} className="px-10 py-5 bg-white text-black font-black uppercase tracking-widest text-xs rounded-2xl hover:bg-[#ff5351] hover:text-white transition-all shadow-2xl disabled:opacity-50 flex items-center gap-3"><UserPlus className="w-5 h-5 text-left" />{loading ? 'Aguarde...' : (isEditingMember ? 'Salvar Alterações' : 'Salvar Novo Membro')}</button></div>
             </form>
           )}
-          <DataTable data={allTeamMembers.filter(m => (m as any).clienteId === selectedClient.id)} loading={loading} emptyMessage="Nenhum membro vinculado." columns={[{ header: 'Membro', accessor: (member) => <div className="text-left py-1 text-left flex items-center gap-3"><div className="w-10 h-10 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center shrink-0 overflow-hidden shadow-inner">{member.photoUrl ? <img src={member.photoUrl} alt="" className="w-full h-full object-cover" /> : <div className="text-[10px] font-black text-[#ff5351]">{member.name.split(' ').map((n:any) => n[0]).join('').slice(0,2)}</div>}</div><div className="text-left text-left"><div className="text-white font-bold text-base leading-tight mb-1 uppercase text-left">{member.name}</div><div className="text-zinc-500 text-xs flex items-center gap-2 leading-none uppercase text-left text-left"><Mail className="w-3.5 h-3.5 text-left" />{member.email}</div></div></div> }, { header: 'Status', accessor: (member) => <span className={cn("inline-flex items-center gap-2 px-3 py-1 border rounded-full text-[10px] font-black uppercase tracking-widest", member.status === 'confirmed' ? "text-emerald-400 border-emerald-500/30 bg-emerald-500/10" : "text-amber-400 border-amber-500/30 bg-amber-500/10")}><div className={cn("w-1.5 h-1.5 rounded-full shadow-[0_0_8px_#10b981]", member.status === 'confirmed' ? "bg-emerald-500" : "bg-amber-500")} />{member.status === 'confirmed' ? '✓ OK, SENHA CRIADA' : '⏳ AGUARDANDO SENHA'}</span> }]} actions={(member) => (<><button onClick={(e) => { e.stopPropagation(); handleOpenEditMember(member); }} className="p-2 bg-zinc-800 border border-zinc-700 hover:bg-zinc-700 rounded-xl text-zinc-400 hover:text-white transition-all shadow-lg text-left" title="Editar Membro"><Edit2 className="w-4 h-4 text-left" /></button><button onClick={(e) => { e.stopPropagation(); sendEmailInvite(member.name, member.email); }} disabled={sendingEmail === member.email} className="p-2 bg-zinc-800 border border-zinc-700 hover:bg-[#ff5351] hover:border-transparent rounded-xl text-zinc-300 hover:text-white transition-all shadow-lg text-left" title="Reenviar Convite"><Mail className="w-4 h-4 text-left" /></button><button onClick={(e) => { e.stopPropagation(); handleDeleteTeamMember(member.id!, member.email); }} className="p-2 bg-zinc-800/50 hover:bg-red-500/10 rounded-xl text-zinc-600 hover:text-red-500 transition-all shadow-lg text-left" title="Excluir Membro"><Trash2 className="w-4 h-4 text-left" /></button></>)} />
+          <DataTable data={allTeamMembers.filter(m => (m as any).clienteId === selectedClient.id)} loading={loading} emptyMessage="Nenhum membro vinculado." columns={[{ header: 'Membro', accessor: (member) => <div className="text-left py-1 text-left flex items-center gap-3"><div className="w-10 h-10 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center shrink-0 overflow-hidden shadow-inner">{member.photoUrl ? <img src={member.photoUrl} alt="" className="w-full h-full object-cover" /> : <div className="text-[10px] font-black text-[#ff5351]">{member.name.split(' ').map((n:any) => n[0]).join('').slice(0,2)}</div>}</div><div className="text-left text-left"><div className="text-white font-bold text-base leading-tight mb-1 uppercase text-left">{member.name}</div><div className="text-zinc-500 text-xs flex items-center gap-2 leading-none uppercase text-left text-left"><Mail className="w-3.5 h-3.5 text-left" />{member.email}</div></div></div> }, { header: 'Status', accessor: (member) => <span className={cn("inline-flex items-center gap-2 px-3 py-1 border rounded-full text-[10px] font-black uppercase tracking-widest", member.status === 'confirmed' ? "text-emerald-400 border-emerald-500/30 bg-emerald-500/10" : "text-amber-400 border-amber-500/30 bg-amber-500/10")}>{member.status === 'confirmed' ? '✓ OK, SENHA CRIADA' : '⏳ AGUARDANDO SENHA'}</span> }]} actions={(member) => (<><button onClick={(e) => { e.stopPropagation(); handleOpenEditMember(member); }} className="p-2 bg-zinc-800 border border-zinc-700 hover:bg-zinc-700 rounded-xl text-zinc-400 hover:text-white transition-all shadow-lg text-left" title="Editar Membro"><Edit2 className="w-4 h-4 text-left" /></button><button onClick={(e) => { e.stopPropagation(); sendEmailInvite(member.name, member.email); }} disabled={sendingEmail === member.email} className="p-2 bg-zinc-800 border border-zinc-700 hover:bg-[#ff5351] hover:border-transparent rounded-xl text-zinc-300 hover:text-white transition-all shadow-lg text-left" title="Reenviar Convite"><Mail className="w-4 h-4 text-left" /></button><button onClick={(e) => { e.stopPropagation(); handleDeleteTeamMember(member.id!, member.email); }} className="p-2 bg-zinc-800/50 hover:bg-red-500/10 rounded-xl text-zinc-600 hover:text-red-500 transition-all shadow-lg text-left" title="Excluir Membro"><Trash2 className="w-4 h-4 text-left" /></button></>)} />
         </div>
       )}
 
       {!isClientFormOpen && !isTeamViewOpen && (
         <div className="space-y-4 text-left">
           <div className="relative animate-in fade-in duration-300 text-left text-left text-left"><Search className="w-5 h-5 text-zinc-500 absolute left-5 top-1/2 -translate-y-1/2 text-left text-left text-left" /><input type="text" placeholder="Buscar cliente por nome ou e-mail..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full bg-[#1a1a1a] border border-zinc-800 rounded-2xl pl-13 pr-5 py-4 text-white focus:border-[#ff5351] outline-none transition-all placeholder:text-zinc-600 shadow-xl uppercase font-medium text-left text-left"/></div>
-          <DataTable data={filteredClients} loading={loading} onRowClick={(client) => { if (client.id) navigate(`/clients/${client.id}`); }} emptyMessage={searchTerm ? 'Nenhum cliente encontrado.' : 'Nenhum cliente cadastrado.'} columns={[{ header: 'Cliente', accessor: (client) => (<div onClick={(e) => { e.stopPropagation(); if(client.id) navigate(`/clients/${client.id}`); }} className="text-left py-1 cursor-pointer group/name flex items-center gap-3 text-left text-left text-left text-left text-left"><div className="w-10 h-10 rounded-xl bg-zinc-900 overflow-hidden border border-zinc-800 shrink-0 flex items-center justify-center shadow-lg text-left">{client.logoUrl ? <img src={client.logoUrl} alt="" className="w-full h-full object-contain" /> : <Building className="w-5 h-5 text-zinc-700" />}</div><div className="text-left text-left text-left"><div className="text-white font-black text-base leading-tight mb-1 uppercase italic group-hover/name:text-[#ff5351] transition-colors text-left text-left text-left text-left text-left">{client.name}</div><div className="text-zinc-500 text-[10px] font-black uppercase tracking-widest flex items-center gap-2 text-left text-left text-left text-left text-left"><Mail className="w-3.5 h-3.5 text-left text-left text-left" />{client.email}</div></div></div>) }, { header: 'Status', accessor: (client) => <span className={cn("inline-flex items-center gap-2 px-3 py-1 border rounded-full text-[10px] font-black uppercase tracking-widest", client.status === 'confirmed' ? "text-emerald-400 border-emerald-500/30 bg-emerald-500/10" : "text-amber-400 border-amber-500/30 bg-amber-500/10")}><div className={cn("w-1.5 h-1.5 rounded-full shadow-[0_0_8px_#10b981]", client.status === 'confirmed' ? "bg-emerald-500" : "bg-amber-500")} />{client.status === 'confirmed' ? '✓ OK, SENHA CRIADA' : '⏳ AGUARDANDO SENHA'}</span> }, { header: 'Membros', align: 'center', accessor: (client) => { const count = getClientTeamCount(client.id!); return count > 0 ? <div className="w-8 h-8 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center text-white text-[10px] font-black shadow-lg italic text-left text-left text-left text-left">{count}</div> : <span className="text-zinc-700 text-xs font-medium text-left text-left text-left text-left text-left">-</span>; } }]} actions={(client) => (<><button onClick={(e) => { e.stopPropagation(); handleOpenTeamView(client); }} className="flex items-center gap-2 px-4 py-2 bg-zinc-800 border border-zinc-700 hover:bg-zinc-700 hover:border-transparent rounded-xl text-zinc-300 hover:text-white transition-all text-[10px] font-black uppercase tracking-widest shadow-lg text-left text-left text-left text-left text-left"><Users className="w-4 h-4 text-[#ff5351] text-left text-left text-left text-left text-left" />Equipe</button><button onClick={(e) => { e.stopPropagation(); handleOpenEditClient(client); }} className="p-2 bg-zinc-800 border border-zinc-700 hover:bg-zinc-700 rounded-xl text-zinc-400 hover:text-white transition-all shadow-lg text-left text-left text-left text-left text-left text-left"><Edit2 className="w-4 h-4 text-left text-left text-left text-left text-left text-left" /></button><button onClick={(e) => { e.stopPropagation(); sendEmailInvite(client.name, email); }} disabled={sendingEmail === client.email} className="p-2 bg-zinc-800 border border-zinc-700 hover:bg-[#ff5351] hover:border-transparent rounded-xl text-zinc-300 hover:text-white transition-all disabled:opacity-50 shadow-lg text-left text-left text-left text-left text-left text-left"><Mail className="w-4 h-4 text-left text-left text-left text-left text-left text-left" /></button><button onClick={(e) => { e.stopPropagation(); const inviteLink = `${window.location.origin}/register?email=${encodeURIComponent(client.email)}`; navigator.clipboard.writeText(`Seu conteúdo foi selecionado!\nAcesse pelo link abaixo e crie sua senha:\n\n${inviteLink}`); toast.success('Mensagem de convite copiada!'); }} className="p-2 bg-zinc-800 border border-zinc-700 hover:bg-[#25D366] hover:border-transparent rounded-xl text-zinc-300 hover:text-white transition-all shadow-lg text-left text-left text-left text-left text-left text-left text-left"><ExternalLink className="w-4 h-4 text-left text-left text-left text-left text-left text-left text-left" /></button><button onClick={(e) => { e.stopPropagation(); handleDeleteClient(client.id!, client.email); }} className="p-2 bg-zinc-800/50 hover:bg-red-500/10 rounded-xl text-zinc-600 hover:text-red-500 transition-all shadow-lg text-left text-left text-left text-left text-left text-left text-left text-left text-left"><Trash2 className="w-4 h-4 text-left text-left text-left text-left text-left text-left text-left text-left text-left text-left text-left" /></button></>)} />
+          <DataTable data={filteredClients} loading={loading} onRowClick={(client) => { if (client.id) navigate(`/clients/${client.id}`); }} emptyMessage={searchTerm ? 'Nenhum cliente encontrado.' : 'Nenhum cliente cadastrado.'} columns={[{ header: 'Cliente', accessor: (client) => (<div onClick={(e) => { e.stopPropagation(); if(client.id) navigate(`/clients/${client.id}`); }} className="text-left py-1 cursor-pointer group/name flex items-center gap-3 text-left text-left text-left text-left text-left"><div className="w-10 h-10 rounded-xl bg-zinc-900 overflow-hidden border border-zinc-800 shrink-0 flex items-center justify-center shadow-lg text-left">{client.logoUrl ? <img src={client.logoUrl} alt="" className="w-full h-full object-contain" /> : <Building className="w-5 h-5 text-zinc-700" />}</div><div className="text-left text-left text-left"><div className="text-white font-black text-base leading-tight mb-1 uppercase italic group-hover/name:text-[#ff5351] transition-colors text-left text-left text-left text-left text-left">{client.name}</div><div className="text-zinc-500 text-[10px] font-black uppercase tracking-widest flex items-center gap-2 text-left text-left text-left text-left text-left"><Mail className="w-3.5 h-3.5 text-left text-left text-left" />{client.email}</div></div></div>) }, { header: 'Status', accessor: (client) => <span className={cn("inline-flex items-center gap-2 px-3 py-1 border rounded-full text-[10px] font-black uppercase tracking-widest", client.status === 'confirmed' ? "text-emerald-400 border-emerald-500/30 bg-emerald-500/10" : "text-amber-400 border-amber-500/30 bg-amber-500/10")}>{client.status === 'confirmed' ? '✓ OK, SENHA CRIADA' : '⏳ AGUARDANDO SENHA'}</span> }, { header: 'Membros', align: 'center', accessor: (client) => { const count = getClientTeamCount(client.id!); return count > 0 ? <div className="w-8 h-8 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center text-white text-[10px] font-black shadow-lg italic text-left text-left text-left text-left">{count}</div> : <span className="text-zinc-700 text-xs font-medium text-left text-left text-left text-left text-left">-</span>; } }]} actions={(client) => (<><button onClick={(e) => { e.stopPropagation(); handleOpenTeamView(client); }} className="flex items-center gap-2 px-4 py-2 bg-zinc-800 border border-zinc-700 hover:bg-zinc-700 hover:border-transparent rounded-xl text-zinc-300 hover:text-white transition-all text-[10px] font-black uppercase tracking-widest shadow-lg text-left text-left text-left text-left text-left"><Users className="w-4 h-4 text-[#ff5351] text-left text-left text-left text-left text-left" />Equipe</button><button onClick={(e) => { e.stopPropagation(); handleOpenEditClient(client); }} className="p-2 bg-zinc-800 border border-zinc-700 hover:bg-zinc-700 rounded-xl text-zinc-400 hover:text-white transition-all shadow-lg text-left text-left text-left text-left text-left text-left"><Edit2 className="w-4 h-4 text-left text-left text-left text-left text-left text-left" /></button><button onClick={(e) => { e.stopPropagation(); sendEmailInvite(client.name, client.email); }} disabled={sendingEmail === client.email} className="p-2 bg-zinc-800 border border-zinc-700 hover:bg-[#ff5351] hover:border-transparent rounded-xl text-zinc-300 hover:text-white transition-all disabled:opacity-50 shadow-lg text-left text-left text-left text-left text-left text-left"><Mail className="w-4 h-4 text-left text-left text-left text-left text-left text-left" /></button><button onClick={(e) => { e.stopPropagation(); const inviteLink = `${window.location.origin}/register?email=${encodeURIComponent(client.email)}`; navigator.clipboard.writeText(`Seu conteúdo foi selecionado!\nAcesse pelo link abaixo e crie sua senha:\n\n${inviteLink}`); toast.success('Mensagem de convite copiada!'); }} className="p-2 bg-zinc-800 border border-zinc-700 hover:bg-[#25D366] hover:border-transparent rounded-xl text-zinc-300 hover:text-white transition-all shadow-lg text-left text-left text-left text-left text-left text-left text-left"><ExternalLink className="w-4 h-4 text-left text-left text-left text-left text-left text-left text-left" /></button><button onClick={(e) => { e.stopPropagation(); handleDeleteClient(client.id!, client.email); }} className="p-2 bg-zinc-800/50 hover:bg-red-500/10 rounded-xl text-zinc-600 hover:text-red-500 transition-all shadow-lg text-left text-left text-left text-left text-left text-left text-left text-left text-left"><Trash2 className="w-4 h-4 text-left text-left text-left text-left text-left text-left text-left text-left text-left text-left text-left" /></button></>)} />
         </div>
       )}
     </div>
