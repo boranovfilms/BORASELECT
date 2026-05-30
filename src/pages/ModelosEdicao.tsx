@@ -8,7 +8,7 @@ import {
   MonitorPlay, Image as ImageIcon, Trash2, X, Edit2, ChevronDown
 } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { modelosService, WorkflowModel, Stage } from '../services/modelosService';
+import { modelosService, WorkflowModel, Stage, StageType } from '../services/modelosService';
 import { teamService, TeamMember } from '../services/teamService';
 
 // --- IMPORTS DO DND-KIT PARA O DRAG & DROP ---
@@ -243,6 +243,7 @@ export default function ModelosEdicao() {
     setEditingStage({
       id: `stage_${Date.now()}`,
       name: '',
+      type: 'producao',
       duration: '1 dia',
       assignee: teamMembers[0]?.name || 'Produção',
       requiresApproval: false,
@@ -332,7 +333,7 @@ export default function ModelosEdicao() {
           <button 
             onClick={handleSaveFlow}
             disabled={saving}
-            className="h-12 px-6 rounded-2xl bg-[#ff5351] hover:bg-[#ff5351]/90 text-white font-black uppercase tracking-widest text-[11px] transition-all flex items-center justify-center gap-2 shadow-lg shadow-[#ff5351]/20 disabled:opacity-50"
+            className="h-12 px-6 rounded-2xl bg-[#ff5351] text-white font-black uppercase tracking-widest text-[11px] transition-all flex items-center justify-center gap-2 shadow-lg shadow-[#ff5351]/20 disabled:opacity-50"
           >
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
             Salvar Fluxo
@@ -457,6 +458,29 @@ export default function ModelosEdicao() {
                 <div className="space-y-2">
                   <label className="text-[10px] uppercase font-black tracking-widest text-zinc-500 ml-1">Nome da Etapa</label>
                   <input required autoFocus type="text" placeholder="Ex: Edição Inicial" value={editingStage.name} onChange={e => setEditingStage({...editingStage, name: e.target.value})} className="w-full h-12 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white focus:border-[#ff5351] outline-none" />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] uppercase font-black tracking-widest text-zinc-500 ml-1">Tipo da Etapa</label>
+                  <div className="relative">
+                    <select 
+                      required
+                      value={editingStage.type} 
+                      onChange={e => setEditingStage({...editingStage, type: e.target.value as StageType})}
+                      className="w-full h-12 bg-zinc-800 border border-transparent rounded-xl px-4 text-white focus:border-[#ff5351] outline-none appearance-none cursor-pointer font-bold text-xs"
+                    >
+                      <option value="upload_arquivos">📁 Upload de Arquivos</option>
+                      <option value="aprovacao_admin">✅ Aprovação Admin</option>
+                      <option value="aprovacao_cliente">👤 Aprovação Cliente</option>
+                      <option value="aprovacao_equipe_cliente">👥 Aprovação Equipe do Cliente</option>
+                      <option value="producao">🎬 Produção</option>
+                      <option value="selecao">🎯 Seleção</option>
+                      <option value="revisao">✏️ Revisão de Texto</option>
+                      <option value="programar_postagem">📅 Programar Postagem</option>
+                      <option value="concluido">🏁 Concluído</option>
+                    </select>
+                    <ChevronDown className="w-4 h-4 text-zinc-500 absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  </div>
                 </div>
                 
                 <div className="grid grid-cols-2 gap-4">
