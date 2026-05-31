@@ -78,8 +78,11 @@ export default function NewContentPlan() {
       });
       toast.success('Planejamento salvo!');
       navigate(`/clients/${clientId}`);
-    } catch (error) {
-      toast.error('Erro ao salvar planejamento');
+    } catch (error: any) {
+      console.error('ERRO AO SALVAR:', error);
+      console.error('CÓDIGO:', error?.code);
+      console.error('MENSAGEM:', error?.message);
+      toast.error(`Erro: ${error?.message || 'desconhecido'}`);
     } finally {
       setSaving(false);
     }
