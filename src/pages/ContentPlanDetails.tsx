@@ -10,7 +10,6 @@ import { auth, db } from '../lib/firebase';
 import { contentPlanService, ContentPlan, ContentPost } from '../services/contentPlanService';
 import { teamService, TeamMember } from '../services/teamService';
 import { cn } from '../lib/utils';
-import { format } from 'date-fns';
 
 export default function ContentPlanDetails() {
   const { id: planId } = useParams<{ id: string }>();
@@ -27,6 +26,7 @@ export default function ContentPlanDetails() {
   const [editingText, setEditingText] = useState('');
   const [reprovalComment, setReprovalComment] = useState('');
   const [showReprovalInput, setShowReprovalInput] = useState(false);
+  const [showApprovedInSidebar, setShowApprovedInSidebar] = useState(false);
 
   const user = auth.currentUser;
   const currentEmail = user?.email?.toLowerCase();
@@ -47,10 +47,6 @@ export default function ContentPlanDetails() {
       }
       setPlan(planData);
       
-      if (!selectedPostId && planData.posts.length > 0) {
-        setSelectedPostId(planData.posts[0].id);
-      }
-
       const clientSnap = await getDoc(doc(db, 'clients', planData.clientId));
       if (clientSnap.exists()) {
         setClientEmail(clientSnap.data().email?.toLowerCase() || '');
@@ -58,6 +54,16 @@ export default function ContentPlanDetails() {
 
       const members = await teamService.getClientTeamMembers(planData.clientId);
       setTeamMembers(members);
+
+      // Seleciona o primeiro post não aprovado por padrão
+      if (!selectedPostId) {
+        const firstPending = planData.posts.find(p => p.status !== 'aprovado');
+        if (firstPending) {
+          setSelectedPostId(firstPending.id);
+        } else if (planData.posts.length > 0) {
+          setSelectedPostId(planData.posts[0].id);
+        }
+      }
 
     } catch (error) {
       console.error(error);
@@ -75,18 +81,19 @@ export default function ContentPlanDetails() {
   const selectedPost = plan?.posts.find(p => p.id === selectedPostId);
   const approvedCount = plan?.posts.filter(p => p.status === 'aprovado').length || 0;
   const totalPosts = plan?.posts.length || 0;
+  const allApproved = totalPosts > 0 && approvedCount === totalPosts;
 
   const handleUpdateStatus = async (postId: string, action: 'aprovado' | 'reprovado' | 'editado', comment?: string, newText?: string) => {
     if (!planId || !plan) return;
     setSaving(true);
     try {
-      const allApproved = await contentPlanService.updatePostStatus(planId, postId, action, user, comment, newText);
+      const isFinished = await contentPlanService.updatePostStatus(planId, postId, action, user, comment, newText);
       await loadData();
       
       if (action === 'aprovado') {
         toast.success("Post aprovado!");
         const currentIndex = plan.posts.findIndex(p => p.id === postId);
-        const nextPending = plan.posts.slice(currentIndex + 1).find(p => p.status === 'pendente' || p.status === 'em_revisao');
+        const nextPending = plan.posts.slice(currentIndex + 1).find(p => p.status !== 'aprovado');
         if (nextPending) {
           setTimeout(() => setSelectedPostId(nextPending.id), 300);
         }
@@ -99,7 +106,7 @@ export default function ContentPlanDetails() {
         setIsEditing(false);
       }
 
-      if (allApproved) {
+      if (isFinished) {
         toast.success("Todos os posts aprovados! 🎉");
       }
     } catch (error) {
@@ -125,16 +132,19 @@ export default function ContentPlanDetails() {
 
   const getTypeStyles = (type: string) => {
     const styles: any = {
-      FEED: 'bg-blue-900/50 text-blue-400 border-blue-500/20',
-      REEL: 'bg-purple-900/50 text-purple-400 border-purple-500/20',
-      STORIES: 'bg-emerald-900/50 text-emerald-400 border-emerald-500/20',
-      CARROSSEL: 'bg-orange-900/50 text-orange-400 border-orange-500/20',
-      VIDEO: 'bg-red-900/50 text-red-400 border-red-500/20'
+      FEED: 'bg-blue-900/40 text-blue-400 border-blue-500/20',
+      REEL: 'bg-purple-900/40 text-purple-400 border-purple-500/20',
+      STORIES: 'bg-emerald-900/40 text-emerald-400 border-emerald-500/20',
+      CARROSSEL: 'bg-orange-900/40 text-orange-400 border-orange-500/20',
+      VIDEO: 'bg-red-900/40 text-red-400 border-red-500/20'
     };
     return styles[type] || 'bg-zinc-800 text-zinc-400 border-zinc-700';
   };
 
   if (loading || !plan) return <div className="min-h-[60vh] flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-[#ff5351]" /></div>;
+
+  const pendingPosts = plan.posts.filter(p => p.status !== 'aprovado');
+  const approvedPosts = plan.posts.filter(p => p.status === 'aprovado');
 
   return (
     <div className="max-w-7xl mx-auto text-left">
@@ -161,7 +171,7 @@ export default function ContentPlanDetails() {
         <aside className="w-[280px] bg-[#0e0e0e] border-r border-zinc-800 flex flex-col shrink-0">
           <div className="p-5 border-b border-zinc-800 bg-black/20">
             <div className="flex items-center justify-between mb-3">
-              <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Posts do Planejamento</span>
+              <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Aprovação do Lote</span>
               <span className="text-[10px] font-black text-white">{approvedCount} / {totalPosts}</span>
             </div>
             <div className="h-1 bg-zinc-800 rounded-full overflow-hidden">
@@ -170,41 +180,92 @@ export default function ContentPlanDetails() {
           </div>
 
           <div className="flex-1 overflow-y-auto custom-scrollbar">
-            {plan.posts.map((post) => {
-              const isSelected = selectedPostId === post.id;
-              const isEvaluated = post.status !== 'pendente';
-              return (
-                <button 
-                  key={post.id}
-                  onClick={() => { setSelectedPostId(post.id); setIsEditing(false); setShowReprovalInput(false); }}
-                  className={cn(
-                    "w-full p-5 text-left border-b border-zinc-800/50 transition-all flex items-start gap-4 relative group",
-                    isSelected ? "bg-[#1f1f1f] border-l-4 border-l-[#ff5351]" : "hover:bg-zinc-900/50",
-                    isEvaluated && !isSelected && "opacity-50"
-                  )}
-                >
-                  <div className={cn("w-2 h-2 rounded-full mt-1.5 shrink-0", 
-                    post.status === 'aprovado' ? "bg-emerald-500 shadow-[0_0_8px_#10b981]" : 
-                    post.status === 'reprovado' ? "bg-red-500" : "bg-zinc-600"
-                  )} />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                       <span className={cn("px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter border", getTypeStyles(post.type))}>{post.type}</span>
-                       <span className="text-[9px] font-black text-zinc-500">#{String(post.number).padStart(2, '0')}</span>
-                    </div>
-                    <p className={cn("text-[11px] font-black uppercase leading-tight line-clamp-2", isSelected ? "text-white" : "text-zinc-400 group-hover:text-zinc-200")}>
-                      {post.headline || "Sem título"}
-                    </p>
-                    <p className="text-[9px] text-zinc-600 font-bold mt-2 uppercase">{post.publishDate}</p>
+            {/* GRUPO 1: PENDENTES E REPROVADOS */}
+            {pendingPosts.map((post) => (
+              <button 
+                key={post.id}
+                onClick={() => { setSelectedPostId(post.id); setIsEditing(false); setShowReprovalInput(false); }}
+                className={cn(
+                  "w-full p-5 text-left border-b border-zinc-800/50 transition-all flex items-start gap-4 relative group",
+                  selectedPostId === post.id ? "bg-[#1f1f1f] border-l-4 border-l-[#ff5351]" : "hover:bg-zinc-900/50"
+                )}
+              >
+                <div className={cn("w-2 h-2 rounded-full mt-1.5 shrink-0", 
+                  post.status === 'reprovado' ? "bg-red-500" : "bg-zinc-600"
+                )} />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                     <span className={cn("px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter border", getTypeStyles(post.type))}>{post.type}</span>
+                     <span className="text-[9px] font-black text-zinc-500">#{String(post.number).padStart(2, '0')}</span>
                   </div>
+                  <p className={cn("text-[11px] font-black uppercase leading-tight line-clamp-2", selectedPostId === post.id ? "text-white" : "text-zinc-400 group-hover:text-zinc-200")}>
+                    {post.headline || "Sem título"}
+                  </p>
+                </div>
+              </button>
+            ))}
+
+            {/* SEPARADOR E GRUPO 2: APROVADOS */}
+            {approvedPosts.length > 0 && (
+              <div className="mt-2">
+                <button 
+                  onClick={() => setShowApprovedInSidebar(!showApprovedInSidebar)}
+                  className="w-full p-3 flex items-center justify-between text-zinc-600 hover:text-zinc-400 transition-colors"
+                >
+                  <span className="text-[9px] font-black uppercase tracking-widest flex items-center gap-2">
+                    <Check className="w-3 h-3" /> Aprovados ({approvedPosts.length})
+                  </span>
+                  {showApprovedInSidebar ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
                 </button>
-              );
-            })}
+
+                {showApprovedInSidebar && (
+                  <div className="animate-in slide-in-from-top-2 duration-200">
+                    {approvedPosts.map((post) => (
+                      <button 
+                        key={post.id}
+                        onClick={() => { setSelectedPostId(post.id); setIsEditing(false); setShowReprovalInput(false); }}
+                        className={cn(
+                          "w-full p-5 text-left border-b border-zinc-800/50 transition-all flex items-start gap-4 relative group opacity-50",
+                          selectedPostId === post.id ? "bg-[#1f1f1f] border-l-4 border-l-[#ff5351] opacity-100" : "hover:bg-zinc-900/50"
+                        )}
+                      >
+                        <div className="w-2 h-2 rounded-full mt-1.5 shrink-0 bg-emerald-500 shadow-[0_0_8px_#10b981]" />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                             <span className={cn("px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter border", getTypeStyles(post.type))}>{post.type}</span>
+                             <span className="text-[9px] font-black text-zinc-500">#{String(post.number).padStart(2, '0')}</span>
+                          </div>
+                          <p className={cn("text-[11px] font-black uppercase leading-tight line-clamp-2", selectedPostId === post.id ? "text-white" : "text-zinc-400 group-hover:text-zinc-200")}>
+                            {post.headline || "Sem título"}
+                          </p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </aside>
 
         <main className="flex-1 flex flex-col bg-[#121212] overflow-hidden">
-          {selectedPost ? (
+          {allApproved ? (
+            <div className="flex-1 flex flex-col items-center justify-center text-center p-10 space-y-6 animate-in zoom-in-95 duration-500">
+              <div className="w-20 h-20 bg-emerald-500/10 border border-emerald-500/20 rounded-full flex items-center justify-center text-emerald-500 shadow-[0_0_40px_rgba(16,185,129,0.1)]">
+                <CheckCircle2 className="w-12 h-12" />
+              </div>
+              <div className="space-y-2">
+                <h3 className="text-4xl font-black text-white uppercase italic tracking-tighter">Planejamento Aprovado!</h3>
+                <p className="text-zinc-400 text-sm max-w-sm mx-auto font-medium">Todos os {totalPosts} posts foram aprovados por você. O administrador foi notificado e a produção já pode começar.</p>
+              </div>
+              <button 
+                onClick={() => navigate(`/clients/${plan.clientId}`)}
+                className="h-14 px-10 bg-[#ff5351] text-white rounded-2xl font-black uppercase tracking-widest text-xs hover:brightness-110 transition-all shadow-xl shadow-[#ff5351]/20"
+              >
+                Voltar para o Cliente
+              </button>
+            </div>
+          ) : selectedPost ? (
             <>
               <header className="p-6 border-b border-zinc-800 bg-black/10 flex items-center justify-between shrink-0">
                 <div className="flex items-center gap-4">
@@ -225,21 +286,21 @@ export default function ContentPlanDetails() {
               </header>
 
               <div className="flex-1 overflow-y-auto p-10 custom-scrollbar space-y-10">
-                <section className="space-y-3">
-                  <label className="text-[10px] font-black text-[#ff5351] tracking-[0.3em] uppercase">Headline</label>
+                <section className="space-y-3 text-left">
+                  <label className="text-[10px] font-black text-[#ff5351] tracking-[0.3em] uppercase block">Headline</label>
                   <h3 className="text-4xl font-black text-white uppercase italic tracking-tighter leading-tight">
                     {selectedPost.headline}
                   </h3>
                 </section>
 
-                <section className="space-y-3">
-                  <label className="text-[10px] font-black text-[#ff5351] tracking-[0.3em] uppercase">Legenda</label>
+                <section className="space-y-3 text-left">
+                  <label className="text-[10px] font-black text-[#ff5351] tracking-[0.3em] uppercase block">Legenda</label>
                   <div 
                     contentEditable={isEditing}
                     onInput={(e) => setEditingText(e.currentTarget.innerText)}
                     className={cn(
                       "bg-[#1a1a1a] border rounded-xl p-6 text-xs text-white leading-relaxed font-medium transition-all outline-none",
-                      isEditing ? "border-[#ff5351]" : "border-zinc-800"
+                      isEditing ? "border-[#ff5351] ring-4 ring-[#ff5351]/10" : "border-zinc-800"
                     )}
                     style={{ whiteSpace: 'pre-wrap' }}
                   >
@@ -253,20 +314,20 @@ export default function ContentPlanDetails() {
                   )}
                 </section>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 text-left">
                   <section className="space-y-3">
-                    <label className="text-[10px] font-black text-[#ff5351] tracking-[0.3em] uppercase flex items-center gap-2"><Target className="w-3 h-3" /> Chamada para Ação</label>
+                    <label className="text-[10px] font-black text-[#ff5351] tracking-[0.3em] uppercase flex items-center gap-2 block"><Target className="w-3 h-3" /> Chamada para Ação</label>
                     <p className="text-white font-black uppercase text-sm">{selectedPost.cta || "-"}</p>
                   </section>
                   <section className="space-y-3">
-                    <label className="text-[10px] font-black text-[#ff5351] tracking-[0.3em] uppercase flex items-center gap-2"><Hash className="w-3 h-3" /> Hashtags</label>
+                    <label className="text-[10px] font-black text-[#ff5351] tracking-[0.3em] uppercase flex items-center gap-2 block"><Hash className="w-3 h-3" /> Hashtags</label>
                     <p className="text-white font-black uppercase text-xs">{selectedPost.hashtags || "-"}</p>
                   </section>
                 </div>
 
                 {selectedPost.roteiro && (
-                  <section className="space-y-3">
-                    <label className="text-[10px] font-black text-[#ff5351] tracking-[0.3em] uppercase flex items-center gap-2"><Zap className="w-3 h-3" /> Roteiro</label>
+                  <section className="space-y-3 text-left">
+                    <label className="text-[10px] font-black text-[#ff5351] tracking-[0.3em] uppercase flex items-center gap-2 block"><Zap className="w-3 h-3" /> Roteiro</label>
                     <div className="bg-black/30 border border-zinc-800 rounded-xl p-6 text-zinc-400 text-xs leading-relaxed whitespace-pre-wrap italic font-medium">
                        {selectedPost.roteiro}
                     </div>
@@ -274,8 +335,8 @@ export default function ContentPlanDetails() {
                 )}
 
                 {showReprovalInput && (
-                  <section className="space-y-3 p-6 border-2 border-red-500/20 bg-red-500/5 rounded-2xl animate-in slide-in-from-bottom-4">
-                    <label className="text-[10px] font-black text-red-500 tracking-[0.3em] uppercase">Motivo do Ajuste</label>
+                  <section className="space-y-3 p-6 border-2 border-red-500/20 bg-red-500/5 rounded-2xl animate-in slide-in-from-bottom-4 text-left">
+                    <label className="text-[10px] font-black text-red-500 tracking-[0.3em] uppercase block">Motivo do Ajuste</label>
                     <textarea 
                       value={reprovalComment}
                       onChange={(e) => setReprovalComment(e.target.value)}
@@ -297,19 +358,19 @@ export default function ContentPlanDetails() {
                       <button 
                         onClick={() => handleUpdateStatus(selectedPost.id, 'aprovado')}
                         disabled={saving}
-                        className="h-12 px-8 bg-[#ff5351] text-white rounded-xl font-black uppercase tracking-widest text-[11px] hover:brightness-110 transition-all flex items-center gap-2 shadow-xl shadow-[#ff5351]/20 disabled:opacity-50"
+                        className="h-12 px-8 bg-[#ff5351] text-white rounded-xl font-black uppercase tracking-widest text-[11px] hover:brightness-110 transition-all flex items-center justify-center gap-2 shadow-lg shadow-[#ff5351]/20 disabled:opacity-50"
                       >
                         <Check className="w-4 h-4" /> Aprovar Post
                       </button>
                       <button 
                         onClick={() => { setShowReprovalInput(true); setIsEditing(false); }}
-                        className="h-12 px-6 bg-zinc-800 border border-red-500/20 text-red-400 rounded-xl font-black uppercase tracking-widest text-[10px] hover:bg-zinc-700 transition-all flex items-center gap-2"
+                        className="h-12 px-6 bg-zinc-800 border border-red-500/20 text-red-400 rounded-xl font-black uppercase tracking-widest text-[10px] hover:bg-zinc-700 transition-all flex items-center justify-center gap-2"
                       >
                         <X className="w-4 h-4" /> Reprovar
                       </button>
                       <button 
                         onClick={() => { setIsEditing(true); setEditingText(selectedPost.caption); setShowReprovalInput(false); }}
-                        className="h-12 px-6 bg-zinc-800 text-zinc-400 rounded-xl font-black uppercase tracking-widest text-[10px] hover:text-white transition-all flex items-center gap-2"
+                        className="h-12 px-6 bg-zinc-800 text-zinc-400 rounded-xl font-black uppercase tracking-widest text-[10px] hover:text-white transition-all flex items-center gap-2 border border-zinc-700"
                       >
                         <Edit3 className="w-4 h-4" /> Sugerir Edição
                       </button>
@@ -317,15 +378,13 @@ export default function ContentPlanDetails() {
                   )}
                 </div>
                 <div className="text-[10px] font-black text-zinc-600 uppercase tracking-widest">
-                   {approvedCount} de {totalPosts} aprovados
+                   Post {selectedPost.status}
                 </div>
               </footer>
             </>
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center text-center p-10 space-y-4">
-              <CheckCircle2 className="w-12 h-12 text-zinc-800" />
-              <h3 className="text-xl font-black text-white uppercase italic tracking-tighter">Planejamento Concluído</h3>
-              <p className="text-zinc-500 text-xs max-w-xs mx-auto uppercase font-bold tracking-widest leading-relaxed">Você já avaliou todos os posts deste lote. Aguarde o início da produção.</p>
+              <Loader2 className="w-8 h-8 animate-spin text-zinc-800" />
             </div>
           )}
         </main>
