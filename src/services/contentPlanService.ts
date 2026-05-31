@@ -58,7 +58,7 @@ export function parsePostsFromText(text: string): ContentPost[] {
   const posts: ContentPost[] = [];
   
   // Detecta blocos que começam com CONTEÚDO N
-  const blocks = text.split(/(?=📅\s*\*?\*?CONTEÚDO\s+\d+)/i);
+  const blocks = text.split(/(?=📅\s*\\*?\\*?CONTEÚDO\\s+\\d+)/i);
   
   blocks.forEach((block, index) => {
     if (!block.trim()) return;
@@ -102,11 +102,11 @@ export function parsePostsFromText(text: string): ContentPost[] {
     
     // Extrai roteiro (para Reels)
     const roteiroMatch = block.match(/Roteiro[^:]*:\s*\n([\s\S]*?)(?=\n✍️|\nLegenda|$)/i);
-    const roteiro = roteiroMatch ? roteiroMatch[1].trim().replace(/\*/g, '') : undefined;
+    const roteiro = roteiroMatch ? roteiroMatch[1].trim().replace(/\*/g, '') : null;
     
     // Extrai função estratégica
     const funcaoMatch = block.match(/Função estratégica\s*\n\s*(.+)/i);
-    const strategicFunction = funcaoMatch ? funcaoMatch[1].trim().replace(/\*/g, '') : undefined;
+    const strategicFunction = funcaoMatch ? funcaoMatch[1].trim().replace(/\*/g, '') : null;
     
     posts.push({
       id: `post_${number}_${Date.now()}_${index}`,
@@ -135,7 +135,12 @@ export const contentPlanService = {
       name: data.name,
       monthReference: data.monthReference || '',
       currentText: data.currentText || '',
-      posts: data.posts || [],
+      posts: (data.posts || []).map(post => ({
+        ...post,
+        roteiro: post.roteiro ?? null,
+        strategicFunction: post.strategicFunction ?? null,
+        comment: (post as any).comment ?? null,
+      })),
       status: data.status || 'rascunho',
       history: [],
       validations: [],
