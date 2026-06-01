@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic';
 import { useState, useEffect, useMemo } from 'react';
 import { 
   Plus, Calendar, Image as ImageIcon, Link as LinkIcon, 
-  LayoutGrid, CheckCircle2, Trash2, GitBranch, User, Filter, X, ChevronDown, Search, FileText, Clock, ChevronRight
+  LayoutGrid, CheckCircle2, Trash2, GitBranch, User, Filter, X, ChevronDown, Search, FileText, Clock, ChevronRight, Eye
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
@@ -125,10 +125,31 @@ export default function Projetos() {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'Em Seleção': return 'text-[#ff5351] border-[#ff5351] bg-[#ff5351]/10';
-      case 'Finalizado': case 'aprovado': return 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10';
+      case 'Finalizado': case 'concluido': return 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10';
       case 'Aguardando Cliente': case 'aguardando_cliente': return 'text-amber-400 border-amber-500/30 bg-amber-500/10';
+      case 'aprovado': return 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10';
+      case 'em_revisao': return 'text-red-400 border-red-500/30 bg-red-500/10';
+      case 'em_producao': return 'text-violet-400 border-violet-500/30 bg-violet-500/10';
+      case 'devolvido': return 'text-red-400 border-red-500/30 bg-red-500/10';
+      case 'rascunho': return 'text-zinc-400 border-zinc-700 bg-zinc-800/50';
       default: return 'text-zinc-500 border-zinc-700 bg-zinc-800/50';
     }
+  };
+
+  const getStatusLabel = (status: string) => {
+    const labels: Record<string, string> = {
+      'aguardando_cliente': 'Aguardando Cliente',
+      'aprovado': 'Aprovado',
+      'em_revisao': 'Em Revisão',
+      'em_producao': 'Em Produção',
+      'concluido': 'Concluído',
+      'devolvido': 'Devolvido',
+      'rascunho': 'Rascunho',
+      'Em Seleção': 'Em Seleção',
+      'Finalizado': 'Finalizado',
+      'Aguardando Cliente': 'Aguardando Cliente'
+    };
+    return labels[status] || status.replace(/_/g, ' ');
   };
 
   const getTypeBadge = (type: string) => {
@@ -157,6 +178,109 @@ export default function Projetos() {
       return matchType && matchSearch;
     });
   }, [unifiedItems, selectedType, searchTerm]);
+
+  // Renderiza coluna de progresso para visão cliente
+  const renderProgresso = (item: any) => {
+    const status = item.status;
+    
+    if (status === 'em_producao') {
+      const faseAtual = 'EDIÇÃO';
+      const porcentagem = 65;
+      return (
+        <div className="text-left min-w-[120px]">
+          <p className="text-[9px] font-black uppercase tracking-widest text-[#ff5351] mb-1">FASE ATUAL: {faseAtual}</p>
+          <div className="w-full h-1 bg-zinc-800 rounded-full overflow-hidden">
+            <div className="h-full bg-[#ff5351] rounded-full transition-all duration-500" style={{ width: `${porcentagem}%` }} />
+          </div>
+          <p className="text-[9px] font-black text-zinc-500 mt-1">{porcentagem}%</p>
+        </div>
+      );
+    }
+    
+    if (status === 'concluido') {
+      return (
+        <div className="text-left min-w-[120px]">
+          <div className="w-full h-1 bg-zinc-800 rounded-full overflow-hidden">
+            <div className="h-full bg-emerald-500 rounded-full" style={{ width: '100%' }} />
+          </div>
+          <p className="text-[9px] font-black text-emerald-500 mt-1 uppercase tracking-widest">CONCLUÍDO</p>
+        </div>
+      );
+    }
+    
+    if (status === 'aprovado') {
+      return <span className="text-zinc-600 text-sm">—</span>;
+    }
+    
+    return <span className="text-zinc-600 text-sm">—</span>;
+  };
+
+  // Renderiza botão de controle para visão cliente
+  const renderControle = (item: any) => {
+    const status = item.status;
+    
+    if (status === 'aguardando_cliente' || status === 'rascunho') {
+      return (
+        <button 
+          onClick={() => navigate(item.route)}
+          className="flex items-center gap-2 px-4 py-2 bg-[#ff5351] text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:brightness-110 transition-all"
+        >
+          Revisar e Aprovar
+          <ChevronRight className="w-3 h-3" />
+        </button>
+      );
+    }
+    
+    if (status === 'devolvido') {
+      return (
+        <div className="flex items-center gap-3">
+          <span className="text-[9px] font-black uppercase tracking-widest text-zinc-600">Aguardando ajustes</span>
+          <button 
+            onClick={() => navigate(item.route)}
+            className="p-2 bg-zinc-900 border border-zinc-800 rounded-xl hover:border-[#ff5351] text-zinc-500 hover:text-white transition-all"
+          >
+            <Eye className="w-4 h-4" />
+          </button>
+        </div>
+      );
+    }
+    
+    // aprovado, em_revisao, em_producao, concluido
+    return (
+      <button 
+        onClick={() => navigate(item.route)}
+        className="p-2 bg-zinc-900 border border-zinc-800 rounded-xl hover:border-[#ff5351] text-zinc-500 hover:text-white transition-all"
+      >
+        <Eye className="w-4 h-4" />
+      </button>
+    );
+  };
+
+  // Determina se a linha é clicável
+  const getRowClick = (item: any) => {
+    if (item.status === 'aguardando_cliente') {
+      return () => navigate(item.route);
+    }
+    return undefined;
+  };
+
+  // Badge de status com bolinha pulsante para aguardando_cliente
+  const renderStatusBadge = (status: string) => {
+    const isPulsing = status === 'aguardando_cliente';
+    return (
+      <div className="flex items-center justify-center gap-2">
+        {isPulsing && (
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+          </span>
+        )}
+        <span className={cn("px-3 py-1 rounded-full border text-[9px] font-black uppercase tracking-widest", getStatusColor(status))}>
+          {getStatusLabel(status)}
+        </span>
+      </div>
+    );
+  };
 
   if (isModalOpen) {
     return <NewProjectModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onSuccess={checkUserRoleAndLoad} />;
@@ -271,7 +395,10 @@ export default function Projetos() {
         ) : (
           <DataTable 
             data={filteredClientItems}
-            onRowClick={(item) => navigate(item.route)}
+            onRowClick={(item) => {
+              const clickHandler = getRowClick(item);
+              if (clickHandler) clickHandler();
+            }}
             emptyMessage="Nenhuma entrega encontrada."
             columns={[
               {
@@ -286,7 +413,12 @@ export default function Projetos() {
                 )
               },
               { header: 'Tipo', accessor: (item) => getTypeBadge(item.type), align: 'center' },
-              { header: 'Status', accessor: (item) => <span className={cn("px-3 py-1 rounded-full border text-[9px] font-black uppercase tracking-widest", getStatusColor(item.status))}>{item.status.replace(/_/g, ' ')}</span>, align: 'center' },
+              { header: 'Status', accessor: (item) => renderStatusBadge(item.status), align: 'center' },
+              { 
+                header: 'Progresso', 
+                accessor: (item) => renderProgresso(item),
+                align: 'center'
+              },
               {
                 header: 'Última Atualização',
                 accessor: (item) => {
@@ -300,12 +432,7 @@ export default function Projetos() {
                 }
               }
             ]}
-            actions={(item) => (
-              <button className="flex items-center gap-2 px-4 py-2 bg-zinc-900 border border-zinc-800 rounded-xl text-[10px] font-black uppercase tracking-widest text-zinc-400 hover:text-white hover:border-[#ff5351] transition-all">
-                Abrir Entrega
-                <ChevronRight className="w-3 h-3 text-[#ff5351]" />
-              </button>
-            )}
+            actions={(item) => renderControle(item)}
           />
         )}
       </div>
