@@ -28,6 +28,8 @@ export default function ContentPlanDetails() {
   const [showReprovalInput, setShowReprovalInput] = useState(false);
   const [showApprovedInSidebar, setShowApprovedInSidebar] = useState(false);
   const [showCompletionModal, setShowCompletionModal] = useState(false);
+  const [showReprovalModal, setShowReprovalModal] = useState(false);
+  const [reprovalType, setReprovalType] = useState<'correcao' | 'descartar' | null>(null);
 
   const user = auth.currentUser;
   const currentEmail = user?.email?.toLowerCase();
@@ -82,20 +84,33 @@ export default function ContentPlanDetails() {
   const selectedPost = plan?.posts.find(p => p.id === selectedPostId);
   const approvedCount = plan?.posts.filter(p => p.status === 'aprovado').length || 0;
   const reprovedCount = plan?.posts.filter(p => p.status === 'reprovado').length || 0;
+  const discardedCount = plan?.posts.filter(p => p.status === 'descartado').length || 0;
   const totalPosts = plan?.posts.length || 0;
-  const allApproved = totalPosts > 0 && approvedCount === totalPosts;
 
   const handleUpdateStatus = async (postId: string, action: 'aprovado' | 'reprovado' | 'editado', comment?: string, newText?: string) => {
     if (!planId || !plan) return;
     setSaving(true);
     try {
-      const isFinished = await contentPlanService.updatePostStatus(planId, postId, action, user, comment, newText);
-      await loadData();
+      await contentPlanService.updatePostStatus(planId, postId, action, user, comment, newText);
+      
+      const updatedPlan = await contentPlanService.getPlanById(planId);
+      if (updatedPlan) {
+        setPlan(updatedPlan);
+        const allEvaluated = updatedPlan.posts.every(p => 
+          p.status === 'aprovado' || p.status === 'reprovado' || p.status === 'descartado'
+        );
+        if (allEvaluated) {
+          setShowCompletionModal(true);
+          await contentPlanService.updateStatus(planId, 'aprovado');
+        }
+      }
       
       if (action === 'aprovado') {
         toast.success("Post aprovado!");
         const currentIndex = plan.posts.findIndex(p => p.id === postId);
-        const nextPending = plan.posts.slice(currentIndex + 1).find(p => p.status !== 'aprovado');
+        const nextPending = plan.posts.slice(currentIndex + 1).find(p => 
+          p.status !== 'aprovado' && p.status !== 'reprovado' && p.status !== 'descartado'
+        );
         if (nextPending) {
           setTimeout(() => setSelectedPostId(nextPending.id), 300);
         }
@@ -107,12 +122,45 @@ export default function ContentPlanDetails() {
         toast.success("Edição salva!");
         setIsEditing(false);
       }
-
-      if (isFinished) {
-        setShowCompletionModal(true);
-      }
     } catch (error) {
       toast.error("Erro ao atualizar status");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleConfirmReproval = async () => {
+    if (!reprovalType || !selectedPostId || !planId || !plan) return;
+    setSaving(true);
+    try {
+      const action = reprovalType === 'descartar' ? 'descartado' : 'reprovado';
+      await contentPlanService.updatePostStatus(
+        planId, 
+        selectedPostId, 
+        action as any,
+        auth.currentUser,
+        reprovalComment
+      );
+      
+      const updatedPlan = await contentPlanService.getPlanById(planId);
+      if (updatedPlan) {
+        setPlan(updatedPlan);
+        const allEvaluated = updatedPlan.posts.every(p => 
+          p.status === 'aprovado' || p.status === 'reprovado' || p.status === 'descartado'
+        );
+        if (allEvaluated) {
+          setShowCompletionModal(true);
+          await contentPlanService.updateStatus(planId, 'aprovado');
+        }
+      }
+      
+      setShowReprovalModal(false);
+      setReprovalType(null);
+      setReprovalComment('');
+      
+      loadData();
+    } catch (error) {
+      toast.error('Erro ao reprovar post');
     } finally {
       setSaving(false);
     }
@@ -143,10 +191,21 @@ export default function ContentPlanDetails() {
     return styles[type] || 'bg-zinc-800 text-zinc-400 border-zinc-700';
   };
 
+  const getStatusDot = (status: string) => {
+    switch (status) {
+      case 'reprovado': return 'bg-red-500';
+      case 'descartado': return 'bg-red-600';
+      default: return 'bg-zinc-600';
+    }
+  };
+
   if (loading || !plan) return <div className="min-h-[60vh] flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-[#ff5351]" /></div>;
 
-  const pendingPosts = plan.posts.filter(p => p.status !== 'aprovado');
+  const pendingPosts = plan.posts.filter(p => 
+    p.status !== 'aprovado' && p.status !== 'reprovado' && p.status !== 'descartado'
+  );
   const approvedPosts = plan.posts.filter(p => p.status === 'aprovado');
+  const reprovedOrDiscardedPosts = plan.posts.filter(p => p.status === 'reprovado' || p.status === 'descartado');
 
   return (
     <div className="max-w-7xl mx-auto text-left relative">
@@ -182,7 +241,7 @@ export default function ContentPlanDetails() {
           </div>
 
           <div className="flex-1 overflow-y-auto custom-scrollbar">
-            {/* GRUPO 1: PENDENTES E REPROVADOS */}
+            {/* GRUPO 1: PENDENTES */}
             {pendingPosts.map((post) => (
               <button 
                 key={post.id}
@@ -192,9 +251,7 @@ export default function ContentPlanDetails() {
                   selectedPostId === post.id ? "bg-[#1f1f1f] border-l-4 border-l-[#ff5351]" : "hover:bg-zinc-900/50"
                 )}
               >
-                <div className={cn("w-2 h-2 rounded-full mt-1.5 shrink-0", 
-                  post.status === 'reprovado' ? "bg-red-500" : "bg-zinc-600"
-                )} />
+                <div className={cn("w-2 h-2 rounded-full mt-1.5 shrink-0", getStatusDot(post.status))} />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
                      <span className={cn("px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter border", getTypeStyles(post.type))}>{post.type}</span>
@@ -247,6 +304,50 @@ export default function ContentPlanDetails() {
                 )}
               </div>
             )}
+
+            {/* GRUPO 3: REPROVADOS E DESCARTADOS */}
+            {reprovedOrDiscardedPosts.length > 0 && (
+              <div className="mt-2">
+                <button 
+                  onClick={() => setShowApprovedInSidebar(!showApprovedInSidebar)}
+                  className="w-full p-3 flex items-center justify-between text-zinc-600 hover:text-zinc-400 transition-colors"
+                >
+                  <span className="text-[9px] font-black uppercase tracking-widest flex items-center gap-2">
+                    <X className="w-3 h-3" /> Reprovados/Descartados ({reprovedOrDiscardedPosts.length})
+                  </span>
+                  {showApprovedInSidebar ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                </button>
+
+                {showApprovedInSidebar && (
+                  <div className="animate-in slide-in-from-top-2 duration-200">
+                    {reprovedOrDiscardedPosts.map((post) => (
+                      <button 
+                        key={post.id}
+                        onClick={() => { setSelectedPostId(post.id); setIsEditing(false); setShowReprovalInput(false); }}
+                        className={cn(
+                          "w-full p-5 text-left border-b border-zinc-800/50 transition-all flex items-start gap-4 relative group opacity-40",
+                          selectedPostId === post.id ? "bg-[#1f1f1f] border-l-4 border-l-[#ff5351] opacity-100" : "hover:bg-zinc-900/50"
+                        )}
+                      >
+                        <div className="w-2 h-2 rounded-full mt-1.5 shrink-0 bg-red-600" />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                             <span className={cn("px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter border", getTypeStyles(post.type))}>{post.type}</span>
+                             <span className="text-[9px] font-black text-zinc-500">#{String(post.number).padStart(2, '0')}</span>
+                             {post.status === 'descartado' && (
+                               <span className="px-1.5 py-0.5 rounded text-[7px] font-black uppercase tracking-tighter bg-red-500/20 text-red-400 border border-red-500/20">✕ DESCARTADO</span>
+                             )}
+                          </div>
+                          <p className={cn("text-[11px] font-black uppercase leading-tight line-clamp-2 line-through", selectedPostId === post.id ? "text-white" : "text-zinc-500 group-hover:text-zinc-300")}>
+                            {post.headline || "Sem título"}
+                          </p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </aside>
 
@@ -262,6 +363,7 @@ export default function ContentPlanDetails() {
                    <span className={cn("px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest border ml-2", 
                      selectedPost.status === 'aprovado' ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" : 
                      selectedPost.status === 'reprovado' ? "bg-red-500/10 text-red-500 border-red-500/20" : 
+                     selectedPost.status === 'descartado' ? "bg-red-600/10 text-red-400 border-red-600/20" :
                      selectedPost.status === 'em_revisao' ? "bg-amber-500/10 text-amber-400 border-amber-500/20" : "bg-zinc-800 text-zinc-500 border-zinc-700"
                    )}>{selectedPost.status}</span>
                 </div>
@@ -349,7 +451,7 @@ export default function ContentPlanDetails() {
                         <Check className="w-4 h-4" /> Aprovar Post
                       </button>
                       <button 
-                        onClick={() => { setShowReprovalInput(true); setIsEditing(false); }}
+                        onClick={() => { setShowReprovalModal(true); setIsEditing(false); }}
                         className="h-12 px-6 bg-zinc-800 border border-red-500/20 text-red-400 rounded-xl font-black uppercase tracking-widest text-[10px] hover:bg-zinc-700 transition-all flex items-center justify-center gap-2"
                       >
                         <X className="w-4 h-4" /> Reprovar
@@ -400,7 +502,7 @@ export default function ContentPlanDetails() {
               </div>
               <div className="bg-[#121212] border border-zinc-800 rounded-xl p-4 text-center">
                 <div className="text-3xl font-black italic text-red-400 mb-1">
-                  {plan.posts.filter(p => p.status === 'reprovado').length}
+                  {plan.posts.filter(p => p.status === 'reprovado' || p.status === 'descartado').length}
                 </div>
                 <div className="text-[9px] font-black uppercase tracking-widest text-red-800">Reprovados</div>
               </div>
@@ -413,10 +515,10 @@ export default function ContentPlanDetails() {
               />
             </div>
 
-            {plan.posts.filter(p => p.status === 'reprovado').length > 0 ? (
+            {plan.posts.filter(p => p.status === 'reprovado' || p.status === 'descartado').length > 0 ? (
               <div className="mb-6 text-center">
                 <span className="inline-flex items-center gap-2 px-3 py-1 bg-red-500/10 border border-red-500/20 rounded-full text-red-400 text-[9px] font-black uppercase tracking-widest mb-3">
-                  ⚠ {plan.posts.filter(p => p.status === 'reprovado').length} posts precisam de revisão
+                  ⚠ {plan.posts.filter(p => p.status === 'reprovado' || p.status === 'descartado').length} posts precisam de revisão
                 </span>
                 <p className="text-zinc-500 text-xs leading-relaxed">
                   O redator foi notificado sobre os posts reprovados e irá realizar os ajustes. 
@@ -441,6 +543,98 @@ export default function ContentPlanDetails() {
             >
               OK, Entendido
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE REPROVAÇÃO */}
+      {showReprovalModal && selectedPost && (
+        <div className="fixed inset-0 z-[500] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setShowReprovalModal(false)} />
+          <div className="relative bg-[#1a1a1a] border border-zinc-800 rounded-[20px] p-8 w-full max-w-md animate-in zoom-in-95 duration-200">
+            
+            <h3 className="text-lg font-black uppercase italic text-white mb-1">
+              O que deseja fazer?
+            </h3>
+            <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-6">
+              Post {selectedPost.number} — {selectedPost.headline}
+            </p>
+
+            <div className="space-y-3 mb-6">
+              
+              <button
+                onClick={() => setReprovalType('correcao')}
+                className={cn(
+                  "w-full p-4 rounded-2xl border text-left transition-all",
+                  reprovalType === 'correcao' 
+                    ? "bg-amber-500/10 border-amber-500/30" 
+                    : "bg-zinc-900 border-zinc-800 hover:border-zinc-600"
+                )}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400 text-sm">✎</div>
+                  <div>
+                    <p className="text-white font-black uppercase text-xs">Solicitar Correção</p>
+                    <p className="text-zinc-500 text-[10px] mt-0.5">
+                      A redatora ajusta o texto conforme sua orientação
+                    </p>
+                  </div>
+                </div>
+              </button>
+
+              <button
+                onClick={() => setReprovalType('descartar')}
+                className={cn(
+                  "w-full p-4 rounded-2xl border text-left transition-all",
+                  reprovalType === 'descartar' 
+                    ? "bg-red-500/10 border-red-500/30" 
+                    : "bg-zinc-900 border-zinc-800 hover:border-zinc-600"
+                )}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-xl bg-red-500/20 border border-red-500/30 flex items-center justify-center text-red-400 text-sm">✕</div>
+                  <div>
+                    <p className="text-white font-black uppercase text-xs">Não Usar Este Post</p>
+                    <p className="text-zinc-500 text-[10px] mt-0.5">
+                      A redatora cria um novo post para substituir este
+                    </p>
+                  </div>
+                </div>
+              </button>
+            </div>
+
+            {reprovalType && (
+              <div className="space-y-3 animate-in fade-in duration-200">
+                <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500">
+                  {reprovalType === 'correcao' ? 'O que precisa ser corrigido?' : 'Motivo do descarte (opcional)'}
+                </label>
+                <textarea
+                  value={reprovalComment}
+                  onChange={e => setReprovalComment(e.target.value)}
+                  rows={3}
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-4 text-white text-sm focus:border-[#ff5351] outline-none resize-none"
+                  placeholder={reprovalType === 'correcao' 
+                    ? "Ex: O tom está muito formal, precisa ser mais direto..." 
+                    : "Ex: Tema já foi abordado recentemente..."}
+                />
+              </div>
+            )}
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => { setShowReprovalModal(false); setReprovalType(null); setReprovalComment(''); }}
+                className="flex-1 h-11 bg-zinc-900 border border-zinc-800 text-zinc-500 font-black uppercase tracking-widest text-[9px] rounded-xl hover:text-white transition-all"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => handleConfirmReproval()}
+                disabled={!reprovalType}
+                className="flex-1 h-11 bg-[#ff5351] text-white font-black uppercase tracking-widest text-[9px] rounded-xl hover:brightness-110 transition-all disabled:opacity-30"
+              >
+                Confirmar
+              </button>
+            </div>
           </div>
         </div>
       )}
