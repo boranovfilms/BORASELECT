@@ -142,9 +142,23 @@ export default function ContentPlanDetails() {
         reprovalComment
       );
       
+      setShowReprovalModal(false);
+      setReprovalType(null);
+      setReprovalComment('');
+      
+      await loadData();
+      
       const updatedPlan = await contentPlanService.getPlanById(planId);
       if (updatedPlan) {
         setPlan(updatedPlan);
+        
+        const nextPending = updatedPlan.posts.find(p => 
+          p.status === 'pendente' || p.status === 'em_revisao'
+        );
+        if (nextPending) {
+          setSelectedPostId(nextPending.id);
+        }
+        
         const allEvaluated = updatedPlan.posts.every(p => 
           p.status === 'aprovado' || p.status === 'reprovado' || p.status === 'descartado'
         );
@@ -153,12 +167,6 @@ export default function ContentPlanDetails() {
           await contentPlanService.updateStatus(planId, 'aprovado');
         }
       }
-      
-      setShowReprovalModal(false);
-      setReprovalType(null);
-      setReprovalComment('');
-      
-      loadData();
     } catch (error) {
       toast.error('Erro ao reprovar post');
     } finally {
@@ -206,6 +214,12 @@ export default function ContentPlanDetails() {
   );
   const approvedPosts = plan.posts.filter(p => p.status === 'aprovado');
   const reprovedOrDiscardedPosts = plan.posts.filter(p => p.status === 'reprovado' || p.status === 'descartado');
+
+  // Cálculos para o modal de conclusão
+  const aprovados = plan?.posts?.filter(p => p.status === 'aprovado').length || 0;
+  const reprovados = plan?.posts?.filter(p => 
+    p.status === 'reprovado' || p.status === 'descartado'
+  ).length || 0;
 
   return (
     <div className="max-w-7xl mx-auto text-left relative">
@@ -496,13 +510,13 @@ export default function ContentPlanDetails() {
             <div className="grid grid-cols-2 gap-3 mb-4">
               <div className="bg-[#121212] border border-zinc-800 rounded-xl p-4 text-center">
                 <div className="text-3xl font-black italic text-emerald-500 mb-1">
-                  {plan.posts.filter(p => p.status === 'aprovado').length}
+                  {aprovados}
                 </div>
                 <div className="text-[9px] font-black uppercase tracking-widest text-emerald-700">Aprovados</div>
               </div>
               <div className="bg-[#121212] border border-zinc-800 rounded-xl p-4 text-center">
                 <div className="text-3xl font-black italic text-red-400 mb-1">
-                  {plan.posts.filter(p => p.status === 'reprovado' || p.status === 'descartado').length}
+                  {reprovados}
                 </div>
                 <div className="text-[9px] font-black uppercase tracking-widest text-red-800">Reprovados</div>
               </div>
@@ -511,14 +525,14 @@ export default function ContentPlanDetails() {
             <div className="w-full h-1 bg-zinc-800 rounded-full mb-6 overflow-hidden">
               <div 
                 className="h-full bg-[#ff5351] rounded-full transition-all duration-1000"
-                style={{ width: `${(plan.posts.filter(p => p.status === 'aprovado').length / plan.posts.length) * 100}%` }}
+                style={{ width: `${(aprovados / totalPosts) * 100}%` }}
               />
             </div>
 
-            {plan.posts.filter(p => p.status === 'reprovado' || p.status === 'descartado').length > 0 ? (
+            {reprovados > 0 ? (
               <div className="mb-6 text-center">
                 <span className="inline-flex items-center gap-2 px-3 py-1 bg-red-500/10 border border-red-500/20 rounded-full text-red-400 text-[9px] font-black uppercase tracking-widest mb-3">
-                  ⚠ {plan.posts.filter(p => p.status === 'reprovado' || p.status === 'descartado').length} posts precisam de revisão
+                  ⚠ {reprovados} posts precisam de revisão
                 </span>
                 <p className="text-zinc-500 text-xs leading-relaxed">
                   O redator foi notificado sobre os posts reprovados e irá realizar os ajustes. 
