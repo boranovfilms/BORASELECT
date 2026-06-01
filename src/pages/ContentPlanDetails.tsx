@@ -27,6 +27,7 @@ export default function ContentPlanDetails() {
   const [reprovalComment, setReprovalComment] = useState('');
   const [showReprovalInput, setShowReprovalInput] = useState(false);
   const [showApprovedInSidebar, setShowApprovedInSidebar] = useState(false);
+  const [showCompletionModal, setShowCompletionModal] = useState(false);
 
   const user = auth.currentUser;
   const currentEmail = user?.email?.toLowerCase();
@@ -80,6 +81,7 @@ export default function ContentPlanDetails() {
 
   const selectedPost = plan?.posts.find(p => p.id === selectedPostId);
   const approvedCount = plan?.posts.filter(p => p.status === 'aprovado').length || 0;
+  const reprovedCount = plan?.posts.filter(p => p.status === 'reprovado').length || 0;
   const totalPosts = plan?.posts.length || 0;
   const allApproved = totalPosts > 0 && approvedCount === totalPosts;
 
@@ -107,7 +109,7 @@ export default function ContentPlanDetails() {
       }
 
       if (isFinished) {
-        toast.success("Todos os posts aprovados! 🎉");
+        setShowCompletionModal(true);
       }
     } catch (error) {
       toast.error("Erro ao atualizar status");
@@ -147,7 +149,7 @@ export default function ContentPlanDetails() {
   const approvedPosts = plan.posts.filter(p => p.status === 'aprovado');
 
   return (
-    <div className="max-w-7xl mx-auto text-left">
+    <div className="max-w-7xl mx-auto text-left relative">
       <header className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-4">
           <button onClick={() => navigate(-1)} className="p-2 hover:bg-zinc-800 rounded-xl transition-all text-zinc-500 hover:text-white">
@@ -249,23 +251,7 @@ export default function ContentPlanDetails() {
         </aside>
 
         <main className="flex-1 flex flex-col bg-[#121212] overflow-hidden">
-          {allApproved ? (
-            <div className="flex-1 flex flex-col items-center justify-center text-center p-10 space-y-6 animate-in zoom-in-95 duration-500">
-              <div className="w-20 h-20 bg-emerald-500/10 border border-emerald-500/20 rounded-full flex items-center justify-center text-emerald-500 shadow-[0_0_40px_rgba(16,185,129,0.1)]">
-                <CheckCircle2 className="w-12 h-12" />
-              </div>
-              <div className="space-y-2">
-                <h3 className="text-4xl font-black text-white uppercase italic tracking-tighter">Planejamento Aprovado!</h3>
-                <p className="text-zinc-400 text-sm max-w-sm mx-auto font-medium">Todos os {totalPosts} posts foram aprovados por você. O administrador foi notificado e a produção já pode começar.</p>
-              </div>
-              <button 
-                onClick={() => navigate(`/clients/${plan.clientId}`)}
-                className="h-14 px-10 bg-[#ff5351] text-white rounded-2xl font-black uppercase tracking-widest text-xs hover:brightness-110 transition-all shadow-xl shadow-[#ff5351]/20"
-              >
-                Voltar para o Cliente
-              </button>
-            </div>
-          ) : selectedPost ? (
+          {selectedPost ? (
             <>
               <header className="p-6 border-b border-zinc-800 bg-black/10 flex items-center justify-between shrink-0">
                 <div className="flex items-center gap-4">
@@ -389,6 +375,75 @@ export default function ContentPlanDetails() {
           )}
         </main>
       </div>
+
+      {/* MODAL DE CONCLUSÃO */}
+      {showCompletionModal && (
+        <div className="fixed inset-0 z-[400] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setShowCompletionModal(false)} />
+          <div className="relative bg-[#1a1a1a] border border-zinc-800 rounded-[20px] p-8 w-full max-w-sm animate-in zoom-in-95 duration-200">
+            
+            <div className="flex items-center justify-center gap-3 mb-4">
+              <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">{plan.name}</span>
+              <span className="w-px h-3 bg-zinc-700" />
+              <span className="text-[10px] font-black uppercase tracking-widest text-zinc-600">{plan.monthReference}</span>
+            </div>
+
+            <h2 className="text-2xl font-black uppercase italic text-white text-center mb-1">Revisão Concluída</h2>
+            <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500 text-center mb-6">Planejamento avaliado com sucesso</p>
+
+            <div className="grid grid-cols-2 gap-3 mb-4">
+              <div className="bg-[#121212] border border-zinc-800 rounded-xl p-4 text-center">
+                <div className="text-3xl font-black italic text-emerald-500 mb-1">
+                  {plan.posts.filter(p => p.status === 'aprovado').length}
+                </div>
+                <div className="text-[9px] font-black uppercase tracking-widest text-emerald-700">Aprovados</div>
+              </div>
+              <div className="bg-[#121212] border border-zinc-800 rounded-xl p-4 text-center">
+                <div className="text-3xl font-black italic text-red-400 mb-1">
+                  {plan.posts.filter(p => p.status === 'reprovado').length}
+                </div>
+                <div className="text-[9px] font-black uppercase tracking-widest text-red-800">Reprovados</div>
+              </div>
+            </div>
+
+            <div className="w-full h-1 bg-zinc-800 rounded-full mb-6 overflow-hidden">
+              <div 
+                className="h-full bg-[#ff5351] rounded-full transition-all duration-1000"
+                style={{ width: `${(plan.posts.filter(p => p.status === 'aprovado').length / plan.posts.length) * 100}%` }}
+              />
+            </div>
+
+            {plan.posts.filter(p => p.status === 'reprovado').length > 0 ? (
+              <div className="mb-6 text-center">
+                <span className="inline-flex items-center gap-2 px-3 py-1 bg-red-500/10 border border-red-500/20 rounded-full text-red-400 text-[9px] font-black uppercase tracking-widest mb-3">
+                  ⚠ {plan.posts.filter(p => p.status === 'reprovado').length} posts precisam de revisão
+                </span>
+                <p className="text-zinc-500 text-xs leading-relaxed">
+                  O redator foi notificado sobre os posts reprovados e irá realizar os ajustes. 
+                  Você será notificado quando estiverem prontos.
+                </p>
+              </div>
+            ) : (
+              <div className="mb-6 text-center">
+                <span className="inline-flex items-center gap-2 px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-full text-emerald-400 text-[9px] font-black uppercase tracking-widest mb-3">
+                  ✓ Aprovação total!
+                </span>
+                <p className="text-zinc-500 text-xs leading-relaxed">
+                  Todos os posts foram aprovados! O administrador foi notificado 
+                  e a produção já pode começar.
+                </p>
+              </div>
+            )}
+
+            <button
+              onClick={() => setShowCompletionModal(false)}
+              className="w-full h-12 bg-[#ff5351] text-white rounded-xl font-black uppercase tracking-widest text-[10px] hover:brightness-110 transition-all"
+            >
+              OK, Entendido
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
