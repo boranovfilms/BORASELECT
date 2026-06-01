@@ -552,7 +552,10 @@ export default function ContentPlanDetails() {
             )}
 
             <button
-              onClick={() => setShowCompletionModal(false)}
+              onClick={() => {
+                setShowCompletionModal(false);
+                navigate('/projetos');
+              }}
               className="w-full h-12 bg-[#ff5351] text-white rounded-xl font-black uppercase tracking-widest text-[10px] hover:brightness-110 transition-all"
             >
               OK, Entendido
