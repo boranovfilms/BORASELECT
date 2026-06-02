@@ -52,6 +52,13 @@ const STAGE_TYPES: { id: StageType; label: string }[] = [
   { id: 'revisao', label: '✏️ Revisão de Texto' },
   { id: 'programar_postagem', label: '📅 Programar Postagem' },
   { id: 'concluido', label: '🏁 Concluído' },
+  { id: 'gravacao', label: '🎙 Gravação' },
+  { id: 'edicao_video', label: '🎬 Edição de Vídeo' },
+  { id: 'design', label: '🎨 Design / Arte' },
+  { id: 'fotografia', label: '📷 Fotografia' },
+  { id: 'jornalismo', label: '📰 Jornalismo' },
+  { id: 'locucao', label: '🎤 Locução' },
+  { id: 'roteiro', label: '✍️ Roteiro' },
 ];
 
 // COMPONENTE DA ETAPA ARRASTÁVEL
