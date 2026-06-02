@@ -259,7 +259,7 @@ export default function PlanejamentoTarefas() {
                               style={{ width: `${percent}%` }}
                             />
                           </div>
-                          <span className={cn('text-[10px] font-black w-8 text-right', faseConfig.color)}">
+                          <span className={cn('text-[10px] font-black w-8 text-right', faseConfig.color)}>
                             {percent}%
                           </span>
                         </div>
