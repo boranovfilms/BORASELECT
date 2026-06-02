@@ -35,7 +35,7 @@ export type WorkflowModel = {
   id?: string;
   name: string;
   description: string;
-  iconName: string; // Salvaremos o nome do ícone (ex: 'PlayCircle') como string
+  iconName: string;
   color: string;
   bgColor: string;
   borderColor: string;
@@ -45,10 +45,30 @@ export type WorkflowModel = {
   updatedAt?: any;
 };
 
+export type DemandType = 
+  | 'planejamento'
+  | 'podcast' 
+  | 'arte'
+  | 'video_institucional'
+  | 'video_clipe'
+  | 'ensaio_fotografico'
+  | 'email_marketing'
+  | 'assinatura_email';
+
+export const DEMAND_TYPE_LABELS: Record<DemandType, string> = {
+  planejamento: 'Planejamento de Conteúdo',
+  podcast: 'Podcast',
+  arte: 'Criar Arte',
+  video_institucional: 'Vídeo Institucional',
+  video_clipe: 'Vídeo Clipe',
+  ensaio_fotografico: 'Ensaio Fotográfico',
+  email_marketing: 'Criar E-mail',
+  assinatura_email: 'Assinatura de E-mail'
+};
+
 class ModelosService {
   private collectionName = 'workflowModels';
 
-  // Buscar todos os modelos
   async getModelos(): Promise<WorkflowModel[]> {
     const q = query(collection(db, this.collectionName), orderBy('createdAt', 'desc'));
     const querySnapshot = await getDocs(q);
@@ -59,7 +79,6 @@ class ModelosService {
     })) as WorkflowModel[];
   }
 
-  // Buscar um modelo específico pelo ID
   async getModelo(id: string): Promise<WorkflowModel | null> {
     const docRef = doc(db, this.collectionName, id);
     const docSnap = await getDoc(docRef);
@@ -70,11 +89,10 @@ class ModelosService {
     return null;
   }
 
-  // Criar um novo modelo
   async criarModelo(data: Omit<WorkflowModel, 'id' | 'createdAt' | 'updatedAt' | 'stages'>): Promise<string> {
     const docRef = await addDoc(collection(db, this.collectionName), {
       ...data,
-      stages: [], // Começa sem etapas
+      stages: [],
       activeProjects: 0,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp()
@@ -83,7 +101,6 @@ class ModelosService {
     return docRef.id;
   }
 
-  // Atualizar as informações básicas de um modelo
   async atualizarModelo(id: string, data: Partial<WorkflowModel>): Promise<void> {
     const docRef = doc(db, this.collectionName, id);
     await updateDoc(docRef, {
@@ -92,7 +109,6 @@ class ModelosService {
     });
   }
 
-  // Salvar/Atualizar todas as etapas (útil para o drag & drop)
   async atualizarEtapas(id: string, stages: Stage[]): Promise<void> {
     const docRef = doc(db, this.collectionName, id);
     await updateDoc(docRef, {
@@ -101,7 +117,6 @@ class ModelosService {
     });
   }
 
-  // Deletar um modelo
   async deletarModelo(id: string): Promise<void> {
     const docRef = doc(db, this.collectionName, id);
     await deleteDoc(docRef);
