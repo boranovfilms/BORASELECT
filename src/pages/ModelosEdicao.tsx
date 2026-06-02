@@ -8,7 +8,7 @@ import {
   MonitorPlay, Image as ImageIcon, Trash2, X, Edit2, ChevronDown
 } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { modelosService, WorkflowModel, Stage, StageType } from '../services/modelosService';
+import { modelosService, WorkflowModel, Stage, StageType, CustomStageType } from '../services/modelosService';
 import { teamService, TeamMember } from '../services/teamService';
 
 // --- IMPORTS DO DND-KIT PARA O DRAG & DROP ---
@@ -42,7 +42,7 @@ const PRESET_COLORS = [
   { id: 'rose', color: 'text-rose-400', bg: 'bg-rose-400/10', border: 'border-rose-400/20', icon: 'MonitorPlay' },
 ];
 
-const STAGE_TYPES: { id: StageType; label: string }[] = [
+const FIXED_STAGE_TYPES: { id: StageType; label: string }[] = [
   { id: 'upload_arquivos', label: '📁 Upload de Arquivos' },
   { id: 'aprovacao_admin', label: '✅ Aprovação Admin' },
   { id: 'aprovacao_cliente', label: '👤 Aprovação Cliente' },
@@ -79,8 +79,6 @@ function SortableStageItem({ stage, index, onEdit, onRemove }: { stage: Stage; i
     opacity: isDragging ? 0.8 : 1,
   };
 
-  const typeLabel = STAGE_TYPES.find(t => t.id === stage.type)?.label || stage.type;
-
   return (
     <div 
       ref={setNodeRef} 
@@ -106,7 +104,7 @@ function SortableStageItem({ stage, index, onEdit, onRemove }: { stage: Stage; i
           <div>
             <h4 className="text-white font-black uppercase text-base">{stage.name}</h4>
             <div className="flex items-center gap-4 mt-2 text-[10px] uppercase font-bold tracking-widest text-zinc-500">
-              <span>{typeLabel}</span>
+              <span>{stage.type}</span>
             </div>
           </div>
         </div>
@@ -157,10 +155,25 @@ export default function ModelosEdicao() {
   const [editModelForm, setEditModelForm] = useState({ name: '', description: '', presetIndex: 0 });
   const [editingStage, setEditingStage] = useState<Stage | null>(null);
 
+  // Estados para nomes de etapas existentes
+  const [stageNames, setStageNames] = useState<string[]>([]);
+  const [isAddingNewName, setIsAddingNewName] = useState(false);
+  const [newNameInput, setNewNameInput] = useState('');
+
+  // Estados para tipos customizados
+  const [customTypes, setCustomTypes] = useState<CustomStageType[]>([]);
+  const [isNewTypeModalOpen, setIsNewTypeModalOpen] = useState(false);
+  const [newTypeForm, setNewTypeForm] = useState({ id: '', label: '', emoji: '' });
+
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
+
+  const allStageTypes = [
+    ...FIXED_STAGE_TYPES,
+    ...customTypes.map(ct => ({ id: ct.id as StageType, label: ct.label }))
+  ];
 
   useEffect(() => {
     async function load() {
@@ -194,6 +207,23 @@ export default function ModelosEdicao() {
     }
     load();
   }, [id, navigate]);
+
+  useEffect(() => {
+    modelosService.getModelos().then(modelos => {
+      const names = modelos
+        .flatMap(m => m.stages || [])
+        .map(s => s.name)
+        .filter(Boolean);
+      const unique = [...new Set(names)].sort() as string[];
+      setStageNames(unique);
+    });
+  }, []);
+
+  useEffect(() => {
+    modelosService.getCustomStageTypes().then(types => {
+      setCustomTypes(types);
+    });
+  }, []);
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
@@ -254,6 +284,8 @@ export default function ModelosEdicao() {
       requiresApproval: false,
       order: stages.length
     });
+    setIsAddingNewName(false);
+    setNewNameInput('');
     setIsStageModalOpen(true);
   };
 
@@ -303,6 +335,39 @@ export default function ModelosEdicao() {
     }
 
     setEditingStage({ ...editingStage, type, requiresApproval });
+  };
+
+  const handleConfirmNewName = () => {
+    if (!newNameInput.trim()) return;
+    if (editingStage) {
+      setEditingStage({ ...editingStage, name: newNameInput.trim() });
+    }
+    if (!stageNames.includes(newNameInput.trim())) {
+      setStageNames(prev => [...prev, newNameInput.trim()].sort());
+    }
+    setIsAddingNewName(false);
+    setNewNameInput('');
+  };
+
+  const handleSaveNewType = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTypeForm.id.trim() || !newTypeForm.emoji.trim()) return;
+    
+    const label = `${newTypeForm.emoji} ${newTypeForm.id.toUpperCase()}`;
+    const newType: CustomStageType = {
+      id: newTypeForm.id.trim().toLowerCase().replace(/\s+/g, '_'),
+      label
+    };
+    
+    try {
+      await modelosService.saveCustomStageType(newType);
+      setCustomTypes(prev => [...prev, newType]);
+      setIsNewTypeModalOpen(false);
+      setNewTypeForm({ id: '', label: '', emoji: '' });
+      toast.success('Novo tipo adicionado!');
+    } catch (error) {
+      toast.error('Erro ao salvar tipo customizado.');
+    }
   };
 
   if (loading || !modelData) {
@@ -473,25 +538,77 @@ export default function ModelosEdicao() {
             </header>
             <form onSubmit={handleSaveStageForm}>
               <div className="p-6 space-y-6">
+                {/* NOME DA ETAPA - SELECT OU INPUT */}
                 <div className="space-y-2">
                   <label className="text-[10px] uppercase font-black tracking-widest text-zinc-500 ml-1">Nome da Etapa</label>
-                  <input required autoFocus type="text" placeholder="Ex: Edição Inicial" value={editingStage.name} onChange={e => setEditingStage({...editingStage, name: e.target.value})} className="w-full h-12 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white focus:border-[#ff5351] outline-none" />
+                  {isAddingNewName ? (
+                    <div className="flex gap-2">
+                      <input
+                        autoFocus
+                        type="text"
+                        value={newNameInput}
+                        onChange={e => setNewNameInput(e.target.value)}
+                        placeholder="Ex: Edição Inicial"
+                        className="flex-1 h-12 bg-zinc-900 border border-[#ff5351] rounded-xl px-4 text-white focus:border-[#ff5351] outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleConfirmNewName}
+                        className="h-12 px-4 bg-[#ff5351] text-white rounded-xl font-black uppercase text-[10px] tracking-widest hover:brightness-110 transition-all"
+                      >
+                        ✓ Confirmar
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="relative">
+                      <select
+                        required
+                        value={editingStage.name}
+                        onChange={e => {
+                          if (e.target.value === '__add_new__') {
+                            setIsAddingNewName(true);
+                          } else {
+                            setEditingStage({ ...editingStage, name: e.target.value });
+                          }
+                        }}
+                        className="w-full h-12 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white focus:border-[#ff5351] outline-none appearance-none cursor-pointer font-bold uppercase text-xs"
+                      >
+                        <option value="">Selecione um nome...</option>
+                        {stageNames.map(name => (
+                          <option key={name} value={name}>{name}</option>
+                        ))}
+                        <option value="__add_new__" className="text-[#ff5351] font-black">+ Adicionar novo nome...</option>
+                      </select>
+                      <ChevronDown className="w-4 h-4 text-zinc-500 absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    </div>
+                  )}
                 </div>
 
+                {/* TIPO DA ETAPA - SELECT + BOTÃO + */}
                 <div className="space-y-2">
                   <label className="text-[10px] uppercase font-black tracking-widest text-zinc-500 ml-1">Tipo da Etapa</label>
-                  <div className="relative">
-                    <select 
-                      required
-                      value={editingStage.type} 
-                      onChange={e => handleTypeChange(e.target.value as StageType)}
-                      className="w-full h-12 bg-zinc-800 border border-transparent rounded-xl px-4 text-white focus:border-[#ff5351] outline-none appearance-none cursor-pointer font-bold text-xs"
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <select 
+                        required
+                        value={editingStage.type} 
+                        onChange={e => handleTypeChange(e.target.value as StageType)}
+                        className="w-full h-12 bg-zinc-800 border border-transparent rounded-xl px-4 text-white focus:border-[#ff5351] outline-none appearance-none cursor-pointer font-bold text-xs"
+                      >
+                        {allStageTypes.map(type => (
+                          <option key={type.id} value={type.id}>{type.label}</option>
+                        ))}
+                      </select>
+                      <ChevronDown className="w-4 h-4 text-zinc-500 absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setIsNewTypeModalOpen(true)}
+                      className="h-12 w-12 bg-zinc-900 border border-zinc-800 rounded-xl flex items-center justify-center text-zinc-500 hover:text-white hover:border-[#ff5351] transition-all"
+                      title="Adicionar novo tipo"
                     >
-                      {STAGE_TYPES.map(type => (
-                        <option key={type.id} value={type.id}>{type.label}</option>
-                      ))}
-                    </select>
-                    <ChevronDown className="w-4 h-4 text-zinc-500 absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      <Plus className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
 
@@ -523,6 +640,59 @@ export default function ModelosEdicao() {
               <footer className="p-6 bg-zinc-900/50 border-t border-zinc-800 flex gap-3">
                 <button type="button" onClick={() => setIsStageModalOpen(false)} className="flex-1 h-12 text-xs font-black uppercase tracking-widest text-zinc-500 hover:text-white transition-all bg-zinc-900 rounded-xl border border-zinc-800">Cancelar</button>
                 <button type="submit" className="flex-1 h-12 bg-white text-black text-xs font-black uppercase tracking-widest rounded-xl hover:bg-zinc-200 flex items-center justify-center gap-2">Confirmar Etapa</button>
+              </footer>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE NOVO TIPO CUSTOMIZADO */}
+      {isNewTypeModalOpen && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setIsNewTypeModalOpen(false)} />
+          <div className="relative w-full max-w-sm bg-[#151515] rounded-[32px] border border-zinc-800 shadow-[0_0_50px_rgba(0,0,0,0.5)] overflow-hidden">
+            <header className="p-6 border-b border-zinc-800 flex items-center justify-between bg-zinc-900/30">
+              <h3 className="text-xl font-black text-white uppercase tracking-tighter">Novo Tipo de Etapa</h3>
+              <button onClick={() => setIsNewTypeModalOpen(false)} className="p-2 text-zinc-500 hover:text-white transition-all">
+                <X className="w-5 h-5" />
+              </button>
+            </header>
+            <form onSubmit={handleSaveNewType}>
+              <div className="p-6 space-y-6">
+                <div className="space-y-2">
+                  <label className="text-[10px] uppercase font-black tracking-widest text-zinc-500 ml-1">ID do Tipo (sem espaços)</label>
+                  <input
+                    required
+                    type="text"
+                    value={newTypeForm.id}
+                    onChange={e => setNewTypeForm({...newTypeForm, id: e.target.value})}
+                    placeholder="Ex: jornalismo"
+                    className="w-full h-12 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white focus:border-[#ff5351] outline-none"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] uppercase font-black tracking-widest text-zinc-500 ml-1">Emoji / Ícone</label>
+                  <input
+                    required
+                    type="text"
+                    value={newTypeForm.emoji}
+                    onChange={e => setNewTypeForm({...newTypeForm, emoji: e.target.value})}
+                    placeholder="Ex: 📰"
+                    className="w-full h-12 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white focus:border-[#ff5351] outline-none"
+                  />
+                </div>
+                <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4">
+                  <p className="text-[10px] uppercase font-black tracking-widest text-zinc-500 mb-2">Pré-visualização</p>
+                  <p className="text-white text-sm">
+                    {newTypeForm.emoji || '📋'} {newTypeForm.id ? newTypeForm.id.toUpperCase() : 'NOME DO TIPO'}
+                  </p>
+                </div>
+              </div>
+              <footer className="p-6 bg-zinc-900/50 border-t border-zinc-800 flex gap-3">
+                <button type="button" onClick={() => setIsNewTypeModalOpen(false)} className="flex-1 h-12 text-xs font-black uppercase tracking-widest text-zinc-500 hover:text-white transition-all bg-zinc-900 rounded-xl border border-zinc-800">Cancelar</button>
+                <button type="submit" className="flex-1 h-12 bg-[#ff5351] text-white text-xs font-black uppercase tracking-widest rounded-xl hover:brightness-110 flex items-center justify-center gap-2">
+                  <Save className="w-4 h-4" /> Salvar Tipo
+                </button>
               </footer>
             </form>
           </div>
