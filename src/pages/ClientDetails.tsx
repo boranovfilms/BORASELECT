@@ -40,7 +40,6 @@ export default function ClientDetails() {
   const [teamMembers, setTeamMembers] = useState<any[]>([]);
   const [workflowApprovers, setWorkflowApprovers] = useState<Record<string, string[]>>({});
   const [savingApprovers, setSavingApprovers] = useState(false);
-  const [showApprovers, setShowApprovers] = useState(false);
 
   // ✅ HOOKS MOVIDOS PARA ANTES DOS RETURNS CONDICIONAIS
   const [linkedModel, setLinkedModel] = useState<WorkflowModel | null>(null);
@@ -229,18 +228,6 @@ export default function ClientDetails() {
               <div className="flex flex-wrap items-center gap-4 mt-2">
                 <span className="flex items-center gap-1.5 text-xs text-zinc-500 font-medium"><Mail className="w-3.5 h-3.5" /> {client.email}</span>
                 <span className="text-zinc-800">•</span>
-                
-                <div className="flex items-center gap-3">
-                  <button 
-                    onClick={() => setShowApprovers(!showApprovers)}
-                    className="flex items-center gap-2 px-3 py-1.5 bg-zinc-900 border border-zinc-800 hover:border-zinc-600 rounded-lg text-[10px] font-black uppercase tracking-widest text-zinc-500 hover:text-white transition-all"
-                  >
-                    <Settings className="w-3.5 h-3.5" />
-                    Configurar Fluxo
-                  </button>
-                </div>
-
-                <span className="text-zinc-800">•</span>
                 <span className={cn("text-[10px] font-black uppercase tracking-widest", client.status === 'confirmed' ? "text-emerald-500" : "text-amber-500")}>
                   {client.status === 'confirmed' ? '✓ Ativo' : '⏳ Pendente'}
                 </span>
@@ -328,148 +315,6 @@ export default function ClientDetails() {
           )}
         />
       </section>
-
-      {/* SEÇÃO DE CONFIGURAÇÃO DE FLUXOS */}
-      {showApprovers && (
-        <section className="animate-in fade-in duration-300 pt-10 border-t border-zinc-900">
-          <div className="bg-[#1f1f1f] border border-zinc-800 rounded-[32px] p-8">
-            <div className="flex items-center justify-between mb-8">
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 bg-[#ff5351]/10 rounded-xl border border-[#ff5351]/20">
-                  <GitBranch className="w-5 h-5 text-[#ff5351]" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-black text-white uppercase italic leading-none">Fluxos por Tipo de Demanda</h3>
-                  <p className="text-zinc-500 text-xs font-bold uppercase tracking-wider mt-2">Vincule um modelo de fluxo para cada tipo de demanda deste cliente.</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <button 
-                  onClick={() => setShowApprovers(false)}
-                  className="px-6 h-12 bg-zinc-900 text-zinc-500 text-[10px] font-black uppercase tracking-widest rounded-xl border border-zinc-800 hover:text-white transition-all"
-                >
-                  Fechar
-                </button>
-                <button 
-                  onClick={handleSaveWorkflowModels}
-                  className="px-6 h-12 bg-[#ff5351] text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:brightness-110 transition-all flex items-center gap-2 shadow-lg shadow-[#ff5351]/20"
-                >
-                  <Save className="w-4 h-4" />
-                  Salvar Fluxos
-                </button>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              {DEMAND_TYPES.map(demandType => (
-                <div key={demandType} className="flex items-center gap-4 p-4 bg-black/20 border border-zinc-800/50 rounded-2xl">
-                  <div className="flex-1">
-                    <p className="text-white font-black uppercase text-sm">{DEMAND_TYPE_LABELS[demandType]}</p>
-                  </div>
-                  <div className="w-72">
-                    <select
-                      value={workflowModels[demandType] || ''}
-                      onChange={(e) => handleUpdateWorkflowModel(demandType, e.target.value)}
-                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-[10px] font-black uppercase tracking-widest text-zinc-300 focus:border-[#ff5351] outline-none appearance-none cursor-pointer"
-                    >
-                      <option value="">Nenhum modelo vinculado</option>
-                      {availableModels.map(model => (
-                        <option key={model.id} value={model.id}>{model.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {linkedModel && approvalStages.length > 0 && (
-              <div className="mt-10 pt-8 border-t border-zinc-800/50">
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="p-2.5 bg-[#ff5351]/10 rounded-xl border border-[#ff5351]/20">
-                    <Users className="w-5 h-5 text-[#ff5351]" />
-                  </div>
-                  <div>
-                    <h4 className="text-lg font-black text-white uppercase italic leading-none">Aprovadores por Etapa</h4>
-                    <p className="text-zinc-500 text-xs font-bold uppercase tracking-wider mt-2">Defina quais membros podem validar cada fase do planejamento.</p>
-                  </div>
-                  <button 
-                    onClick={handleSaveApprovers}
-                    disabled={savingApprovers}
-                    className="ml-auto px-6 h-12 bg-[#ff5351] text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:brightness-110 transition-all flex items-center gap-2 shadow-lg shadow-[#ff5351]/20 disabled:opacity-50"
-                  >
-                    {savingApprovers ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                    Salvar Configuração
-                  </button>
-                </div>
-
-                {teamMembers.length === 0 ? (
-                  <div className="py-12 text-center border-2 border-dashed border-zinc-800 rounded-3xl">
-                    <Users className="w-12 h-12 text-zinc-800 mx-auto mb-4" />
-                    <p className="text-zinc-500 text-sm font-bold uppercase tracking-widest max-w-xs mx-auto mb-6">
-                      Adicione membros à equipe deste cliente para configurar aprovadores
-                    </p>
-                    <Link to="/clients" className="px-6 py-3 bg-zinc-800 text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-zinc-700 transition-all">
-                      Ir para Gestão de Equipe
-                    </Link>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {approvalStages.map(stage => (
-                      <div key={stage.id} className="bg-black/20 border border-zinc-800/50 rounded-3xl p-6 hover:border-zinc-700 transition-all">
-                        <div className="flex items-center justify-between mb-6">
-                          <div>
-                            <h4 className="text-white font-black uppercase text-sm">{stage.name}</h4>
-                            <span className="text-[9px] font-bold text-[#ff5351] uppercase tracking-widest mt-1 block opacity-70">{(stage.type || 'sem tipo').replace(/_/g, ' ')}</span>
-                          </div>
-                          <div className="w-8 h-8 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center text-[10px] font-black text-zinc-500">
-                            {(stage.order || 0) + 1}
-                          </div>
-                        </div>
-
-                        <div className="space-y-3">
-                          {teamMembers.map(member => {
-                            const isSelected = (workflowApprovers[stage.id] || []).includes(member.email);
-                            return (
-                              <div 
-                                key={member.id}
-                                onClick={() => toggleApprover(stage.id, member.email)}
-                                className={cn(
-                                  "flex items-center justify-between p-3 rounded-2xl border transition-all cursor-pointer group",
-                                  isSelected ? "bg-[#ff5351]/5 border-[#ff5351]/30" : "bg-zinc-900/50 border-zinc-800 hover:border-zinc-700"
-                                )}
-                              >
-                                <div className="flex items-center gap-3 overflow-hidden">
-                                  <div className="w-8 h-8 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center overflow-hidden shrink-0">
-                                    {member.photoUrl ? (
-                                      <img src={member.photoUrl} className="w-full h-full object-cover" alt="" />
-                                    ) : (
-                                      <User className="w-4 h-4 text-zinc-600" />
-                                    )}
-                                  </div>
-                                  <div className="overflow-hidden">
-                                    <p className={cn("text-[10px] font-black uppercase truncate", isSelected ? "text-white" : "text-zinc-400")}>{member.name}</p>
-                                    <p className="text-[8px] font-bold text-zinc-600 truncate uppercase">{member.email}</p>
-                                  </div>
-                                </div>
-                                <div className={cn(
-                                  "w-5 h-5 rounded-lg border-2 flex items-center justify-center transition-all",
-                                  isSelected ? "bg-[#ff5351] border-[#ff5351]" : "border-zinc-800 group-hover:border-zinc-600"
-                                )}>
-                                  {isSelected && <Check className="w-3 h-3 text-white" />}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        </section>
-      )}
 
       {isModalOpen && (
         <div className="fixed inset-0 z-[300] flex items-center justify-center p-4">
