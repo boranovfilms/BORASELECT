@@ -8,7 +8,8 @@ import {
   deleteDoc, 
   serverTimestamp, 
   query, 
-  orderBy 
+  orderBy, 
+  setDoc 
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 
@@ -73,6 +74,11 @@ export const DEMAND_TYPE_LABELS: Record<DemandType, string> = {
   assinatura_email: 'Assinatura de E-mail'
 };
 
+export interface CustomStageType {
+  id: string;
+  label: string;
+}
+
 class ModelosService {
   private collectionName = 'workflowModels';
 
@@ -127,6 +133,24 @@ class ModelosService {
   async deletarModelo(id: string): Promise<void> {
     const docRef = doc(db, this.collectionName, id);
     await deleteDoc(docRef);
+  }
+
+  async getCustomStageTypes(): Promise<CustomStageType[]> {
+    const docRef = doc(db, 'settings', 'stage_types');
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+      const data = docSnap.data();
+      return (data.customTypes || []) as CustomStageType[];
+    }
+    return [];
+  }
+
+  async saveCustomStageType(newType: CustomStageType): Promise<void> {
+    const docRef = doc(db, 'settings', 'stage_types');
+    const docSnap = await getDoc(docRef);
+    const existing = docSnap.exists() ? (docSnap.data().customTypes || []) as CustomStageType[] : [];
+    const updated = [...existing.filter(t => t.id !== newType.id), newType];
+    await setDoc(docRef, { customTypes: updated }, { merge: true });
   }
 }
 
