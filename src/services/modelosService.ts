@@ -21,7 +21,14 @@ export type StageType =
   | 'selecao'
   | 'revisao'
   | 'programar_postagem'
-  | 'concluido';
+  | 'concluido'
+  | 'jornalismo'
+  | 'fotografia'
+  | 'locucao'
+  | 'design'
+  | 'edicao_video'
+  | 'gravacao'
+  | 'roteiro';
 
 export type Stage = {
   id: string;
