@@ -169,8 +169,8 @@ export default function PlanejamentoTarefas() {
                 key={post.id}
                 title={`Post ${post.number}`}
                 className={cn(
-                  "w-4 h-1.5 rounded-sm transition-all",
-                  concluido ? "bg-[#ff5351]" : emAndamento ? "bg-amber-500" : "bg-zinc-800"
+                  'w-4 h-1.5 rounded-sm transition-all',
+                  concluido ? 'bg-[#ff5351]' : emAndamento ? 'bg-amber-500' : 'bg-zinc-800'
                 )}
               />
             );
@@ -216,7 +216,7 @@ export default function PlanejamentoTarefas() {
 
                     <td className="px-6 py-5 text-center">
                       <span className={cn(
-                        "px-2 py-1 rounded-lg border text-[8px] font-black uppercase tracking-widest",
+                        'px-2 py-1 rounded-lg border text-[8px] font-black uppercase tracking-widest',
                         getTypeStyles(post.type)
                       )}>
                         {post.type}
@@ -226,8 +226,8 @@ export default function PlanejamentoTarefas() {
                     <td className="px-6 py-5 text-center">
                       <div className="flex flex-col items-center">
                         <span className={cn(
-                          "text-xs font-black uppercase",
-                          dateInfo.isUrgente ? "text-amber-400" : "text-white"
+                          'text-xs font-black uppercase',
+                          dateInfo.isUrgente ? 'text-amber-400' : 'text-white'
                         )}>
                           {dateInfo.data}
                         </span>
@@ -240,9 +240,9 @@ export default function PlanejamentoTarefas() {
 
                     <td className="px-6 py-5 text-center">
                       <div className="flex items-center justify-center gap-2">
-                        <span className={cn("w-2 h-2 rounded-full", faseConfig.barColor)} />
+                        <span className={cn('w-2 h-2 rounded-full', faseConfig.barColor)} />
                         <span className={cn(
-                          "px-2 py-1 rounded-lg border text-[8px] font-black uppercase tracking-widest",
+                          'px-2 py-1 rounded-lg border text-[8px] font-black uppercase tracking-widest',
                           faseConfig.bg, faseConfig.color, faseConfig.border
                         )}>
                           {faseConfig.label}
@@ -255,11 +255,11 @@ export default function PlanejamentoTarefas() {
                         <div className="flex items-center gap-3">
                           <div className="flex-1 h-1 bg-zinc-800 rounded-full overflow-hidden">
                             <div
-                              className={cn("h-full rounded-full transition-all duration-500", faseConfig.barColor)}
+                              className={cn('h-full rounded-full transition-all duration-500', faseConfig.barColor)}
                               style={{ width: `${percent}%` }}
                             />
                           </div>
-                          <span className={cn("text-[10px] font-black w-8 text-right", faseConfig.color)}">
+                          <span className={cn('text-[10px] font-black w-8 text-right', faseConfig.color)}">
                             {percent}%
                           </span>
                         </div>
@@ -272,9 +272,9 @@ export default function PlanejamentoTarefas() {
                               <div
                                 key={fase.id}
                                 className={cn(
-                                  "w-8 h-1.5 rounded-sm transition-all",
-                                  isActive ? faseConfig.barColor : "bg-zinc-800",
-                                  isCurrent && "ring-1 ring-white/20"
+                                  'w-8 h-1.5 rounded-sm transition-all',
+                                  isActive ? faseConfig.barColor : 'bg-zinc-800',
+                                  isCurrent && 'ring-1 ring-white/20'
                                 )}
                                 title={fase.label}
                               />
