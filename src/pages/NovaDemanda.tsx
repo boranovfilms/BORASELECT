@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, Calendar, Palette, Mail, PenLine, 
-  Mic, Camera, Video, Music, Plus, Loader2 
+  Mic, Camera, Video, Music, Plus, Loader2, Settings
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { doc, getDoc } from 'firebase/firestore';
@@ -14,6 +14,7 @@ export default function NovaDemanda() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [clientName, setClientName] = useState('');
+  const [clientWorkflowModels, setClientWorkflowModels] = useState<Record<string, string | null>>({});
 
   useEffect(() => {
     async function loadClient() {
@@ -22,7 +23,9 @@ export default function NovaDemanda() {
         const docRef = doc(db, 'clients', clientId);
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
-          setClientName(docSnap.data().name || '');
+          const cData = docSnap.data();
+          setClientName(cData.name || '');
+          setClientWorkflowModels(cData.workflowModels || {});
         }
       } catch (error) {
         console.error('Erro ao carregar cliente:', error);
@@ -33,9 +36,20 @@ export default function NovaDemanda() {
     loadClient();
   }, [clientId]);
 
+  const hasFlow = (tipo: string) => !!clientWorkflowModels[tipo];
+
+  const handleGear = (e: React.MouseEvent, tipo: string) => {
+    e.stopPropagation();
+    navigate(`/clients/${clientId}/configurar-fluxo/${tipo}`);
+  };
+
   const handleAction = (route?: string, tipo?: string) => {
     if (!route) {
-      toast.success('Em breve! 🚀');
+      toast('Em breve! 🚀');
+      return;
+    }
+    if (tipo && !hasFlow(tipo)) {
+      toast.error('Nenhum fluxo configurado. Clique na engrenagem para configurar.');
       return;
     }
     const tipoParam = tipo ? `?tipo=${tipo}` : '';
@@ -85,12 +99,16 @@ export default function NovaDemanda() {
               title="Planejamento de conteúdo" 
               desc="Planejamento mensal completo com posts e reels." 
               onClick={() => handleAction('novo-planejamento', 'planejamento')}
+              hasFlow={hasFlow('planejamento')}
+              onGear={(e) => handleGear(e, 'planejamento')}
             />
             <DemandCard 
               icon={Palette} 
               title="Criar arte" 
               desc="Post, story, banner ou peça avulsa." 
               onClick={() => handleAction()}
+              hasFlow={hasFlow('arte')}
+              onGear={(e) => handleGear(e, 'arte')}
             />
             <DemandCard 
               icon={Mail} 
@@ -98,12 +116,16 @@ export default function NovaDemanda() {
               desc="Campanha de e-mail marketing." 
               badge="NOVO"
               onClick={() => handleAction()}
+              hasFlow={hasFlow('email_marketing')}
+              onGear={(e) => handleGear(e, 'email_marketing')}
             />
             <DemandCard 
               icon={PenLine} 
               title="Assinatura de e-mail" 
               desc="Crie ou atualize a assinatura profissional." 
               onClick={() => handleAction()}
+              hasFlow={hasFlow('assinatura_email')}
+              onGear={(e) => handleGear(e, 'assinatura_email')}
             />
             <PlusCard />
           </div>
@@ -121,24 +143,32 @@ export default function NovaDemanda() {
               title="Podcast" 
               desc="Gravação e seleção de cortes." 
               onClick={() => handleAction('novo-projeto', 'podcast')}
+              hasFlow={hasFlow('podcast')}
+              onGear={(e) => handleGear(e, 'podcast')}
             />
             <DemandCard 
               icon={Camera} 
               title="Ensaio fotográfico" 
               desc="Agendamento e gestão do ensaio." 
               onClick={() => handleAction()}
+              hasFlow={hasFlow('ensaio_fotografico')}
+              onGear={(e) => handleGear(e, 'ensaio_fotografico')}
             />
             <DemandCard 
               icon={Video} 
               title="Vídeo institucional" 
               desc="Fluxo completo de produção." 
               onClick={() => handleAction()}
+              hasFlow={hasFlow('video_institucional')}
+              onGear={(e) => handleGear(e, 'video_institucional')}
             />
             <DemandCard 
               icon={Music} 
               title="Vídeo clipe" 
               desc="Produção completa de vídeo clipe." 
               onClick={() => handleAction()}
+              hasFlow={hasFlow('video_clipe')}
+              onGear={(e) => handleGear(e, 'video_clipe')}
             />
             <PlusCard />
           </div>
@@ -148,27 +178,38 @@ export default function NovaDemanda() {
   );
 }
 
-function DemandCard({ icon: Icon, title, desc, onClick, badge }: any) {
+function DemandCard({ icon: Icon, title, desc, onClick, badge, hasFlow, onGear }: any) {
   return (
-    <button
-      onClick={onClick}
-      className="group p-6 bg-[#1f1f1f] border border-zinc-800 rounded-3xl hover:border-[#ff5351] transition-all text-left relative overflow-hidden"
-    >
+    <div className={cn(
+      "group relative bg-[#1f1f1f] border border-zinc-800 rounded-3xl p-6 transition-all",
+      hasFlow ? "hover:border-[#ff5351] cursor-pointer" : "opacity-60"
+    )}>
       {badge && (
-        <span className="absolute top-4 right-4 bg-[#ff5351] text-white text-[8px] font-black px-2 py-0.5 rounded-full tracking-widest">
+        <span className="absolute top-4 right-10 bg-[#ff5351] text-white text-[8px] font-black px-2 py-0.5 rounded-full tracking-widest">
           {badge}
         </span>
       )}
-      <div className="w-12 h-12 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
-        <Icon className="w-6 h-6 text-[#ff5351]" />
+      <button
+        onClick={onGear}
+        className="absolute top-3 right-3 w-7 h-7 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center hover:border-[#ff5351] hover:bg-[#ff5351] transition-all z-10"
+        title="Configurar fluxo"
+      >
+        <Settings className="w-3.5 h-3.5 text-zinc-500 group-hover:text-white" />
+      </button>
+      <div onClick={onClick} className="h-full">
+        <div className="w-12 h-12 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+          <Icon className="w-6 h-6 text-[#ff5351]" />
+        </div>
+        <h3 className="text-white font-black uppercase text-sm leading-tight mb-2">{title}</h3>
+        <p className="text-zinc-500 text-xs leading-relaxed font-medium mb-8">{desc}</p>
+        <div className="absolute bottom-4 right-4 flex items-center gap-1.5">
+          <div className={cn("w-1.5 h-1.5 rounded-full", hasFlow ? "bg-emerald-500 shadow-[0_0_6px_rgba(34,197,94,0.5)]" : "bg-zinc-700")} />
+          <span className={cn("text-[8px] font-black uppercase tracking-widest", hasFlow ? "text-emerald-500" : "text-zinc-600")}>
+            {hasFlow ? "Fluxo Configurado" : "Sem Fluxo"}
+          </span>
+        </div>
       </div>
-      <h3 className="text-white font-black uppercase text-sm leading-tight mb-2">
-        {title}
-      </h3>
-      <p className="text-zinc-500 text-xs leading-relaxed font-medium">
-        {desc}
-      </p>
-    </button>
+    </div>
   );
 }
 
