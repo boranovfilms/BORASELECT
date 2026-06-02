@@ -42,9 +42,25 @@ export default function ClientDetails() {
   const [savingApprovers, setSavingApprovers] = useState(false);
   const [showApprovers, setShowApprovers] = useState(false);
 
+  // ✅ HOOKS MOVIDOS PARA ANTES DOS RETURNS CONDICIONAIS
+  const [linkedModel, setLinkedModel] = useState<WorkflowModel | null>(null);
+
   useEffect(() => {
     if (clientId) loadData();
   }, [clientId]);
+
+  useEffect(() => {
+    const planejamentoModelId = workflowModels['planejamento'];
+    async function loadModel() {
+      if (planejamentoModelId) {
+        const mData = await modelosService.getModelo(planejamentoModelId);
+        setLinkedModel(mData);
+      } else {
+        setLinkedModel(null);
+      }
+    }
+    loadModel();
+  }, [workflowModels]);
 
   const loadData = async () => {
     setLoading(true);
@@ -60,15 +76,12 @@ export default function ClientDetails() {
         const cData = { id: clientSnap.id, ...clientSnap.data() };
         setClient(cData);
         setWorkflowApprovers(cData.workflowApprovers || {});
-
-        // Carrega workflowModels (novo formato por tipo de demanda)
         const wfModels = cData.workflowModels || {};
         setWorkflowModels(wfModels);
 
         const q = query(collection(db, 'clients'), where('clienteId', '==', clientId), where('role', '==', 'equipe'));
         const teamSnap = await getDocs(q);
         setTeamMembers(teamSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-
       } else {
         toast.error('Cliente não encontrado no banco de dados.');
       }
@@ -192,24 +205,9 @@ export default function ClientDetails() {
     return <span className={cn("px-3 py-1 rounded-full border text-[9px] font-black uppercase tracking-widest", config.class)}>{config.label}</span>;
   };
 
+  // ✅ RETURNS CONDICIONAIS AGORA VÊM DEPOIS DE TODOS OS HOOKS
   if (loading) return <div className="min-h-[60vh] flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-[#ff5351]" /></div>;
   if (!client) return <div className="p-8 text-center text-white"><p className="mb-4">Cliente não encontrado.</p><button onClick={() => navigate('/clients')} className="text-[#ff5351] font-bold underline">Voltar para a lista</button></div>;
-
-  // Busca o modelo vinculado ao tipo planejamento (para a seção de aprovadores)
-  const planejamentoModelId = workflowModels['planejamento'];
-  const [linkedModel, setLinkedModel] = useState<WorkflowModel | null>(null);
-
-  useEffect(() => {
-    async function loadModel() {
-      if (planejamentoModelId) {
-        const mData = await modelosService.getModelo(planejamentoModelId);
-        setLinkedModel(mData);
-      } else {
-        setLinkedModel(null);
-      }
-    }
-    loadModel();
-  }, [planejamentoModelId]);
 
   const approvalStages = linkedModel?.stages?.filter(s => s.requiresApproval) || [];
   const awaitingAction = plans.filter(p => p.status === 'aguardando_cliente' || p.status === 'devolvido').length;
@@ -331,7 +329,7 @@ export default function ClientDetails() {
         />
       </section>
 
-      {/* SEÇÃO DE CONFIGURAÇÃO DE FLUXOS (OCULTA POR PADRÃO) */}
+      {/* SEÇÃO DE CONFIGURAÇÃO DE FLUXOS */}
       {showApprovers && (
         <section className="animate-in fade-in duration-300 pt-10 border-t border-zinc-900">
           <div className="bg-[#1f1f1f] border border-zinc-800 rounded-[32px] p-8">
@@ -384,7 +382,6 @@ export default function ClientDetails() {
               ))}
             </div>
 
-            {/* APROVADORES - apenas para o modelo de planejamento */}
             {linkedModel && approvalStages.length > 0 && (
               <div className="mt-10 pt-8 border-t border-zinc-800/50">
                 <div className="flex items-center gap-3 mb-6">
