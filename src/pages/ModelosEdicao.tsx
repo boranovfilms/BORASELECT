@@ -316,6 +316,7 @@ export default function ModelosEdicao() {
       await modelosService.atualizarEtapas(id, updatedStages);
       setStages(updatedStages);
       toast.success('Fluxo salvo com sucesso!');
+      navigate('/modelos');
     } catch (error) {
       toast.error('Erro ao salvar as etapas.');
     } finally {
@@ -355,7 +356,7 @@ export default function ModelosEdicao() {
     
     const label = `${newTypeForm.emoji} ${newTypeForm.id.toUpperCase()}`;
     const newType: CustomStageType = {
-      id: newTypeForm.id.trim().toLowerCase().replace(/\s+/g, '_'),
+      id: newTypeForm.id.trim().toLowerCase().replace(/\\s+/g, '_'),
       label
     };
     
