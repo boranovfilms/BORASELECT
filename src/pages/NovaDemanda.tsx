@@ -33,12 +33,13 @@ export default function NovaDemanda() {
     loadClient();
   }, [clientId]);
 
-  const handleAction = (route?: string) => {
-    if (route) {
-      navigate(`/clients/${clientId}/${route}`);
-    } else {
+  const handleAction = (route?: string, tipo?: string) => {
+    if (!route) {
       toast.success('Em breve! 🚀');
+      return;
     }
+    const tipoParam = tipo ? `?tipo=${tipo}` : '';
+    navigate(`/clients/${clientId}/${route}${tipoParam}`);
   };
 
   if (loading) {
@@ -83,7 +84,7 @@ export default function NovaDemanda() {
               icon={Calendar} 
               title="Planejamento de conteúdo" 
               desc="Planejamento mensal completo com posts e reels." 
-              onClick={() => handleAction('novo-planejamento')}
+              onClick={() => handleAction('novo-planejamento', 'planejamento')}
             />
             <DemandCard 
               icon={Palette} 
@@ -119,7 +120,7 @@ export default function NovaDemanda() {
               icon={Mic} 
               title="Podcast" 
               desc="Gravação e seleção de cortes." 
-              onClick={() => handleAction()}
+              onClick={() => handleAction('novo-projeto', 'podcast')}
             />
             <DemandCard 
               icon={Camera} 
