@@ -215,55 +215,6 @@ export default function Projetos() {
     return <span className="text-zinc-600 text-sm">—</span>;
   };
 
-  // Renderiza botão de controle para visão cliente
-  const renderControle = (item: any) => {
-    const status = item.status;
-    
-    if (status === 'aguardando_cliente' || status === 'rascunho') {
-      return (
-        <button 
-          onClick={() => navigate(item.route)}
-          className="flex items-center gap-2 px-4 py-2 bg-[#ff5351] text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:brightness-110 transition-all"
-        >
-          Revisar e Aprovar
-          <ChevronRight className="w-3 h-3" />
-        </button>
-      );
-    }
-    
-    if (status === 'devolvido') {
-      return (
-        <div className="flex items-center gap-3">
-          <span className="text-[9px] font-black uppercase tracking-widest text-zinc-600">Aguardando ajustes</span>
-          <button 
-            onClick={() => navigate(item.route)}
-            className="p-2 bg-zinc-900 border border-zinc-800 rounded-xl hover:border-[#ff5351] text-zinc-500 hover:text-white transition-all"
-          >
-            <Eye className="w-4 h-4" />
-          </button>
-        </div>
-      );
-    }
-    
-    // aprovado, em_revisao, em_producao, concluido
-    return (
-      <button 
-        onClick={() => navigate(item.route)}
-        className="p-2 bg-zinc-900 border border-zinc-800 rounded-xl hover:border-[#ff5351] text-zinc-500 hover:text-white transition-all"
-      >
-        <Eye className="w-4 h-4" />
-      </button>
-    );
-  };
-
-  // Determina se a linha é clicável
-  const getRowClick = (item: any) => {
-    if (item.status === 'aguardando_cliente') {
-      return () => navigate(item.route);
-    }
-    return undefined;
-  };
-
   // Badge de status com bolinha pulsante para aguardando_cliente
   const renderStatusBadge = (status: string) => {
     const isPulsing = status === 'aguardando_cliente';
@@ -396,8 +347,9 @@ export default function Projetos() {
           <DataTable 
             data={filteredClientItems}
             onRowClick={(item) => {
-              const clickHandler = getRowClick(item);
-              if (clickHandler) clickHandler();
+              if (item.type !== 'Planejamento') return navigate(item.route);
+              if (item.status === 'aguardando_cliente') return navigate(item.route);
+              return navigate(`/planejamento/${item.id}/tarefas`);
             }}
             emptyMessage="Nenhuma entrega encontrada."
             columns={[
@@ -432,7 +384,6 @@ export default function Projetos() {
                 }
               }
             ]}
-            actions={(item) => renderControle(item)}
           />
         )}
       </div>
