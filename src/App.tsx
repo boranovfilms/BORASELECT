@@ -21,6 +21,7 @@ import ClientDetails from './pages/ClientDetails';
 import NovaDemanda from './pages/NovaDemanda';
 import NewContentPlan from './pages/NewContentPlan'; 
 import ContentPlanDetails from './pages/ContentPlanDetails';
+import PlanejamentoTarefas from './pages/PlanejamentoTarefas';
 import Packages from './pages/Packages';
 import Credits from './pages/Credits';
 import ModelosFluxo from './pages/ModelosFluxo'; 
@@ -118,6 +119,7 @@ export default function App() {
         <Route path="/clients/:id/novo-planejamento" element={user && isAdmin ? wrapLayout(<NewContentPlan />) : <Navigate to="/" />} />
         
         <Route path="/planejamento/:id" element={user ? wrapLayout(<ContentPlanDetails />) : <Navigate to="/login" />} />
+        <Route path="/planejamento/:id/tarefas" element={user ? wrapLayout(<PlanejamentoTarefas />) : <Navigate to="/login" />} />
         <Route path="/packages" element={user && isAdmin ? wrapLayout(<Packages />) : <Navigate to="/" />} />
         <Route path="/credits" element={user && isAdmin ? wrapLayout(<Credits />) : <Navigate to="/" />} />
         <Route path="/modelos" element={user && isAdmin ? wrapLayout(<ModelosFluxo />) : <Navigate to="/" />} />
