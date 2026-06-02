@@ -7,10 +7,21 @@ import {
 import { db } from '../lib/firebase';
 import { doc, getDoc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { contentPlanService, ContentPlan } from '../services/contentPlanService';
-import { modelosService, WorkflowModel, Stage } from '../services/modelosService';
+import { modelosService, WorkflowModel, Stage, DemandType, DEMAND_TYPE_LABELS } from '../services/modelosService';
 import { DataTable } from '../components/ui/DataTable';
 import { cn } from '../lib/utils';
 import { toast } from 'react-hot-toast';
+
+const DEMAND_TYPES: DemandType[] = [
+  'planejamento',
+  'podcast',
+  'arte',
+  'video_institucional',
+  'video_clipe',
+  'ensaio_fotografico',
+  'email_marketing',
+  'assinatura_email'
+];
 
 export default function ClientDetails() {
   const { id: clientId } = useParams();
@@ -24,8 +35,8 @@ export default function ClientDetails() {
   const [newPlan, setNewPlan] = useState({ name: '', month: '', text: '' });
   const [saving, setSaving] = useState(false);
 
-  // Estados para Aprovadores
-  const [linkedModel, setLinkedModel] = useState<WorkflowModel | null>(null);
+  // Estados para Fluxos por Tipo de Demanda
+  const [workflowModels, setWorkflowModels] = useState<Record<string, string | null>>({});
   const [teamMembers, setTeamMembers] = useState<any[]>([]);
   const [workflowApprovers, setWorkflowApprovers] = useState<Record<string, string[]>>({});
   const [savingApprovers, setSavingApprovers] = useState(false);
@@ -50,12 +61,9 @@ export default function ClientDetails() {
         setClient(cData);
         setWorkflowApprovers(cData.workflowApprovers || {});
 
-        if (cData.workflowModelId) {
-          const mData = await modelosService.getModelo(cData.workflowModelId);
-          setLinkedModel(mData);
-        } else {
-          setLinkedModel(null);
-        }
+        // Carrega workflowModels (novo formato por tipo de demanda)
+        const wfModels = cData.workflowModels || {};
+        setWorkflowModels(wfModels);
 
         const q = query(collection(db, 'clients'), where('clienteId', '==', clientId), where('role', '==', 'equipe'));
         const teamSnap = await getDocs(q);
@@ -76,26 +84,35 @@ export default function ClientDetails() {
     }
   };
 
-  const handleUpdateWorkflowModel = async (modelId: string) => {
+  const handleUpdateWorkflowModel = async (demandType: string, modelId: string) => {
+    if (!clientId) return;
+    try {
+      const updatedModels = { ...workflowModels, [demandType]: modelId || null };
+      setWorkflowModels(updatedModels);
+      
+      const clientRef = doc(db, 'clients', clientId);
+      await updateDoc(clientRef, {
+        workflowModels: updatedModels,
+        updatedAt: new Date().toISOString()
+      });
+      
+      toast.success(`Modelo vinculado para ${DEMAND_TYPE_LABELS[demandType as DemandType]}!`);
+    } catch (error) {
+      toast.error('Erro ao vincular modelo.');
+    }
+  };
+
+  const handleSaveWorkflowModels = async () => {
     if (!clientId) return;
     try {
       const clientRef = doc(db, 'clients', clientId);
       await updateDoc(clientRef, {
-        workflowModelId: modelId,
+        workflowModels: workflowModels,
         updatedAt: new Date().toISOString()
       });
-      setClient((prev: any) => ({ ...prev, workflowModelId: modelId }));
-      
-      if (modelId) {
-        const mData = await modelosService.getModelo(modelId);
-        setLinkedModel(mData);
-      } else {
-        setLinkedModel(null);
-      }
-      
-      toast.success('Modelo de fluxo vinculado!');
+      toast.success('Fluxos configurados!');
     } catch (error) {
-      toast.error('Erro ao vincular modelo.');
+      toast.error('Erro ao salvar fluxos.');
     }
   };
 
@@ -178,6 +195,22 @@ export default function ClientDetails() {
   if (loading) return <div className="min-h-[60vh] flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-[#ff5351]" /></div>;
   if (!client) return <div className="p-8 text-center text-white"><p className="mb-4">Cliente não encontrado.</p><button onClick={() => navigate('/clients')} className="text-[#ff5351] font-bold underline">Voltar para a lista</button></div>;
 
+  // Busca o modelo vinculado ao tipo planejamento (para a seção de aprovadores)
+  const planejamentoModelId = workflowModels['planejamento'];
+  const [linkedModel, setLinkedModel] = useState<WorkflowModel | null>(null);
+
+  useEffect(() => {
+    async function loadModel() {
+      if (planejamentoModelId) {
+        const mData = await modelosService.getModelo(planejamentoModelId);
+        setLinkedModel(mData);
+      } else {
+        setLinkedModel(null);
+      }
+    }
+    loadModel();
+  }, [planejamentoModelId]);
+
   const approvalStages = linkedModel?.stages?.filter(s => s.requiresApproval) || [];
   const awaitingAction = plans.filter(p => p.status === 'aguardando_cliente' || p.status === 'devolvido').length;
   const approvedCount = plans.filter(p => p.status === 'aprovado').length;
@@ -200,32 +233,13 @@ export default function ClientDetails() {
                 <span className="text-zinc-800">•</span>
                 
                 <div className="flex items-center gap-3">
-                  <div className="flex items-center gap-2">
-                    <GitBranch className="w-3.5 h-3.5 text-zinc-500" />
-                    <div className="relative">
-                      <select 
-                        value={client.workflowModelId || ''} 
-                        onChange={(e) => handleUpdateWorkflowModel(e.target.value)}
-                        className="bg-zinc-900 border border-zinc-800 rounded-lg pl-2 pr-8 py-1 text-[10px] font-black uppercase tracking-widest text-zinc-300 focus:border-[#ff5351] outline-none appearance-none cursor-pointer"
-                      >
-                        <option value="">Nenhum modelo vinculado</option>
-                        {availableModels.map(model => (
-                          <option key={model.id} value={model.id}>{model.name}</option>
-                        ))}
-                      </select>
-                      <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-zinc-600 pointer-events-none" />
-                    </div>
-                  </div>
-
-                  {client.workflowModelId && (
-                    <button 
-                      onClick={() => setShowApprovers(!showApprovers)}
-                      className="flex items-center gap-2 px-3 py-1.5 bg-zinc-900 border border-zinc-800 hover:border-zinc-600 rounded-lg text-[10px] font-black uppercase tracking-widest text-zinc-500 hover:text-white transition-all"
-                    >
-                      <Settings className="w-3.5 h-3.5" />
-                      Configurar Fluxo
-                    </button>
-                  )}
+                  <button 
+                    onClick={() => setShowApprovers(!showApprovers)}
+                    className="flex items-center gap-2 px-3 py-1.5 bg-zinc-900 border border-zinc-800 hover:border-zinc-600 rounded-lg text-[10px] font-black uppercase tracking-widest text-zinc-500 hover:text-white transition-all"
+                  >
+                    <Settings className="w-3.5 h-3.5" />
+                    Configurar Fluxo
+                  </button>
                 </div>
 
                 <span className="text-zinc-800">•</span>
@@ -317,18 +331,18 @@ export default function ClientDetails() {
         />
       </section>
 
-      {/* SEÇÃO DE APROVADORES NO FINAL (OCULTA POR PADRÃO) */}
-      {client.workflowModelId && showApprovers && (
+      {/* SEÇÃO DE CONFIGURAÇÃO DE FLUXOS (OCULTA POR PADRÃO) */}
+      {showApprovers && (
         <section className="animate-in fade-in duration-300 pt-10 border-t border-zinc-900">
           <div className="bg-[#1f1f1f] border border-zinc-800 rounded-[32px] p-8">
             <div className="flex items-center justify-between mb-8">
               <div className="flex items-center gap-3">
                 <div className="p-2.5 bg-[#ff5351]/10 rounded-xl border border-[#ff5351]/20">
-                  <Users className="w-5 h-5 text-[#ff5351]" />
+                  <GitBranch className="w-5 h-5 text-[#ff5351]" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-black text-white uppercase italic leading-none">Aprovadores por Etapa</h3>
-                  <p className="text-zinc-500 text-xs font-bold uppercase tracking-wider mt-2">Defina quais membros podem validar cada fase do projeto.</p>
+                  <h3 className="text-lg font-black text-white uppercase italic leading-none">Fluxos por Tipo de Demanda</h3>
+                  <p className="text-zinc-500 text-xs font-bold uppercase tracking-wider mt-2">Vincule um modelo de fluxo para cada tipo de demanda deste cliente.</p>
                 </div>
               </div>
               <div className="flex items-center gap-3">
@@ -339,84 +353,121 @@ export default function ClientDetails() {
                   Fechar
                 </button>
                 <button 
-                  onClick={handleSaveApprovers}
-                  disabled={savingApprovers}
-                  className="px-6 h-12 bg-[#ff5351] text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:brightness-110 transition-all flex items-center gap-2 shadow-lg shadow-[#ff5351]/20 disabled:opacity-50"
+                  onClick={handleSaveWorkflowModels}
+                  className="px-6 h-12 bg-[#ff5351] text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:brightness-110 transition-all flex items-center gap-2 shadow-lg shadow-[#ff5351]/20"
                 >
-                  {savingApprovers ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                  Salvar Configuração
+                  <Save className="w-4 h-4" />
+                  Salvar Fluxos
                 </button>
               </div>
             </div>
 
-            {teamMembers.length === 0 ? (
-              <div className="py-12 text-center border-2 border-dashed border-zinc-800 rounded-3xl">
-                <Users className="w-12 h-12 text-zinc-800 mx-auto mb-4" />
-                <p className="text-zinc-500 text-sm font-bold uppercase tracking-widest max-w-xs mx-auto mb-6">
-                  Adicione membros à equipe deste cliente para configurar aprovadores
-                </p>
-                <Link to="/clients" className="px-6 py-3 bg-zinc-800 text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-zinc-700 transition-all">
-                  Ir para Gestão de Equipe
-                </Link>
-              </div>
-            ) : approvalStages.length === 0 ? (
-              <div className="py-12 text-center border-2 border-dashed border-zinc-800 rounded-3xl">
-                <AlertCircle className="w-12 h-12 text-zinc-800 mx-auto mb-4" />
-                <p className="text-zinc-500 text-sm font-bold uppercase tracking-widest">
-                  O modelo vinculado não possui etapas que requerem aprovação.
-                </p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {approvalStages.map(stage => (
-                  <div key={stage.id} className="bg-black/20 border border-zinc-800/50 rounded-3xl p-6 hover:border-zinc-700 transition-all">
-                    <div className="flex items-center justify-between mb-6">
-                      <div>
-                        <h4 className="text-white font-black uppercase text-sm">{stage.name}</h4>
-                        <span className="text-[9px] font-bold text-[#ff5351] uppercase tracking-widest mt-1 block opacity-70">{(stage.type || 'sem tipo').replace(/_/g, ' ')}</span>
-                      </div>
-                      <div className="w-8 h-8 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center text-[10px] font-black text-zinc-500">
-                        {(stage.order || 0) + 1}
-                      </div>
-                    </div>
-
-                    <div className="space-y-3">
-                      {teamMembers.map(member => {
-                        const isSelected = (workflowApprovers[stage.id] || []).includes(member.email);
-                        return (
-                          <div 
-                            key={member.id}
-                            onClick={() => toggleApprover(stage.id, member.email)}
-                            className={cn(
-                              "flex items-center justify-between p-3 rounded-2xl border transition-all cursor-pointer group",
-                              isSelected ? "bg-[#ff5351]/5 border-[#ff5351]/30" : "bg-zinc-900/50 border-zinc-800 hover:border-zinc-700"
-                            )}
-                          >
-                            <div className="flex items-center gap-3 overflow-hidden">
-                              <div className="w-8 h-8 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center overflow-hidden shrink-0">
-                                {member.photoUrl ? (
-                                  <img src={member.photoUrl} className="w-full h-full object-cover" alt="" />
-                                ) : (
-                                  <User className="w-4 h-4 text-zinc-600" />
-                                )}
-                              </div>
-                              <div className="overflow-hidden">
-                                <p className={cn("text-[10px] font-black uppercase truncate", isSelected ? "text-white" : "text-zinc-400")}>{member.name}</p>
-                                <p className="text-[8px] font-bold text-zinc-600 truncate uppercase">{member.email}</p>
-                              </div>
-                            </div>
-                            <div className={cn(
-                              "w-5 h-5 rounded-lg border-2 flex items-center justify-center transition-all",
-                              isSelected ? "bg-[#ff5351] border-[#ff5351]" : "border-zinc-800 group-hover:border-zinc-600"
-                            )}>
-                              {isSelected && <Check className="w-3 h-3 text-white" />}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
+            <div className="space-y-4">
+              {DEMAND_TYPES.map(demandType => (
+                <div key={demandType} className="flex items-center gap-4 p-4 bg-black/20 border border-zinc-800/50 rounded-2xl">
+                  <div className="flex-1">
+                    <p className="text-white font-black uppercase text-sm">{DEMAND_TYPE_LABELS[demandType]}</p>
                   </div>
-                ))}
+                  <div className="w-72">
+                    <select
+                      value={workflowModels[demandType] || ''}
+                      onChange={(e) => handleUpdateWorkflowModel(demandType, e.target.value)}
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-[10px] font-black uppercase tracking-widest text-zinc-300 focus:border-[#ff5351] outline-none appearance-none cursor-pointer"
+                    >
+                      <option value="">Nenhum modelo vinculado</option>
+                      {availableModels.map(model => (
+                        <option key={model.id} value={model.id}>{model.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* APROVADORES - apenas para o modelo de planejamento */}
+            {linkedModel && approvalStages.length > 0 && (
+              <div className="mt-10 pt-8 border-t border-zinc-800/50">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="p-2.5 bg-[#ff5351]/10 rounded-xl border border-[#ff5351]/20">
+                    <Users className="w-5 h-5 text-[#ff5351]" />
+                  </div>
+                  <div>
+                    <h4 className="text-lg font-black text-white uppercase italic leading-none">Aprovadores por Etapa</h4>
+                    <p className="text-zinc-500 text-xs font-bold uppercase tracking-wider mt-2">Defina quais membros podem validar cada fase do planejamento.</p>
+                  </div>
+                  <button 
+                    onClick={handleSaveApprovers}
+                    disabled={savingApprovers}
+                    className="ml-auto px-6 h-12 bg-[#ff5351] text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:brightness-110 transition-all flex items-center gap-2 shadow-lg shadow-[#ff5351]/20 disabled:opacity-50"
+                  >
+                    {savingApprovers ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                    Salvar Configuração
+                  </button>
+                </div>
+
+                {teamMembers.length === 0 ? (
+                  <div className="py-12 text-center border-2 border-dashed border-zinc-800 rounded-3xl">
+                    <Users className="w-12 h-12 text-zinc-800 mx-auto mb-4" />
+                    <p className="text-zinc-500 text-sm font-bold uppercase tracking-widest max-w-xs mx-auto mb-6">
+                      Adicione membros à equipe deste cliente para configurar aprovadores
+                    </p>
+                    <Link to="/clients" className="px-6 py-3 bg-zinc-800 text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-zinc-700 transition-all">
+                      Ir para Gestão de Equipe
+                    </Link>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {approvalStages.map(stage => (
+                      <div key={stage.id} className="bg-black/20 border border-zinc-800/50 rounded-3xl p-6 hover:border-zinc-700 transition-all">
+                        <div className="flex items-center justify-between mb-6">
+                          <div>
+                            <h4 className="text-white font-black uppercase text-sm">{stage.name}</h4>
+                            <span className="text-[9px] font-bold text-[#ff5351] uppercase tracking-widest mt-1 block opacity-70">{(stage.type || 'sem tipo').replace(/_/g, ' ')}</span>
+                          </div>
+                          <div className="w-8 h-8 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center text-[10px] font-black text-zinc-500">
+                            {(stage.order || 0) + 1}
+                          </div>
+                        </div>
+
+                        <div className="space-y-3">
+                          {teamMembers.map(member => {
+                            const isSelected = (workflowApprovers[stage.id] || []).includes(member.email);
+                            return (
+                              <div 
+                                key={member.id}
+                                onClick={() => toggleApprover(stage.id, member.email)}
+                                className={cn(
+                                  "flex items-center justify-between p-3 rounded-2xl border transition-all cursor-pointer group",
+                                  isSelected ? "bg-[#ff5351]/5 border-[#ff5351]/30" : "bg-zinc-900/50 border-zinc-800 hover:border-zinc-700"
+                                )}
+                              >
+                                <div className="flex items-center gap-3 overflow-hidden">
+                                  <div className="w-8 h-8 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center overflow-hidden shrink-0">
+                                    {member.photoUrl ? (
+                                      <img src={member.photoUrl} className="w-full h-full object-cover" alt="" />
+                                    ) : (
+                                      <User className="w-4 h-4 text-zinc-600" />
+                                    )}
+                                  </div>
+                                  <div className="overflow-hidden">
+                                    <p className={cn("text-[10px] font-black uppercase truncate", isSelected ? "text-white" : "text-zinc-400")}>{member.name}</p>
+                                    <p className="text-[8px] font-bold text-zinc-600 truncate uppercase">{member.email}</p>
+                                  </div>
+                                </div>
+                                <div className={cn(
+                                  "w-5 h-5 rounded-lg border-2 flex items-center justify-center transition-all",
+                                  isSelected ? "bg-[#ff5351] border-[#ff5351]" : "border-zinc-800 group-hover:border-zinc-600"
+                                )}>
+                                  {isSelected && <Check className="w-3 h-3 text-white" />}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>
