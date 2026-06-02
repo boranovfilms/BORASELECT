@@ -1,4 +1,3 @@
-export const dynamic = 'force-dynamic';
 import { useState, useEffect } from 'react';
 import { 
   Users, UserPlus, Library, CheckSquare, ArrowRight, Loader2, Shield, Clock, CheckCircle2, Wallet, Bell, Building

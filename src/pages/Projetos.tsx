@@ -1,4 +1,3 @@
-export const dynamic = 'force-dynamic';
 import { useState, useEffect, useMemo } from 'react';
 import { 
   Plus, Calendar, Image as ImageIcon, Link as LinkIcon, 
@@ -215,7 +214,7 @@ export default function Projetos() {
     return <span className="text-zinc-600 text-sm">—</span>;
   };
 
-  // Badge de status com bolinha pulsante para aguardando_cliente
+  // Badge de status com bolinha pulsando para aguardando_cliente
   const renderStatusBadge = (status: string) => {
     const isPulsing = status === 'aguardando_cliente';
     return (
