@@ -117,9 +117,19 @@ export default function AppLayout({ children, userRole = 'cliente', userName = '
   }, [user]);
 
   const handleNotificationClick = async (task: Task) => {
-    await taskService.markAsSeen(task.id!);
+    try {
+      await taskService.markAsSeen(task.id!);
+    } catch(e) {}
+    
     setShowNotificationDropdown(false);
-    navigate('/tarefas');
+    
+    if ((task.tipo === 'validacao_planejamento' || 
+         task.tipo === 'planejamento_revisado' || 
+         task.tipo === 'planejamento_validado_equipe') && task.planId) {
+      navigate(`/planejamento/${task.planId}`);
+    } else {
+      navigate('/tarefas');
+    }
   };
 
   const handleLogout = async () => {
@@ -223,7 +233,11 @@ export default function AppLayout({ children, userRole = 'cliente', userName = '
                       <div className="w-2 h-2 rounded-full bg-[#ff5351] mt-1.5 shadow-[0_0_8px_rgba(255,83,81,0.4)]" />
                       <div className="flex-1 overflow-hidden">
                         <p className="text-xs font-bold text-white uppercase truncate group-hover/item:text-[#ff5351] transition-colors">{task.nome}</p>
-                        <p className="text-[9px] text-zinc-500 font-black uppercase tracking-widest mt-1">Nova tarefa delegada</p>
+                        <p className="text-[9px] text-zinc-500 font-black uppercase tracking-widest mt-1">
+                          {task.tipo === 'validacao_planejamento' || task.tipo === 'planejamento_revisado' || task.tipo === 'planejamento_validado_equipe'
+                            ? task.descricao || 'Nova notificação de planejamento'
+                            : 'Nova tarefa delegada'}
+                        </p>
                       </div>
                       <ChevronRight className="w-4 h-4 text-zinc-700 group-hover/item:text-[#ff5351] transition-colors" />
                     </button>
