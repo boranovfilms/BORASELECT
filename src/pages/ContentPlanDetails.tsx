@@ -87,6 +87,9 @@ export default function ContentPlanDetails() {
         if (isEquipe) {
           const firstApproved = planData.posts.find(p => p.status === 'aprovado');
           if (firstApproved) setSelectedPostId(firstApproved.id);
+        } else if (isInternal && planData.status === 'devolvido') {
+          const firstReprovado = planData.posts.find(p => p.status === 'reprovado' || p.status === 'em_revisao');
+          if (firstReprovado) setSelectedPostId(firstReprovado.id);
         } else {
           const firstPending = planData.posts.find(p => 
             p.status !== 'aprovado' && p.status !== 'reprovado' && p.status !== 'descartado'
@@ -174,43 +177,6 @@ export default function ContentPlanDetails() {
       });
     } catch (e) {
       console.warn('Erro ao notificar admin:', e);
-    }
-  };
-
-  const notifyClient = async () => {
-    if (!plan) return;
-    try {
-      const currentUserEmail = auth.currentUser?.email?.toLowerCase();
-      const clientQuery = query(
-        collection(db, 'clients'),
-        where('clienteId', '==', plan.clientId),
-        where('role', '==', 'cliente')
-      );
-      const clientSnap = await getDocs(clientQuery);
-      const clients = clientSnap.docs.map(d => ({ id: d.id, ...d.data() as any }));
-      
-      const notifPromises = clients.map(client => 
-        addDoc(collection(db, 'tasks'), {
-          nome: `PLANEJAMENTO CORRIGIDO: ${plan.name}`,
-          prioridade: 'alta',
-          status: 'pendente',
-          dataCriacao: serverTimestamp(),
-          responsavelCriacao: auth.currentUser?.displayName || 'Redator',
-          responsavelCriacaoEmail: currentUserEmail || '',
-          responsavelTarefa: client.name || client.email,
-          tipoAcesso: 'particular',
-          delegadoPara: client.email?.toLowerCase(),
-          delegadoNome: client.name || client.email,
-          vistoPeloDelegado: false,
-          descricao: `O planejamento "${plan.name}" foi corrigido e está pronto para nova avaliação.`,
-          planId: plan.id,
-          tipo: 'planejamento_corrigido'
-        })
-      );
-      
-      await Promise.all(notifPromises);
-    } catch (e) {
-      console.warn('Erro ao notificar cliente:', e);
     }
   };
 
@@ -412,10 +378,48 @@ export default function ContentPlanDetails() {
     if (!planId || !plan) return;
     setSaving(true);
     try {
-      await contentPlanService.updateStatus(planId, 'aguardando_cliente');
-      await notifyClient();
+      // Buscar email do cliente
+      const clientSnap = await getDoc(doc(db, 'clients', plan.clientId));
+      const clientData = clientSnap.exists() ? clientSnap.data() : null;
+      const targetEmail = clientData?.email?.toLowerCase() || clientEmail;
+      const targetName = clientData?.name || targetEmail;
+
+      // Atualizar status dos posts em_revisao para pendente
+      const planRef = doc(db, 'content_plans', planId);
+      const updatedPosts = plan.posts.map(post => {
+        if (post.status === 'em_revisao') {
+          return { ...post, status: 'pendente' as const };
+        }
+        return post;
+      });
+      
+      await updateDoc(planRef, {
+        posts: updatedPosts,
+        status: 'aguardando_cliente',
+        updatedAt: serverTimestamp()
+      });
+
+      // Criar notificação para o cliente
+      await addDoc(collection(db, 'tasks'), {
+        nome: `PLANEJAMENTO REVISADO: ${plan.name}`,
+        prioridade: 'alta',
+        status: 'pendente',
+        dataCriacao: serverTimestamp(),
+        responsavelCriacao: auth.currentUser?.displayName || 'Redator',
+        responsavelCriacaoEmail: auth.currentUser?.email || '',
+        responsavelTarefa: targetName,
+        tipoAcesso: 'particular',
+        delegadoPara: targetEmail,
+        delegadoNome: targetName,
+        vistoPeloDelegado: false,
+        descricao: `O planejamento "${plan.name}" foi revisado pelo redator e está pronto para sua avaliação.`,
+        planId: plan.id,
+        tipo: 'planejamento_revisado'
+      });
+
       await loadData();
       toast.success('Planejamento reenviado para o cliente!');
+      navigate('/projetos');
     } catch (error) {
       toast.error('Erro ao reenviar');
     } finally {
@@ -463,8 +467,8 @@ export default function ContentPlanDetails() {
   // Posts visíveis na sidebar dependem do modo
   const sidebarPosts = isEquipe 
     ? plan.posts.filter(p => p.status === 'aprovado' || p.status === 'validado_equipe')
-    : isInternal
-      ? plan.posts
+    : isInternal && plan.status === 'devolvido'
+      ? plan.posts.filter(p => p.status === 'reprovado' || p.status === 'em_revisao')
       : plan.posts;
 
   const pendingPosts = sidebarPosts.filter(p => 
@@ -472,10 +476,15 @@ export default function ContentPlanDetails() {
   );
   const approvedPosts = sidebarPosts.filter(p => p.status === 'aprovado');
   const validatedPosts = sidebarPosts.filter(p => p.status === 'validado_equipe');
-  const emRevisaoPosts = isInternal ? plan.posts.filter(p => p.status === 'em_revisao') : [];
-  const reprovedOrDiscardedPosts = isEquipe || isInternal
-    ? []
-    : plan.posts.filter(p => p.status === 'reprovado' || p.status === 'descartado');
+  const emRevisaoPosts = isInternal && plan.status === 'devolvido' 
+    ? plan.posts.filter(p => p.status === 'em_revisao')
+    : [];
+  const reprovedPosts = isInternal && plan.status === 'devolvido'
+    ? plan.posts.filter(p => p.status === 'reprovado')
+    : [];
+  const reprovedOrDiscardedPosts = !isEquipe && !isInternal
+    ? plan.posts.filter(p => p.status === 'reprovado' || p.status === 'descartado')
+    : [];
 
   // Cálculos para o modal de conclusão
   const aprovados = plan?.posts?.filter(p => p.status === 'aprovado').length || 0;
@@ -483,10 +492,11 @@ export default function ContentPlanDetails() {
     p.status === 'reprovado' || p.status === 'descartado'
   ).length || 0;
 
-  // Verifica se todos os reprovados foram corrigidos (em_revisao)
-  const allReprovadosCorrigidos = plan.posts.every(p => 
-    p.status !== 'reprovado'
+  // Verifica se todos os posts reprovados/em_revisao foram editados (todos em_revisao)
+  const postsReprovados = plan.posts.filter(p => 
+    p.status === 'reprovado' || p.status === 'em_revisao'
   );
+  const todosEditados = postsReprovados.length > 0 && postsReprovados.every(p => p.status === 'em_revisao');
 
   return (
     <div className="max-w-7xl mx-auto text-left relative">
@@ -509,7 +519,7 @@ export default function ContentPlanDetails() {
             </button>
           )}
 
-          {isInternal && plan.status === 'devolvido' && allReprovadosCorrigidos && (
+          {isInternal && plan.status === 'devolvido' && todosEditados && (
             <button onClick={handleReenviarParaCliente} disabled={saving} className="h-10 px-6 bg-[#ff5351] text-white rounded-xl font-black uppercase tracking-widest text-[10px] hover:brightness-110 transition-all flex items-center gap-2">
               {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}
               Reenviar para Cliente
@@ -554,8 +564,40 @@ export default function ContentPlanDetails() {
               </button>
             ))}
 
-            {/* GRUPO EM REVISÃO (modo redator) */}
-            {isInternal && emRevisaoPosts.length > 0 && (
+            {/* GRUPO REPROVADOS (modo redator devolvido) */}
+            {isInternal && plan.status === 'devolvido' && reprovedPosts.length > 0 && (
+              <div className="mt-2">
+                <div className="w-full p-3 flex items-center justify-between text-red-500">
+                  <span className="text-[9px] font-black uppercase tracking-widest flex items-center gap-2">
+                    <X className="w-3 h-3" /> Reprovados ({reprovedPosts.length})
+                  </span>
+                </div>
+                {reprovedPosts.map((post) => (
+                  <button 
+                    key={post.id}
+                    onClick={() => { setSelectedPostId(post.id); setIsEditing(false); setShowReprovalInput(false); }}
+                    className={cn(
+                      "w-full p-5 text-left border-b border-zinc-800/50 transition-all flex items-start gap-4 relative group",
+                      selectedPostId === post.id ? "bg-[#1f1f1f] border-l-4 border-l-[#ff5351]" : "hover:bg-zinc-900/50"
+                    )}
+                  >
+                    <div className="w-2 h-2 rounded-full mt-1.5 shrink-0 bg-red-500" />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                         <span className={cn("px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter border", getTypeStyles(post.type))}>{post.type}</span>
+                         <span className="text-[9px] font-black text-zinc-500">#{String(post.number).padStart(2, '0')}</span>
+                      </div>
+                      <p className={cn("text-[11px] font-black uppercase leading-tight line-clamp-2", selectedPostId === post.id ? "text-white" : "text-zinc-400 group-hover:text-zinc-200")}>
+                        {post.headline || "Sem título"}
+                      </p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* GRUPO EM REVISÃO (modo redator devolvido) */}
+            {isInternal && plan.status === 'devolvido' && emRevisaoPosts.length > 0 && (
               <div className="mt-2">
                 <div className="w-full p-3 flex items-center justify-between text-amber-500">
                   <span className="text-[9px] font-black uppercase tracking-widest flex items-center gap-2">
