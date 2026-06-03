@@ -20,6 +20,7 @@ export default function ContentPlanDetails() {
   const [clientEmail, setClientEmail] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [userRole, setUserRole] = useState('cliente');
   
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -30,13 +31,35 @@ export default function ContentPlanDetails() {
   const [showCompletionModal, setShowCompletionModal] = useState(false);
   const [showReprovalModal, setShowReprovalModal] = useState(false);
   const [reprovalType, setReprovalType] = useState<'correcao' | 'descartar' | null>(null);
+  const [completionMode, setCompletionMode] = useState<'cliente' | 'equipe'>('cliente');
 
   const user = auth.currentUser;
   const currentEmail = user?.email?.toLowerCase();
 
+  const isAdmin = currentEmail === 'admin@boraselect.com.br' || currentEmail === 'boranovfilms@gmail.com';
+  const isClient = clientEmail === currentEmail;
+  const isTeamMember = teamMembers.some(m => m.email?.toLowerCase() === currentEmail);
+  const isEquipe = userRole === 'equipe';
+  const hasApprovalPower = isClient || isTeamMember;
+
   useEffect(() => {
     loadData();
+    loadUserRole();
   }, [planId]);
+
+  const loadUserRole = async () => {
+    if (!currentEmail) return;
+    try {
+      const q = query(collection(db, 'clients'), where('email', '==', currentEmail));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        const role = snap.docs[0].data().role || 'cliente';
+        setUserRole(role);
+      }
+    } catch (e) {
+      console.warn('Erro ao carregar role:', e);
+    }
+  };
 
   const loadData = async () => {
     if (!planId) return;
@@ -58,13 +81,21 @@ export default function ContentPlanDetails() {
       const members = await teamService.getClientTeamMembers(planData.clientId);
       setTeamMembers(members);
 
-      // Seleciona o primeiro post não aprovado por padrão
+      // Seleciona o primeiro post não aprovado por padrão (cliente)
+      // ou primeiro aprovado por padrão (equipe)
       if (!selectedPostId) {
-        const firstPending = planData.posts.find(p => p.status !== 'aprovado');
-        if (firstPending) {
-          setSelectedPostId(firstPending.id);
-        } else if (planData.posts.length > 0) {
-          setSelectedPostId(planData.posts[0].id);
+        if (isEquipe) {
+          const firstApproved = planData.posts.find(p => p.status === 'aprovado');
+          if (firstApproved) setSelectedPostId(firstApproved.id);
+        } else {
+          const firstPending = planData.posts.find(p => 
+            p.status !== 'aprovado' && p.status !== 'reprovado' && p.status !== 'descartado'
+          );
+          if (firstPending) {
+            setSelectedPostId(firstPending.id);
+          } else if (planData.posts.length > 0) {
+            setSelectedPostId(planData.posts[0].id);
+          }
         }
       }
 
@@ -76,15 +107,11 @@ export default function ContentPlanDetails() {
     }
   };
 
-  const isAdmin = currentEmail === 'admin@boraselect.com.br' || currentEmail === 'boranovfilms@gmail.com';
-  const isClient = clientEmail === currentEmail;
-  const isTeamMember = teamMembers.some(m => m.email?.toLowerCase() === currentEmail);
-  const hasApprovalPower = isClient || isTeamMember;
-
   const selectedPost = plan?.posts.find(p => p.id === selectedPostId);
   const approvedCount = plan?.posts.filter(p => p.status === 'aprovado').length || 0;
   const reprovedCount = plan?.posts.filter(p => p.status === 'reprovado').length || 0;
   const discardedCount = plan?.posts.filter(p => p.status === 'descartado').length || 0;
+  const validatedCount = plan?.posts.filter(p => p.status === 'validado_equipe').length || 0;
   const totalPosts = plan?.posts.length || 0;
 
   const notifyTeam = async () => {
@@ -126,6 +153,30 @@ export default function ContentPlanDetails() {
     }
   };
 
+  const notifyAdmin = async () => {
+    if (!plan) return;
+    try {
+      await addDoc(collection(db, 'tasks'), {
+        nome: `PLANEJAMENTO VALIDADO: ${plan.name}`,
+        prioridade: 'alta',
+        status: 'pendente',
+        dataCriacao: serverTimestamp(),
+        responsavelCriacao: auth.currentUser?.displayName || 'Equipe',
+        responsavelCriacaoEmail: auth.currentUser?.email || '',
+        responsavelTarefa: 'Admin BORA',
+        tipoAcesso: 'particular',
+        delegadoPara: 'boranovfilms@gmail.com',
+        delegadoNome: 'Admin BORA',
+        vistoPeloDelegado: false,
+        descricao: `O planejamento "${plan.name}" foi validado pela equipe e está pronto para delegação.`,
+        planId: plan.id,
+        tipo: 'planejamento_validado_equipe'
+      });
+    } catch (e) {
+      console.warn('Erro ao notificar admin:', e);
+    }
+  };
+
   const handleUpdateStatus = async (postId: string, action: 'aprovado' | 'reprovado' | 'editado', comment?: string, newText?: string) => {
     if (!planId || !plan) return;
     setSaving(true);
@@ -138,10 +189,20 @@ export default function ContentPlanDetails() {
         const allEvaluated = updatedPlan.posts.every(p => 
           p.status === 'aprovado' || p.status === 'reprovado' || p.status === 'descartado'
         );
+        const hasReprovados = updatedPlan.posts.filter(p => p.status === 'reprovado').length;
+        const allApprovedOrDiscarded = updatedPlan.posts.every(p => 
+          p.status === 'aprovado' || p.status === 'descartado'
+        );
+        
         if (allEvaluated) {
           setShowCompletionModal(true);
-          await contentPlanService.updateStatus(planId, 'aprovado');
-          await notifyTeam();
+          setCompletionMode('cliente');
+          if (allApprovedOrDiscarded) {
+            await contentPlanService.updateStatus(planId, 'aprovado');
+            await notifyTeam();
+          } else {
+            await contentPlanService.updateStatus(planId, 'devolvido');
+          }
         }
       }
       
@@ -202,14 +263,90 @@ export default function ContentPlanDetails() {
         const allEvaluated = updatedPlan.posts.every(p => 
           p.status === 'aprovado' || p.status === 'reprovado' || p.status === 'descartado'
         );
+        const allApprovedOrDiscarded = updatedPlan.posts.every(p => 
+          p.status === 'aprovado' || p.status === 'descartado'
+        );
+        
         if (allEvaluated) {
           setShowCompletionModal(true);
-          await contentPlanService.updateStatus(planId, 'aprovado');
-          await notifyTeam();
+          setCompletionMode('cliente');
+          if (allApprovedOrDiscarded) {
+            await contentPlanService.updateStatus(planId, 'aprovado');
+            await notifyTeam();
+          } else {
+            await contentPlanService.updateStatus(planId, 'devolvido');
+          }
         }
       }
     } catch (error) {
       toast.error('Erro ao reprovar post');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleValidatePost = async () => {
+    if (!planId || !selectedPostId) return;
+    setSaving(true);
+    try {
+      await contentPlanService.validatePostByEquipe(planId, selectedPostId, auth.currentUser);
+      toast.success('Post validado!');
+      
+      const updatedPlan = await contentPlanService.getPlanById(planId);
+      if (updatedPlan) {
+        setPlan(updatedPlan);
+        
+        const approvedPosts = updatedPlan.posts.filter(p => p.status === 'aprovado');
+        const allValidated = approvedPosts.length === 0;
+        
+        if (allValidated) {
+          setShowCompletionModal(true);
+          setCompletionMode('equipe');
+          await contentPlanService.updateStatus(planId, 'aprovado_equipe');
+          await notifyAdmin();
+        } else {
+          const nextApproved = updatedPlan.posts.find(p => p.status === 'aprovado');
+          if (nextApproved) {
+            setTimeout(() => setSelectedPostId(nextApproved.id), 300);
+          }
+        }
+      }
+    } catch (error) {
+      toast.error('Erro ao validar post');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleEditByEquipe = async () => {
+    if (!planId || !selectedPostId || !editingText) return;
+    setSaving(true);
+    try {
+      await contentPlanService.updatePostByEquipe(planId, selectedPostId, editingText, auth.currentUser);
+      toast.success('Alteração salva e post validado!');
+      setIsEditing(false);
+      
+      const updatedPlan = await contentPlanService.getPlanById(planId);
+      if (updatedPlan) {
+        setPlan(updatedPlan);
+        
+        const approvedPosts = updatedPlan.posts.filter(p => p.status === 'aprovado');
+        const allValidated = approvedPosts.length === 0;
+        
+        if (allValidated) {
+          setShowCompletionModal(true);
+          setCompletionMode('equipe');
+          await contentPlanService.updateStatus(planId, 'aprovado_equipe');
+          await notifyAdmin();
+        } else {
+          const nextApproved = updatedPlan.posts.find(p => p.status === 'aprovado');
+          if (nextApproved) {
+            setTimeout(() => setSelectedPostId(nextApproved.id), 300);
+          }
+        }
+      }
+    } catch (error) {
+      toast.error('Erro ao salvar alteração');
     } finally {
       setSaving(false);
     }
@@ -244,17 +381,26 @@ export default function ContentPlanDetails() {
     switch (status) {
       case 'reprovado': return 'bg-red-500';
       case 'descartado': return 'bg-red-600';
+      case 'validado_equipe': return 'bg-emerald-500';
       default: return 'bg-zinc-600';
     }
   };
 
   if (loading || !plan) return <div className="min-h-[60vh] flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-[#ff5351]" /></div>;
 
-  const pendingPosts = plan.posts.filter(p => 
-    p.status !== 'aprovado' && p.status !== 'reprovado' && p.status !== 'descartado'
+  // Posts visíveis na sidebar dependem do modo
+  const sidebarPosts = isEquipe 
+    ? plan.posts.filter(p => p.status === 'aprovado' || p.status === 'validado_equipe')
+    : plan.posts;
+
+  const pendingPosts = sidebarPosts.filter(p => 
+    p.status !== 'aprovado' && p.status !== 'reprovado' && p.status !== 'descartado' && p.status !== 'validado_equipe'
   );
-  const approvedPosts = plan.posts.filter(p => p.status === 'aprovado');
-  const reprovedOrDiscardedPosts = plan.posts.filter(p => p.status === 'reprovado' || p.status === 'descartado');
+  const approvedPosts = sidebarPosts.filter(p => p.status === 'aprovado');
+  const validatedPosts = sidebarPosts.filter(p => p.status === 'validado_equipe');
+  const reprovedOrDiscardedPosts = isEquipe 
+    ? []
+    : plan.posts.filter(p => p.status === 'reprovado' || p.status === 'descartado');
 
   // Cálculos para o modal de conclusão
   const aprovados = plan?.posts?.filter(p => p.status === 'aprovado').length || 0;
@@ -287,16 +433,16 @@ export default function ContentPlanDetails() {
         <aside className="w-[280px] bg-[#0e0e0e] border-r border-zinc-800 flex flex-col shrink-0">
           <div className="p-5 border-b border-zinc-800 bg-black/20">
             <div className="flex items-center justify-between mb-3">
-              <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Aprovação do Lote</span>
-              <span className="text-[10px] font-black text-white">{approvedCount} / {totalPosts}</span>
+              <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">{isEquipe ? 'Validação da Equipe' : 'Aprovação do Lote'}</span>
+              <span className="text-[10px] font-black text-white">{isEquipe ? validatedCount : approvedCount} / {totalPosts}</span>
             </div>
             <div className="h-1 bg-zinc-800 rounded-full overflow-hidden">
-              <div className="h-full bg-[#ff5351] transition-all duration-500" style={{ width: `${(approvedCount / totalPosts) * 100}%` }} />
+              <div className="h-full bg-[#ff5351] transition-all duration-500" style={{ width: `${((isEquipe ? validatedCount : approvedCount) / totalPosts) * 100}%` }} />
             </div>
           </div>
 
           <div className="flex-1 overflow-y-auto custom-scrollbar">
-            {/* GRUPO 1: PENDENTES */}
+            {/* GRUPO 1: PENDENTES / APROVADOS */}
             {pendingPosts.map((post) => (
               <button 
                 key={post.id}
@@ -319,8 +465,49 @@ export default function ContentPlanDetails() {
               </button>
             ))}
 
-            {/* SEPARADOR E GRUPO 2: APROVADOS */}
-            {approvedPosts.length > 0 && (
+            {/* GRUPO VALIDADOS (modo equipe) */}
+            {isEquipe && validatedPosts.length > 0 && (
+              <div className="mt-2">
+                <button 
+                  onClick={() => setShowApprovedInSidebar(!showApprovedInSidebar)}
+                  className="w-full p-3 flex items-center justify-between text-zinc-600 hover:text-zinc-400 transition-colors"
+                >
+                  <span className="text-[9px] font-black uppercase tracking-widest flex items-center gap-2">
+                    <Check className="w-3 h-3" /> Validados ({validatedPosts.length})
+                  </span>
+                  {showApprovedInSidebar ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                </button>
+
+                {showApprovedInSidebar && (
+                  <div className="animate-in slide-in-from-top-2 duration-200">
+                    {validatedPosts.map((post) => (
+                      <button 
+                        key={post.id}
+                        onClick={() => { setSelectedPostId(post.id); setIsEditing(false); setShowReprovalInput(false); }}
+                        className={cn(
+                          "w-full p-5 text-left border-b border-zinc-800/50 transition-all flex items-start gap-4 relative group opacity-50",
+                          selectedPostId === post.id ? "bg-[#1f1f1f] border-l-4 border-l-[#ff5351] opacity-100" : "hover:bg-zinc-900/50"
+                        )}
+                      >
+                        <div className="w-2 h-2 rounded-full mt-1.5 shrink-0 bg-emerald-500 shadow-[0_0_8px_#10b981]" />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                             <span className={cn("px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter border", getTypeStyles(post.type))}>{post.type}</span>
+                             <span className="text-[9px] font-black text-zinc-500">#{String(post.number).padStart(2, '0')}</span>
+                          </div>
+                          <p className={cn("text-[11px] font-black uppercase leading-tight line-clamp-2", selectedPostId === post.id ? "text-white" : "text-zinc-400 group-hover:text-zinc-200")}>
+                            {post.headline || "Sem título"}
+                          </p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* SEPARADOR E GRUPO 2: APROVADOS (modo cliente) */}
+            {!isEquipe && approvedPosts.length > 0 && (
               <div className="mt-2">
                 <button 
                   onClick={() => setShowApprovedInSidebar(!showApprovedInSidebar)}
@@ -360,8 +547,8 @@ export default function ContentPlanDetails() {
               </div>
             )}
 
-            {/* GRUPO 3: REPROVADOS E DESCARTADOS */}
-            {reprovedOrDiscardedPosts.length > 0 && (
+            {/* GRUPO 3: REPROVADOS E DESCARTADOS (modo cliente) */}
+            {!isEquipe && reprovedOrDiscardedPosts.length > 0 && (
               <div className="mt-2">
                 <button 
                   onClick={() => setShowApprovedInSidebar(!showApprovedInSidebar)}
@@ -419,8 +606,10 @@ export default function ContentPlanDetails() {
                      selectedPost.status === 'aprovado' ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" : 
                      selectedPost.status === 'reprovado' ? "bg-red-500/10 text-red-500 border-red-500/20" : 
                      selectedPost.status === 'descartado' ? "bg-red-600/10 text-red-400 border-red-600/20" :
-                     selectedPost.status === 'em_revisao' ? "bg-amber-500/10 text-amber-400 border-amber-500/20" : "bg-zinc-800 text-zinc-500 border-zinc-700"
-                   )}>{selectedPost.status}</span>
+                     selectedPost.status === 'em_revisao' ? "bg-amber-500/10 text-amber-400 border-amber-500/20" : 
+                     selectedPost.status === 'validado_equipe' ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" :
+                     "bg-zinc-800 text-zinc-500 border-zinc-700"
+                   )}>{selectedPost.status === 'validado_equipe' ? 'VALIDADO' : selectedPost.status}</span>
                 </div>
                 <div className="flex items-center gap-2 text-zinc-500 text-[10px] font-black uppercase">
                   <Calendar className="w-3.5 h-3.5" />
@@ -452,7 +641,11 @@ export default function ContentPlanDetails() {
                   {isEditing && (
                     <div className="flex justify-end gap-3 mt-4">
                        <button onClick={() => setIsEditing(false)} className="px-4 py-2 bg-zinc-800 text-zinc-400 text-[10px] font-black uppercase rounded-lg">Cancelar</button>
-                       <button onClick={() => handleUpdateStatus(selectedPost.id, 'editado', undefined, editingText)} className="px-6 py-2 bg-white text-black text-[10px] font-black uppercase rounded-lg hover:bg-[#ff5351] hover:text-white transition-all">Confirmar Edição</button>
+                       {isEquipe ? (
+                         <button onClick={handleEditByEquipe} disabled={saving} className="px-6 py-2 bg-white text-black text-[10px] font-black uppercase rounded-lg hover:bg-[#ff5351] hover:text-white transition-all">{saving ? 'Salvando...' : 'Salvar e Validar'}</button>
+                       ) : (
+                         <button onClick={() => handleUpdateStatus(selectedPost.id, 'editado', undefined, editingText)} className="px-6 py-2 bg-white text-black text-[10px] font-black uppercase rounded-lg hover:bg-[#ff5351] hover:text-white transition-all">Confirmar Edição</button>
+                       )}
                     </div>
                   )}
                 </section>
@@ -519,7 +712,31 @@ export default function ContentPlanDetails() {
 
               <footer className="p-6 bg-black border-t border-zinc-800 flex items-center justify-between shrink-0">
                 <div className="flex items-center gap-3">
-                  {hasApprovalPower && (plan.status === 'aguardando_cliente' || plan.status === 'aguardando_validacao_equipe') && (
+                  {isEquipe && selectedPost.status === 'aprovado' && (
+                    <>
+                      <button 
+                        onClick={handleValidatePost}
+                        disabled={saving}
+                        className="h-12 px-8 bg-emerald-500 text-white rounded-xl font-black uppercase tracking-widest text-[11px] hover:brightness-110 transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 disabled:opacity-50"
+                      >
+                        <Check className="w-4 h-4" /> Validar Post
+                      </button>
+                      <button 
+                        onClick={() => { setIsEditing(true); setEditingText(selectedPost.caption); }}
+                        className="h-12 px-6 bg-zinc-800 text-zinc-400 rounded-xl font-black uppercase tracking-widest text-[10px] hover:text-white transition-all flex items-center gap-2 border border-zinc-700"
+                      >
+                        <Edit3 className="w-4 h-4" /> Alterar Texto
+                      </button>
+                    </>
+                  )}
+                  
+                  {isEquipe && selectedPost.status === 'validado_equipe' && (
+                    <span className="text-emerald-500 text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
+                      <Check className="w-4 h-4" /> Post Validado
+                    </span>
+                  )}
+
+                  {!isEquipe && hasApprovalPower && (plan.status === 'aguardando_cliente' || plan.status === 'aguardando_validacao_equipe') && (
                     <>
                       <button 
                         onClick={() => handleUpdateStatus(selectedPost.id, 'aprovado')}
@@ -544,7 +761,7 @@ export default function ContentPlanDetails() {
                   )}
                 </div>
                 <div className="text-[10px] font-black text-zinc-600 uppercase tracking-widest">
-                   Post {selectedPost.status}
+                   Post {selectedPost.status === 'validado_equipe' ? 'VALIDADO' : selectedPost.status}
                 </div>
               </footer>
             </>
@@ -568,51 +785,70 @@ export default function ContentPlanDetails() {
               <span className="text-[10px] font-black uppercase tracking-widest text-zinc-600">{plan.monthReference}</span>
             </div>
 
-            <h2 className="text-2xl font-black uppercase italic text-white text-center mb-1">Revisão Concluída</h2>
-            <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500 text-center mb-6">Planejamento avaliado com sucesso</p>
+            {completionMode === 'equipe' ? (
+              <>
+                <h2 className="text-2xl font-black uppercase italic text-white text-center mb-1">Validação Concluída</h2>
+                <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500 text-center mb-6">Todos os posts foram validados</p>
 
-            <div className="grid grid-cols-2 gap-3 mb-4">
-              <div className="bg-[#121212] border border-zinc-800 rounded-xl p-4 text-center">
-                <div className="text-3xl font-black italic text-emerald-500 mb-1">
-                  {aprovados}
+                <div className="mb-6 text-center">
+                  <span className="inline-flex items-center gap-2 px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-full text-emerald-400 text-[9px] font-black uppercase tracking-widest mb-3">
+                    ✓ Validação completa!
+                  </span>
+                  <p className="text-zinc-500 text-xs leading-relaxed">
+                    Validação concluída! O administrador foi notificado para iniciar a produção.
+                  </p>
                 </div>
-                <div className="text-[9px] font-black uppercase tracking-widest text-emerald-700">Aprovados</div>
-              </div>
-              <div className="bg-[#121212] border border-zinc-800 rounded-xl p-4 text-center">
-                <div className="text-3xl font-black italic text-red-400 mb-1">
-                  {reprovados}
-                </div>
-                <div className="text-[9px] font-black uppercase tracking-widest text-red-800">Reprovados</div>
-              </div>
-            </div>
-
-            <div className="w-full h-1 bg-zinc-800 rounded-full mb-6 overflow-hidden">
-              <div 
-                className="h-full bg-[#ff5351] rounded-full transition-all duration-1000"
-                style={{ width: `${(aprovados / totalPosts) * 100}%` }}
-              />
-            </div>
-
-            {reprovados > 0 ? (
-              <div className="mb-6 text-center">
-                <span className="inline-flex items-center gap-2 px-3 py-1 bg-red-500/10 border border-red-500/20 rounded-full text-red-400 text-[9px] font-black uppercase tracking-widest mb-3">
-                  ⚠ {reprovados} posts precisam de revisão
-                </span>
-                <p className="text-zinc-500 text-xs leading-relaxed">
-                  O redator foi notificado sobre os posts reprovados e irá realizar os ajustes. 
-                  Você será notificado quando estiverem prontos.
-                </p>
-              </div>
+              </>
             ) : (
-              <div className="mb-6 text-center">
-                <span className="inline-flex items-center gap-2 px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-full text-emerald-400 text-[9px] font-black uppercase tracking-widest mb-3">
-                  ✓ Aprovação total!
-                </span>
-                <p className="text-zinc-500 text-xs leading-relaxed">
-                  Todos os posts foram aprovados! O administrador foi notificado 
-                  e a produção já pode começar.
-                </p>
-              </div>
+              <>
+                <h2 className="text-2xl font-black uppercase italic text-white text-center mb-1">Revisão Concluída</h2>
+                <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500 text-center mb-6">Planejamento avaliado com sucesso</p>
+
+                <div className="grid grid-cols-2 gap-3 mb-4">
+                  <div className="bg-[#121212] border border-zinc-800 rounded-xl p-4 text-center">
+                    <div className="text-3xl font-black italic text-emerald-500 mb-1">
+                      {aprovados}
+                    </div>
+                    <div className="text-[9px] font-black uppercase tracking-widest text-emerald-700">Aprovados</div>
+                  </div>
+                  <div className="bg-[#121212] border border-zinc-800 rounded-xl p-4 text-center">
+                    <div className="text-3xl font-black italic text-red-400 mb-1">
+                      {reprovados}
+                    </div>
+                    <div className="text-[9px] font-black uppercase tracking-widest text-red-800">Reprovados</div>
+                  </div>
+                </div>
+
+                <div className="w-full h-1 bg-zinc-800 rounded-full mb-6 overflow-hidden">
+                  <div 
+                    className="h-full bg-[#ff5351] rounded-full transition-all duration-1000"
+                    style={{ width: `${(aprovados / totalPosts) * 100}%` }}
+                  />
+                </div>
+
+                {reprovados > 0 ? (
+                  <div className="mb-6 text-center">
+                    <span className="inline-flex items-center gap-2 px-3 py-1 bg-red-500/10 border border-red-500/20 rounded-full text-red-400 text-[9px] font-black uppercase tracking-widest mb-3">
+                      ⚠ {reprovados} posts aguardando correção
+                    </span>
+                    <p className="text-zinc-500 text-xs leading-relaxed">
+                      Os posts reprovados foram enviados para o redator corrigir. 
+                      Você será notificado quando estiverem prontos para uma nova avaliação. 
+                      Os posts aprovados aguardam a validação da equipe.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="mb-6 text-center">
+                    <span className="inline-flex items-center gap-2 px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-full text-emerald-400 text-[9px] font-black uppercase tracking-widest mb-3">
+                      ✓ Aprovação total!
+                    </span>
+                    <p className="text-zinc-500 text-xs leading-relaxed">
+                      Todos os posts foram aprovados! O administrador foi notificado 
+                      e a produção já pode começar.
+                    </p>
+                  </div>
+                )}
+              </>
             )}
 
             <button
