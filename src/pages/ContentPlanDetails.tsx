@@ -416,6 +416,29 @@ export default function ContentPlanDetails() {
                   )}
                 </section>
 
+                {/* SLIDES DO CARROSSEL */}
+                {selectedPost.type === 'CARROSSEL' && selectedPost.slides && selectedPost.slides.length > 0 && (
+                  <section className="space-y-3 text-left">
+                    <label className="text-[10px] font-black text-[#ff5351] tracking-[0.3em] uppercase block">
+                      Slides ({selectedPost.slides.length})
+                    </label>
+                    <div className="space-y-2">
+                      {selectedPost.slides.map((slide, idx) => (
+                        <div key={idx} className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-3">
+                          <div className="text-[10px] font-black uppercase text-white mb-1">
+                            Slide {idx + 1} — {slide.title}
+                          </div>
+                          {slide.description && (
+                            <div className="text-[11px] text-zinc-400 leading-relaxed">
+                              {slide.description}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                )}
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 text-left">
                   <section className="space-y-3">
                     <label className="text-[10px] font-black text-[#ff5351] tracking-[0.3em] uppercase flex items-center gap-2 block"><Target className="w-3 h-3" /> Chamada para Ação</label>
