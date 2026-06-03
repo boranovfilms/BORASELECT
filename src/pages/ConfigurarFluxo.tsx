@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, Save, Loader2, ChevronDown, ChevronUp, Users, 
-  Check, Plus, X, GitBranch, User
+  Plus, X, GitBranch, User
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { doc, getDoc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore';
@@ -21,7 +21,6 @@ export default function ConfigurarFluxo() {
   const [selectedModelId, setSelectedModelId] = useState<string>('');
   const [selectedModel, setSelectedModel] = useState<WorkflowModel | null>(null);
   const [teamMembers, setTeamMembers] = useState<any[]>([]);
-  const [boranovMembers, setBoranovMembers] = useState<any[]>([]);
   const [workflowApprovers, setWorkflowApprovers] = useState<Record<string, string[]>>({});
   const [expandedStages, setExpandedStages] = useState<Set<string>>(new Set());
   const [showAddDropdown, setShowAddDropdown] = useState<string | null>(null);
@@ -69,30 +68,6 @@ export default function ConfigurarFluxo() {
       );
       const teamSnap = await getDocs(teamQuery);
       setTeamMembers(teamSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-
-      // Buscar membros da equipe Boranov (role !== 'cliente')
-      try {
-        const boranovQuery = query(
-          collection(db, 'team'),
-          where('role', '!=', 'cliente')
-        );
-        const boranovSnap = await getDocs(boranovQuery);
-        setBoranovMembers(boranovSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-      } catch (e) {
-        console.warn('Equipe Boranov não encontrada na coleção team:', e);
-        // Fallback: buscar na coleção clients com role master
-        try {
-          const boranovQuery2 = query(
-            collection(db, 'clients'),
-            where('role', '==', 'master')
-          );
-          const boranovSnap2 = await getDocs(boranovQuery2);
-          setBoranovMembers(boranovSnap2.docs.map(d => ({ id: d.id, ...d.data() })));
-        } catch (e2) {
-          console.warn('Fallback também falhou:', e2);
-          setBoranovMembers([]);
-        }
-      }
 
     } catch (error) {
       console.error(error);
@@ -154,7 +129,6 @@ export default function ConfigurarFluxo() {
     }
   };
 
-  const allMembers = [...teamMembers, ...boranovMembers];
   const demandLabel = DEMAND_TYPE_LABELS[demandType as DemandType] || demandType;
 
   const getStageBadge = (stage: Stage) => {
@@ -174,7 +148,6 @@ export default function ConfigurarFluxo() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-10 pb-20 text-left">
-      {/* HEADER */}
       <header className="space-y-4">
         <button 
           onClick={() => navigate(-1)}
@@ -192,7 +165,6 @@ export default function ConfigurarFluxo() {
         </div>
       </header>
 
-      {/* SELETOR DE MODELO */}
       <section className="bg-[#1f1f1f] border border-zinc-800 rounded-[32px] p-8 shadow-xl">
         <div className="flex items-center gap-3 mb-6">
           <div className="p-2.5 bg-[#ff5351]/10 rounded-xl border border-[#ff5351]/20">
@@ -203,7 +175,6 @@ export default function ConfigurarFluxo() {
             <p className="text-zinc-500 text-xs font-bold uppercase tracking-wider mt-2">Selecione o modelo de fluxo para este tipo de demanda.</p>
           </div>
         </div>
-
         <div className="relative">
           <select
             value={selectedModelId}
@@ -219,7 +190,6 @@ export default function ConfigurarFluxo() {
         </div>
       </section>
 
-      {/* ETAPAS DO FLUXO */}
       {selectedModel && selectedModel.stages && selectedModel.stages.length > 0 && (
         <section className="bg-[#1f1f1f] border border-zinc-800 rounded-[32px] p-8 shadow-xl space-y-4">
           <div className="flex items-center gap-3 mb-6">
@@ -232,14 +202,13 @@ export default function ConfigurarFluxo() {
             </div>
           </div>
 
-          {selectedModel.stages.sort((a, b) => a.order - b.order).map((stage) => {
+          {[...selectedModel.stages].sort((a, b) => a.order - b.order).map((stage) => {
             const isExpanded = expandedStages.has(stage.id);
             const stageApprovers = workflowApprovers[stage.id] || [];
-            const availableForStage = allMembers.filter(m => !stageApprovers.includes(m.email));
+            const availableForStage = teamMembers.filter(m => !stageApprovers.includes(m.email));
 
             return (
               <div key={stage.id} className="border border-zinc-800 rounded-2xl overflow-hidden">
-                {/* HEADER DA ETAPA */}
                 <button
                   onClick={() => toggleStage(stage.id)}
                   className="w-full p-5 flex items-center justify-between bg-zinc-900/30 hover:bg-zinc-900/50 transition-all"
@@ -264,17 +233,15 @@ export default function ConfigurarFluxo() {
                   </div>
                 </button>
 
-                {/* BODY EXPANDIDO */}
                 {isExpanded && (
-                  <div className="p-5 bg-black/20 animate-in slide-in-from-top-2 duration-200">
+                  <div className="p-5 bg-black/20">
                     <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-3">
                       {stage.requiresApproval || stage.type.includes('aprovacao') ? 'Aprovadores' : 'Responsáveis'}
                     </label>
 
-                    {/* LISTA DE RESPONSÁVEIS */}
                     <div className="space-y-2 mb-4">
                       {stageApprovers.map((email) => {
-                        const member = allMembers.find(m => m.email === email);
+                        const member = teamMembers.find(m => m.email === email);
                         return (
                           <div key={email} className="flex items-center justify-between p-3 bg-zinc-900/50 border border-zinc-800 rounded-xl">
                             <div className="flex items-center gap-3">
@@ -301,22 +268,18 @@ export default function ConfigurarFluxo() {
                       })}
                     </div>
 
-                    {/* BOTÃO ADICIONAR */}
                     <div className="relative">
                       {showAddDropdown === stage.id ? (
                         <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden shadow-xl">
                           <div className="p-3 border-b border-zinc-800 flex items-center justify-between">
                             <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Selecionar membro</span>
-                            <button 
-                              onClick={() => setShowAddDropdown(null)}
-                              className="p-1 hover:bg-zinc-800 rounded-lg text-zinc-500"
-                            >
+                            <button onClick={() => setShowAddDropdown(null)} className="p-1 hover:bg-zinc-800 rounded-lg text-zinc-500">
                               <X className="w-3.5 h-3.5" />
                             </button>
                           </div>
                           <div className="max-h-48 overflow-y-auto">
                             {availableForStage.length === 0 ? (
-                              <div className="p-4 text-center text-zinc-600 text-xs">Nenhum membro disponível</div>
+                              <div className="p-4 text-center text-zinc-600 text-xs font-bold uppercase">Nenhum membro disponível</div>
                             ) : (
                               availableForStage.map((member) => (
                                 <button
@@ -357,7 +320,6 @@ export default function ConfigurarFluxo() {
         </section>
       )}
 
-      {/* BOTÃO SALVAR */}
       <footer className="flex justify-end pt-4">
         <button
           onClick={handleSave}
