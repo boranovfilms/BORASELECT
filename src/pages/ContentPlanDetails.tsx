@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, Calendar, Check, X, Edit3, Loader2, Send, 
-  ChevronDown, ChevronUp, CheckCircle2, AlertCircle, Target, Hash, Zap
+  ChevronDown, ChevronUp, CheckCircle2, AlertCircle, Target, Hash, Zap, RotateCcw
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { doc, getDoc, collection, query, where, getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
@@ -40,6 +40,8 @@ export default function ContentPlanDetails() {
   const isClient = clientEmail === currentEmail;
   const isTeamMember = teamMembers.some(m => m.email?.toLowerCase() === currentEmail);
   const isEquipe = userRole === 'equipe';
+  const internalRoles = ['master', 'admin', 'redator', 'editor'];
+  const isInternal = internalRoles.includes(userRole);
   const hasApprovalPower = isClient || isTeamMember;
 
   useEffect(() => {
@@ -81,8 +83,6 @@ export default function ContentPlanDetails() {
       const members = await teamService.getClientTeamMembers(planData.clientId);
       setTeamMembers(members);
 
-      // Seleciona o primeiro post não aprovado por padrão (cliente)
-      // ou primeiro aprovado por padrão (equipe)
       if (!selectedPostId) {
         if (isEquipe) {
           const firstApproved = planData.posts.find(p => p.status === 'aprovado');
@@ -174,6 +174,43 @@ export default function ContentPlanDetails() {
       });
     } catch (e) {
       console.warn('Erro ao notificar admin:', e);
+    }
+  };
+
+  const notifyClient = async () => {
+    if (!plan) return;
+    try {
+      const currentUserEmail = auth.currentUser?.email?.toLowerCase();
+      const clientQuery = query(
+        collection(db, 'clients'),
+        where('clienteId', '==', plan.clientId),
+        where('role', '==', 'cliente')
+      );
+      const clientSnap = await getDocs(clientQuery);
+      const clients = clientSnap.docs.map(d => ({ id: d.id, ...d.data() as any }));
+      
+      const notifPromises = clients.map(client => 
+        addDoc(collection(db, 'tasks'), {
+          nome: `PLANEJAMENTO CORRIGIDO: ${plan.name}`,
+          prioridade: 'alta',
+          status: 'pendente',
+          dataCriacao: serverTimestamp(),
+          responsavelCriacao: auth.currentUser?.displayName || 'Redator',
+          responsavelCriacaoEmail: currentUserEmail || '',
+          responsavelTarefa: client.name || client.email,
+          tipoAcesso: 'particular',
+          delegadoPara: client.email?.toLowerCase(),
+          delegadoNome: client.name || client.email,
+          vistoPeloDelegado: false,
+          descricao: `O planejamento "${plan.name}" foi corrigido e está pronto para nova avaliação.`,
+          planId: plan.id,
+          tipo: 'planejamento_corrigido'
+        })
+      );
+      
+      await Promise.all(notifPromises);
+    } catch (e) {
+      console.warn('Erro ao notificar cliente:', e);
     }
   };
 
@@ -352,6 +389,40 @@ export default function ContentPlanDetails() {
     }
   };
 
+  const handleEditByRedator = async () => {
+    if (!planId || !selectedPostId || !editingText) return;
+    setSaving(true);
+    try {
+      await contentPlanService.updatePostByRedator(planId, selectedPostId, editingText, auth.currentUser);
+      toast.success('Edição salva!');
+      setIsEditing(false);
+      
+      const updatedPlan = await contentPlanService.getPlanById(planId);
+      if (updatedPlan) {
+        setPlan(updatedPlan);
+      }
+    } catch (error) {
+      toast.error('Erro ao salvar edição');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleReenviarParaCliente = async () => {
+    if (!planId || !plan) return;
+    setSaving(true);
+    try {
+      await contentPlanService.updateStatus(planId, 'aguardando_cliente');
+      await notifyClient();
+      await loadData();
+      toast.success('Planejamento reenviado para o cliente!');
+    } catch (error) {
+      toast.error('Erro ao reenviar');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleSendToClient = async () => {
     if (!planId) return;
     setSaving(true);
@@ -382,6 +453,7 @@ export default function ContentPlanDetails() {
       case 'reprovado': return 'bg-red-500';
       case 'descartado': return 'bg-red-600';
       case 'validado_equipe': return 'bg-emerald-500';
+      case 'em_revisao': return 'bg-amber-500';
       default: return 'bg-zinc-600';
     }
   };
@@ -391,14 +463,17 @@ export default function ContentPlanDetails() {
   // Posts visíveis na sidebar dependem do modo
   const sidebarPosts = isEquipe 
     ? plan.posts.filter(p => p.status === 'aprovado' || p.status === 'validado_equipe')
-    : plan.posts;
+    : isInternal
+      ? plan.posts
+      : plan.posts;
 
   const pendingPosts = sidebarPosts.filter(p => 
-    p.status !== 'aprovado' && p.status !== 'reprovado' && p.status !== 'descartado' && p.status !== 'validado_equipe'
+    p.status !== 'aprovado' && p.status !== 'reprovado' && p.status !== 'descartado' && p.status !== 'validado_equipe' && p.status !== 'em_revisao'
   );
   const approvedPosts = sidebarPosts.filter(p => p.status === 'aprovado');
   const validatedPosts = sidebarPosts.filter(p => p.status === 'validado_equipe');
-  const reprovedOrDiscardedPosts = isEquipe 
+  const emRevisaoPosts = isInternal ? plan.posts.filter(p => p.status === 'em_revisao') : [];
+  const reprovedOrDiscardedPosts = isEquipe || isInternal
     ? []
     : plan.posts.filter(p => p.status === 'reprovado' || p.status === 'descartado');
 
@@ -407,6 +482,11 @@ export default function ContentPlanDetails() {
   const reprovados = plan?.posts?.filter(p => 
     p.status === 'reprovado' || p.status === 'descartado'
   ).length || 0;
+
+  // Verifica se todos os reprovados foram corrigidos (em_revisao)
+  const allReprovadosCorrigidos = plan.posts.every(p => 
+    p.status !== 'reprovado'
+  );
 
   return (
     <div className="max-w-7xl mx-auto text-left relative">
@@ -421,28 +501,37 @@ export default function ContentPlanDetails() {
           </div>
         </div>
         
-        {isAdmin && plan.status === 'rascunho' && (
-          <button onClick={handleSendToClient} disabled={saving} className="h-10 px-6 bg-[#ff5351] text-white rounded-xl font-black uppercase tracking-widest text-[10px] hover:brightness-110 transition-all flex items-center gap-2">
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-            Enviar para Cliente
-          </button>
-        )}
+        <div className="flex items-center gap-3">
+          {isAdmin && plan.status === 'rascunho' && (
+            <button onClick={handleSendToClient} disabled={saving} className="h-10 px-6 bg-[#ff5351] text-white rounded-xl font-black uppercase tracking-widest text-[10px] hover:brightness-110 transition-all flex items-center gap-2">
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+              Enviar para Cliente
+            </button>
+          )}
+
+          {isInternal && plan.status === 'devolvido' && allReprovadosCorrigidos && (
+            <button onClick={handleReenviarParaCliente} disabled={saving} className="h-10 px-6 bg-[#ff5351] text-white rounded-xl font-black uppercase tracking-widest text-[10px] hover:brightness-110 transition-all flex items-center gap-2">
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}
+              Reenviar para Cliente
+            </button>
+          )}
+        </div>
       </header>
 
       <div className="flex h-[calc(100vh-12rem)] bg-[#121212] border border-zinc-800 rounded-2xl overflow-hidden shadow-2xl">
         <aside className="w-[280px] bg-[#0e0e0e] border-r border-zinc-800 flex flex-col shrink-0">
           <div className="p-5 border-b border-zinc-800 bg-black/20">
             <div className="flex items-center justify-between mb-3">
-              <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">{isEquipe ? 'Validação da Equipe' : 'Aprovação do Lote'}</span>
-              <span className="text-[10px] font-black text-white">{isEquipe ? validatedCount : approvedCount} / {totalPosts}</span>
+              <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">{isEquipe ? 'Validação da Equipe' : isInternal ? 'Revisão Redator' : 'Aprovação do Lote'}</span>
+              <span className="text-[10px] font-black text-white">{isEquipe ? validatedCount : isInternal ? emRevisaoPosts.length : approvedCount} / {totalPosts}</span>
             </div>
             <div className="h-1 bg-zinc-800 rounded-full overflow-hidden">
-              <div className="h-full bg-[#ff5351] transition-all duration-500" style={{ width: `${((isEquipe ? validatedCount : approvedCount) / totalPosts) * 100}%` }} />
+              <div className="h-full bg-[#ff5351] transition-all duration-500" style={{ width: `${((isEquipe ? validatedCount : isInternal ? emRevisaoPosts.length : approvedCount) / totalPosts) * 100}%` }} />
             </div>
           </div>
 
           <div className="flex-1 overflow-y-auto custom-scrollbar">
-            {/* GRUPO 1: PENDENTES / APROVADOS */}
+            {/* GRUPO 1: PENDENTES / APROVADOS / EM_REVISAO */}
             {pendingPosts.map((post) => (
               <button 
                 key={post.id}
@@ -464,6 +553,38 @@ export default function ContentPlanDetails() {
                 </div>
               </button>
             ))}
+
+            {/* GRUPO EM REVISÃO (modo redator) */}
+            {isInternal && emRevisaoPosts.length > 0 && (
+              <div className="mt-2">
+                <div className="w-full p-3 flex items-center justify-between text-amber-500">
+                  <span className="text-[9px] font-black uppercase tracking-widest flex items-center gap-2">
+                    <Edit3 className="w-3 h-3" /> Em Correção ({emRevisaoPosts.length})
+                  </span>
+                </div>
+                {emRevisaoPosts.map((post) => (
+                  <button 
+                    key={post.id}
+                    onClick={() => { setSelectedPostId(post.id); setIsEditing(false); setShowReprovalInput(false); }}
+                    className={cn(
+                      "w-full p-5 text-left border-b border-zinc-800/50 transition-all flex items-start gap-4 relative group",
+                      selectedPostId === post.id ? "bg-[#1f1f1f] border-l-4 border-l-[#ff5351]" : "hover:bg-zinc-900/50"
+                    )}
+                  >
+                    <div className="w-2 h-2 rounded-full mt-1.5 shrink-0 bg-amber-500" />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                         <span className={cn("px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter border", getTypeStyles(post.type))}>{post.type}</span>
+                         <span className="text-[9px] font-black text-zinc-500">#{String(post.number).padStart(2, '0')}</span>
+                      </div>
+                      <p className={cn("text-[11px] font-black uppercase leading-tight line-clamp-2", selectedPostId === post.id ? "text-white" : "text-zinc-400 group-hover:text-zinc-200")}>
+                        {post.headline || "Sem título"}
+                      </p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
 
             {/* GRUPO VALIDADOS (modo equipe) */}
             {isEquipe && validatedPosts.length > 0 && (
@@ -507,7 +628,7 @@ export default function ContentPlanDetails() {
             )}
 
             {/* SEPARADOR E GRUPO 2: APROVADOS (modo cliente) */}
-            {!isEquipe && approvedPosts.length > 0 && (
+            {!isEquipe && !isInternal && approvedPosts.length > 0 && (
               <div className="mt-2">
                 <button 
                   onClick={() => setShowApprovedInSidebar(!showApprovedInSidebar)}
@@ -548,7 +669,7 @@ export default function ContentPlanDetails() {
             )}
 
             {/* GRUPO 3: REPROVADOS E DESCARTADOS (modo cliente) */}
-            {!isEquipe && reprovedOrDiscardedPosts.length > 0 && (
+            {!isEquipe && !isInternal && reprovedOrDiscardedPosts.length > 0 && (
               <div className="mt-2">
                 <button 
                   onClick={() => setShowApprovedInSidebar(!showApprovedInSidebar)}
@@ -643,6 +764,8 @@ export default function ContentPlanDetails() {
                        <button onClick={() => setIsEditing(false)} className="px-4 py-2 bg-zinc-800 text-zinc-400 text-[10px] font-black uppercase rounded-lg">Cancelar</button>
                        {isEquipe ? (
                          <button onClick={handleEditByEquipe} disabled={saving} className="px-6 py-2 bg-white text-black text-[10px] font-black uppercase rounded-lg hover:bg-[#ff5351] hover:text-white transition-all">{saving ? 'Salvando...' : 'Salvar e Validar'}</button>
+                       ) : isInternal ? (
+                         <button onClick={handleEditByRedator} disabled={saving} className="px-6 py-2 bg-white text-black text-[10px] font-black uppercase rounded-lg hover:bg-[#ff5351] hover:text-white transition-all">{saving ? 'Salvando...' : 'Salvar Edição'}</button>
                        ) : (
                          <button onClick={() => handleUpdateStatus(selectedPost.id, 'editado', undefined, editingText)} className="px-6 py-2 bg-white text-black text-[10px] font-black uppercase rounded-lg hover:bg-[#ff5351] hover:text-white transition-all">Confirmar Edição</button>
                        )}
@@ -708,6 +831,48 @@ export default function ContentPlanDetails() {
                     </div>
                   </section>
                 )}
+
+                {/* HISTÓRICO DE AÇÕES */}
+                {selectedPost.approvals && selectedPost.approvals.length > 0 && (
+                  <section className="space-y-3 text-left">
+                    <label className="text-[10px] font-black text-[#ff5351] tracking-[0.3em] uppercase block">Histórico de Ações</label>
+                    <div className="space-y-2">
+                      {selectedPost.approvals.map((approval, idx) => (
+                        <div key={idx} className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-3">
+                          <div className="flex items-center gap-2 mb-1">
+                            {approval.action === 'aprovado' && (
+                              <span className="px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">✓ Aprovado</span>
+                            )}
+                            {approval.action === 'reprovado' && (
+                              <span className="px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter bg-red-500/10 text-red-500 border border-red-500/20">✕ Reprovado</span>
+                            )}
+                            {approval.action === 'editado' && (
+                              <span className="px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter bg-amber-500/10 text-amber-400 border border-amber-500/20">✎ Editado pelo Cliente</span>
+                            )}
+                            {approval.action === 'editado_equipe' && (
+                              <span className="px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter bg-blue-500/10 text-blue-400 border border-blue-500/20">✎ Editado pela Equipe</span>
+                            )}
+                            {approval.action === 'validado_equipe' && (
+                              <span className="px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">✓ Validado pela Equipe</span>
+                            )}
+                            {approval.action === 'editado_redator' && (
+                              <span className="px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter bg-purple-500/10 text-purple-400 border border-purple-500/20">✎ Editado pelo Redator</span>
+                            )}
+                            <span className="text-[9px] text-zinc-500">{new Date(approval.date).toLocaleDateString('pt-BR')}</span>
+                          </div>
+                          {approval.comment && (
+                            <p className="text-[11px] text-zinc-400 leading-relaxed">{approval.comment}</p>
+                          )}
+                          {approval.textBefore && approval.textAfter && (
+                            <div className="mt-1 text-[10px] text-zinc-500">
+                              <span className="text-zinc-600">Texto alterado</span>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                )}
               </div>
 
               <footer className="p-6 bg-black border-t border-zinc-800 flex items-center justify-between shrink-0">
@@ -736,7 +901,18 @@ export default function ContentPlanDetails() {
                     </span>
                   )}
 
-                  {!isEquipe && hasApprovalPower && (plan.status === 'aguardando_cliente' || plan.status === 'aguardando_validacao_equipe') && (
+                  {isInternal && (
+                    <>
+                      <button 
+                        onClick={() => { setIsEditing(true); setEditingText(selectedPost.caption); }}
+                        className="h-12 px-6 bg-zinc-800 text-zinc-400 rounded-xl font-black uppercase tracking-widest text-[10px] hover:text-white transition-all flex items-center gap-2 border border-zinc-700"
+                      >
+                        <Edit3 className="w-4 h-4" /> Editar Texto
+                      </button>
+                    </>
+                  )}
+
+                  {!isEquipe && !isInternal && hasApprovalPower && (plan.status === 'aguardando_cliente' || plan.status === 'aguardando_validacao_equipe') && (
                     <>
                       <button 
                         onClick={() => handleUpdateStatus(selectedPost.id, 'aprovado')}
