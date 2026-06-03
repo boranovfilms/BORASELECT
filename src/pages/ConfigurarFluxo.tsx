@@ -70,13 +70,29 @@ export default function ConfigurarFluxo() {
       const teamSnap = await getDocs(teamQuery);
       setTeamMembers(teamSnap.docs.map(d => ({ id: d.id, ...d.data() })));
 
-      // Buscar membros da equipe Boranov (role !== 'equipe' e !== 'cliente')
-      const boranovQuery = query(
-        collection(db, 'clients'),
-        where('role', 'in', ['master', 'admin', 'editor', 'designer', 'redator', 'midia_social'])
-      );
-      const boranovSnap = await getDocs(boranovQuery);
-      setBoranovMembers(boranovSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      // Buscar membros da equipe Boranov (role !== 'cliente')
+      try {
+        const boranovQuery = query(
+          collection(db, 'team'),
+          where('role', '!=', 'cliente')
+        );
+        const boranovSnap = await getDocs(boranovQuery);
+        setBoranovMembers(boranovSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      } catch (e) {
+        console.warn('Equipe Boranov não encontrada na coleção team:', e);
+        // Fallback: buscar na coleção clients com role master
+        try {
+          const boranovQuery2 = query(
+            collection(db, 'clients'),
+            where('role', '==', 'master')
+          );
+          const boranovSnap2 = await getDocs(boranovQuery2);
+          setBoranovMembers(boranovSnap2.docs.map(d => ({ id: d.id, ...d.data() })));
+        } catch (e2) {
+          console.warn('Fallback também falhou:', e2);
+          setBoranovMembers([]);
+        }
+      }
 
     } catch (error) {
       console.error(error);
