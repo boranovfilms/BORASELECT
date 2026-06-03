@@ -1,7 +1,7 @@
 import { collection, query, where, getDocs, addDoc, updateDoc, doc, arrayUnion, serverTimestamp, getDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 
-export type ContentPlanStatus = 'rascunho' | 'aguardando_cliente' | 'aguardando_validacao_equipe' | 'aprovado' | 'devolvido';
+export type ContentPlanStatus = 'rascunho' | 'aguardando_cliente' | 'aguardando_validacao_equipe' | 'aprovado' | 'aprovado_equipe' | 'devolvido';
 
 export interface ContentPlanHistory {
   userId: string;
@@ -10,14 +10,14 @@ export interface ContentPlanHistory {
   date: string;
   textBefore: string;
   textAfter: string;
-  action: 'edicao' | 'aprovacao' | 'rejeicao' | 'validacao';
+  action: 'edicao' | 'aprovacao' | 'rejeicao' | 'validacao' | 'editado_equipe';
 }
 
 export interface PostApproval {
   userId: string;
   userName: string;
   userEmail: string;
-  action: 'aprovado' | 'reprovado' | 'editado';
+  action: 'aprovado' | 'reprovado' | 'editado' | 'editado_equipe' | 'validado_equipe';
   comment: string | null;
   textBefore: string | null;
   textAfter: string | null;
@@ -40,7 +40,7 @@ export interface ContentPost {
   hashtags: string;
   roteiro: string | null;
   strategicFunction: string | null;
-  status: 'pendente' | 'aprovado' | 'reprovado' | 'em_revisao';
+  status: 'pendente' | 'aprovado' | 'reprovado' | 'em_revisao' | 'descartado' | 'validado_equipe';
   approvals: PostApproval[];
   tasks?: MicroTask[];
   fase?: string;
@@ -247,6 +247,82 @@ export const contentPlanService = {
       updatedAt: serverTimestamp()
     });
     return allApproved;
+  },
+
+  async updatePostByEquipe(
+    planId: string,
+    postId: string,
+    newCaption: string,
+    currentUser: any
+  ) {
+    const planRef = doc(db, 'content_plans', planId);
+    const planSnap = await getDoc(planRef);
+    if (!planSnap.exists()) throw new Error('Planejamento não encontrado');
+
+    const planData = planSnap.data() as ContentPlan;
+    const posts = planData.posts || [];
+
+    const updatedPosts = posts.map(post => {
+      if (post.id !== postId) return post;
+      const approval: PostApproval = {
+        userId: currentUser.uid,
+        userName: currentUser.displayName || currentUser.email,
+        userEmail: currentUser.email,
+        action: 'editado_equipe',
+        comment: null,
+        textBefore: post.caption,
+        textAfter: newCaption,
+        date: new Date().toISOString()
+      };
+      return {
+        ...post,
+        caption: newCaption,
+        status: 'validado_equipe',
+        approvals: [...(post.approvals || []), approval]
+      };
+    });
+
+    await updateDoc(planRef, {
+      posts: updatedPosts,
+      updatedAt: serverTimestamp()
+    });
+  },
+
+  async validatePostByEquipe(
+    planId: string,
+    postId: string,
+    currentUser: any
+  ) {
+    const planRef = doc(db, 'content_plans', planId);
+    const planSnap = await getDoc(planRef);
+    if (!planSnap.exists()) throw new Error('Planejamento não encontrado');
+
+    const planData = planSnap.data() as ContentPlan;
+    const posts = planData.posts || [];
+
+    const updatedPosts = posts.map(post => {
+      if (post.id !== postId) return post;
+      const approval: PostApproval = {
+        userId: currentUser.uid,
+        userName: currentUser.displayName || currentUser.email,
+        userEmail: currentUser.email,
+        action: 'validado_equipe',
+        comment: null,
+        textBefore: null,
+        textAfter: null,
+        date: new Date().toISOString()
+      };
+      return {
+        ...post,
+        status: 'validado_equipe',
+        approvals: [...(post.approvals || []), approval]
+      };
+    });
+
+    await updateDoc(planRef, {
+      posts: updatedPosts,
+      updatedAt: serverTimestamp()
+    });
   },
 
   async updatePlanText(planId: string, newText: string, currentUser: any) {
