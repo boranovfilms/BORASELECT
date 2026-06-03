@@ -17,7 +17,7 @@ export interface PostApproval {
   userId: string;
   userName: string;
   userEmail: string;
-  action: 'aprovado' | 'reprovado' | 'editado' | 'editado_equipe' | 'validado_equipe';
+  action: 'aprovado' | 'reprovado' | 'editado' | 'editado_equipe' | 'validado_equipe' | 'editado_redator';
   comment: string | null;
   textBefore: string | null;
   textAfter: string | null;
@@ -315,6 +315,45 @@ export const contentPlanService = {
       return {
         ...post,
         status: 'validado_equipe',
+        approvals: [...(post.approvals || []), approval]
+      };
+    });
+
+    await updateDoc(planRef, {
+      posts: updatedPosts,
+      updatedAt: serverTimestamp()
+    });
+  },
+
+  async updatePostByRedator(
+    planId: string,
+    postId: string,
+    newCaption: string,
+    currentUser: any
+  ) {
+    const planRef = doc(db, 'content_plans', planId);
+    const planSnap = await getDoc(planRef);
+    if (!planSnap.exists()) throw new Error('Planejamento não encontrado');
+
+    const planData = planSnap.data() as ContentPlan;
+    const posts = planData.posts || [];
+
+    const updatedPosts = posts.map(post => {
+      if (post.id !== postId) return post;
+      const approval: PostApproval = {
+        userId: currentUser.uid,
+        userName: currentUser.displayName || currentUser.email,
+        userEmail: currentUser.email,
+        action: 'editado_redator',
+        comment: 'Correção solicitada pelo cliente',
+        textBefore: post.caption,
+        textAfter: newCaption,
+        date: new Date().toISOString()
+      };
+      return {
+        ...post,
+        caption: newCaption,
+        status: post.status === 'reprovado' ? 'em_revisao' : post.status,
         approvals: [...(post.approvals || []), approval]
       };
     });
