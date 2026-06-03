@@ -11,6 +11,32 @@ import { cn } from '../lib/utils';
 
 type Step = 'form' | 'review';
 
+function detectPlanInfo(text: string): { name: string; month: string } {
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+  const firstLine = lines[0] || '';
+  
+  // Detecta padrão: "PLANEJAMENTO JUNHO 2026 – CANAPLAN"
+  // ou "PLANEJAMENTO JUNHO 2026 - CANAPLAN"
+  const planMatch = firstLine.match(/PLANEJAMENTO\s+([A-ZÀ-Ú]+\s+\d{4})\s*[-–]\s*(.+)/i);
+  if (planMatch) {
+    return {
+      month: planMatch[1].trim(),
+      name: `Planejamento ${planMatch[1].trim()} — ${planMatch[2].trim()}`
+    };
+  }
+  
+  // Tenta detectar só o mês no texto
+  const monthMatch = text.match(/\b(Janeiro|Fevereiro|Março|Abril|Maio|Junho|Julho|Agosto|Setembro|Outubro|Novembro|Dezembro)\s+(\d{4})\b/i);
+  if (monthMatch) {
+    return {
+      month: `${monthMatch[1]} ${monthMatch[2]}`,
+      name: ''
+    };
+  }
+  
+  return { name: '', month: '' };
+}
+
 export default function NewContentPlan() {
   const { id: clientId } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -164,7 +190,18 @@ export default function NewContentPlan() {
             <textarea 
               rows={15} 
               value={form.text} 
-              onChange={e => setForm({...form, text: e.target.value})} 
+              onChange={e => {
+                const newText = e.target.value;
+                setForm({...form, text: newText});
+                if (newText.length > 50) {
+                  const detected = detectPlanInfo(newText);
+                  setForm(prev => ({
+                    ...prev,
+                    name: detected.name && !prev.name ? detected.name : prev.name,
+                    monthReference: detected.month && !prev.monthReference ? detected.month : prev.monthReference
+                  }));
+                }
+              }} 
               className="w-full bg-zinc-900 border border-zinc-800 rounded-[24px] p-6 text-white focus:border-[#ff5351] outline-none resize-none transition-all leading-relaxed font-medium" 
               placeholder="📅 CONTEÚDO 01 — REEL | 15/05/2026..." 
             />
