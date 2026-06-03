@@ -5,7 +5,7 @@ import {
   ChevronDown, ChevronUp, CheckCircle2, AlertCircle, Target, Hash, Zap
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
 import { contentPlanService, ContentPlan, ContentPost } from '../services/contentPlanService';
 import { teamService, TeamMember } from '../services/teamService';
@@ -87,6 +87,45 @@ export default function ContentPlanDetails() {
   const discardedCount = plan?.posts.filter(p => p.status === 'descartado').length || 0;
   const totalPosts = plan?.posts.length || 0;
 
+  const notifyTeam = async () => {
+    if (!plan) return;
+    try {
+      const currentUserEmail = auth.currentUser?.email?.toLowerCase();
+      const teamQuery = query(
+        collection(db, 'clients'),
+        where('clienteId', '==', plan.clientId),
+        where('role', '==', 'equipe')
+      );
+      const teamSnap = await getDocs(teamQuery);
+      const teamMembers = teamSnap.docs.map(d => ({ id: d.id, ...d.data() as any }));
+      
+      const notifPromises = teamMembers
+        .filter(m => m.email?.toLowerCase() !== currentUserEmail)
+        .map(member => 
+          addDoc(collection(db, 'tasks'), {
+            nome: `VALIDAR PLANEJAMENTO: ${plan.name}`,
+            prioridade: 'alta',
+            status: 'pendente',
+            dataCriacao: serverTimestamp(),
+            responsavelCriacao: auth.currentUser?.displayName || 'Cliente',
+            responsavelCriacaoEmail: currentUserEmail || '',
+            responsavelTarefa: member.name || member.email,
+            tipoAcesso: 'particular',
+            delegadoPara: member.email?.toLowerCase(),
+            delegadoNome: member.name || member.email,
+            vistoPeloDelegado: false,
+            descricao: `O planejamento "${plan.name}" foi aprovado e aguarda sua validação.`,
+            planId: plan.id,
+            tipo: 'validacao_planejamento'
+          })
+        );
+      
+      await Promise.all(notifPromises);
+    } catch (e) {
+      console.warn('Erro ao notificar equipe:', e);
+    }
+  };
+
   const handleUpdateStatus = async (postId: string, action: 'aprovado' | 'reprovado' | 'editado', comment?: string, newText?: string) => {
     if (!planId || !plan) return;
     setSaving(true);
@@ -102,6 +141,7 @@ export default function ContentPlanDetails() {
         if (allEvaluated) {
           setShowCompletionModal(true);
           await contentPlanService.updateStatus(planId, 'aprovado');
+          await notifyTeam();
         }
       }
       
@@ -165,6 +205,7 @@ export default function ContentPlanDetails() {
         if (allEvaluated) {
           setShowCompletionModal(true);
           await contentPlanService.updateStatus(planId, 'aprovado');
+          await notifyTeam();
         }
       }
     } catch (error) {
