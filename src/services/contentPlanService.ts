@@ -24,6 +24,11 @@ export interface PostApproval {
   date: string;
 }
 
+export interface SlideData {
+  title: string;
+  description: string;
+}
+
 export interface ContentPost {
   id: string;
   number: number;
@@ -39,6 +44,7 @@ export interface ContentPost {
   approvals: PostApproval[];
   tasks?: MicroTask[];
   fase?: string;
+  slides?: SlideData[] | null;
 }
 
 export type TaskDept = 'video' | 'design' | 'redacao' | 'midia_social';
@@ -114,6 +120,20 @@ export function parsePostsFromText(text: string): ContentPost[] {
     const funcaoMatch = block.match(/Função estratégica\s*\n\s*(.+)/i);
     const strategicFunction = funcaoMatch ? funcaoMatch[1].trim().replace(/\*/g, '') : null;
 
+    // Extrai slides (para Carrossel)
+    let slides: SlideData[] | undefined = undefined;
+    if (type === 'CARROSSEL') {
+      slides = [];
+      const slideRegex = /Slide\s+(\d+)[-:]\s*(.+?)(?:\n([\s\S]*?))?(?=\nSlide\s+\d+|\nLegenda|\nHashtags|$)/gi;
+      let match;
+      while ((match = slideRegex.exec(block)) !== null) {
+        const slideTitle = match[2]?.trim().replace(/\*/g, '') || '';
+        const slideDesc = match[3]?.trim().replace(/\*/g, '') || '';
+        slides.push({ title: slideTitle, description: slideDesc });
+      }
+      if (slides.length === 0) slides = undefined;
+    }
+
     posts.push({
       id: `post_${number}_${Date.now()}_${index}`,
       number,
@@ -125,6 +145,7 @@ export function parsePostsFromText(text: string): ContentPost[] {
       hashtags,
       roteiro,
       strategicFunction,
+      slides: type === 'CARROSSEL' ? slides : null,
       status: 'pendente',
       approvals: []
     });
@@ -151,6 +172,7 @@ export const contentPlanService = {
         hashtags: post.hashtags,
         roteiro: post.roteiro || null,
         strategicFunction: post.strategicFunction || null,
+        slides: post.slides || null,
         status: post.status,
         approvals: post.approvals || []
       })),
