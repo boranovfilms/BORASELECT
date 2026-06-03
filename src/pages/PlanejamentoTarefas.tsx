@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Calendar, Loader2, Zap, Eye, X, Save, ChevronDown } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { auth, db } from '../lib/firebase';
 import { contentPlanService, ContentPlan, ContentPost, MicroTask, TaskDept } from '../services/contentPlanService';
 import { cn } from '../lib/utils';
 
@@ -77,6 +77,7 @@ export default function PlanejamentoTarefas() {
   const [plan, setPlan] = useState<ContentPlan | null>(null);
   const [clientName, setClientName] = useState('');
   const [loading, setLoading] = useState(true);
+  const [userRole, setUserRole] = useState('cliente');
 
   // Estados do modal de delegação
   const [showDelegModal, setShowDelegModal] = useState(false);
@@ -90,9 +91,31 @@ export default function PlanejamentoTarefas() {
   const [teamMembers, setTeamMembers] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
 
+  const internalRoles = ['master', 'admin', 'redator', 'editor', 'designer', 'midia_social'];
+  const isInternal = internalRoles.includes(userRole);
+
   useEffect(() => {
     loadData();
+    loadUserRole();
   }, [planId]);
+
+  const loadUserRole = async () => {
+    const currentEmail = auth.currentUser?.email?.toLowerCase();
+    if (!currentEmail) return;
+    try {
+      if (currentEmail === 'admin@boraselect.com.br') {
+        setUserRole('master');
+        return;
+      }
+      const q = query(collection(db, 'clients'), where('email', '==', currentEmail));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        setUserRole(snap.docs[0].data().role || 'cliente');
+      }
+    } catch (e) {
+      console.warn('Erro ao carregar role:', e);
+    }
+  };
 
   const loadData = async () => {
     if (!planId) return;
@@ -348,20 +371,26 @@ export default function PlanejamentoTarefas() {
                     </td>
 
                     <td className="px-6 py-5 text-center">
-                      {hasTasks ? (
-                        <button
-                          onClick={() => toast.success('Em breve: visualização de tarefas!')}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 border border-zinc-800 rounded-xl text-[9px] font-black uppercase tracking-widest text-zinc-400 hover:text-white hover:border-[#ff5351] transition-all"
-                        >
-                          <Eye className="w-3 h-3" /> Ver
-                        </button>
+                      {isInternal ? (
+                        hasTasks ? (
+                          <button
+                            onClick={() => toast.success('Em breve: visualização de tarefas!')}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 border border-zinc-800 rounded-xl text-[9px] font-black uppercase tracking-widest text-zinc-400 hover:text-white hover:border-[#ff5351] transition-all"
+                          >
+                            <Eye className="w-3 h-3" /> Ver
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => openDelegModal(post)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#ff5351] text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:brightness-110 transition-all"
+                          >
+                            <Zap className="w-3 h-3" /> Delegar
+                          </button>
+                        )
                       ) : (
-                        <button
-                          onClick={() => openDelegModal(post)}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#ff5351] text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:brightness-110 transition-all"
-                        >
-                          <Zap className="w-3 h-3" /> Delegar
-                        </button>
+                        <span className={cn('px-2 py-1 rounded-lg border text-[8px] font-black uppercase tracking-widest', faseConfig.bg, faseConfig.color, faseConfig.border)}>
+                          {faseConfig.label}
+                        </span>
                       )}
                     </td>
                   </tr>
