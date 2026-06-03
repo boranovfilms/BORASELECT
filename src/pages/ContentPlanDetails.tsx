@@ -5,7 +5,7 @@ import {
   ChevronDown, ChevronUp, CheckCircle2, AlertCircle, Target, Hash, Zap, RotateCcw
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
-import { doc, getDoc, collection, query, where, getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, getDocs, addDoc, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
 import { contentPlanService, ContentPlan, ContentPost } from '../services/contentPlanService';
 import { teamService, TeamMember } from '../services/teamService';
@@ -24,7 +24,11 @@ export default function ContentPlanDetails() {
   
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
-  const [editingText, setEditingText] = useState('');
+  const [editingCaption, setEditingCaption] = useState('');
+  const [editingCta, setEditingCta] = useState('');
+  const [editingHashtags, setEditingHashtags] = useState('');
+  const [editingSlides, setEditingSlides] = useState<{title:string;description:string}[]>([]);
+  const [editorComment, setEditorComment] = useState('');
   const [reprovalComment, setReprovalComment] = useState('');
   const [showReprovalInput, setShowReprovalInput] = useState(false);
   const [showApprovedInSidebar, setShowApprovedInSidebar] = useState(false);
@@ -322,10 +326,10 @@ export default function ContentPlanDetails() {
   };
 
   const handleEditByEquipe = async () => {
-    if (!planId || !selectedPostId || !editingText) return;
+    if (!planId || !selectedPostId || !editingCaption) return;
     setSaving(true);
     try {
-      await contentPlanService.updatePostByEquipe(planId, selectedPostId, editingText, auth.currentUser);
+      await contentPlanService.updatePostByEquipe(planId, selectedPostId, editingCaption, auth.currentUser);
       toast.success('Alteração salva e post validado!');
       setIsEditing(false);
       
@@ -356,10 +360,59 @@ export default function ContentPlanDetails() {
   };
 
   const handleEditByRedator = async () => {
-    if (!planId || !selectedPostId || !editingText) return;
+    if (!planId || !selectedPostId) return;
     setSaving(true);
     try {
-      await contentPlanService.updatePostByRedator(planId, selectedPostId, editingText, auth.currentUser);
+      const planRef = doc(db, 'content_plans', planId);
+      const planSnap = await getDoc(planRef);
+      if (!planSnap.exists()) throw new Error('Planejamento não encontrado');
+
+      const planData = planSnap.data() as ContentPlan;
+      const posts = planData.posts || [];
+      const post = posts.find(p => p.id === selectedPostId);
+      if (!post) throw new Error('Post não encontrado');
+
+      const textBefore = JSON.stringify({
+        caption: post.caption,
+        cta: post.cta,
+        hashtags: post.hashtags,
+        slides: post.slides
+      });
+      const textAfter = JSON.stringify({
+        caption: editingCaption,
+        cta: editingCta,
+        hashtags: editingHashtags,
+        slides: editingSlides
+      });
+
+      const updatedPosts = posts.map(p => {
+        if (p.id !== selectedPostId) return p;
+        const approval = {
+          userId: auth.currentUser!.uid,
+          userName: auth.currentUser?.displayName || auth.currentUser?.email,
+          userEmail: auth.currentUser?.email,
+          action: 'editado_redator' as const,
+          comment: editorComment || 'Texto revisado pelo redator',
+          textBefore,
+          textAfter,
+          date: new Date().toISOString()
+        };
+        return {
+          ...p,
+          caption: editingCaption,
+          cta: editingCta,
+          hashtags: editingHashtags,
+          slides: editingSlides.length > 0 ? editingSlides : p.slides,
+          status: p.status === 'reprovado' ? 'em_revisao' as const : p.status,
+          approvals: [...(p.approvals || []), approval]
+        };
+      });
+
+      await updateDoc(planRef, {
+        posts: updatedPosts,
+        updatedAt: serverTimestamp()
+      });
+
       toast.success('Edição salva!');
       setIsEditing(false);
       
@@ -368,6 +421,7 @@ export default function ContentPlanDetails() {
         setPlan(updatedPlan);
       }
     } catch (error) {
+      console.error(error);
       toast.error('Erro ao salvar edição');
     } finally {
       setSaving(false);
@@ -375,31 +429,29 @@ export default function ContentPlanDetails() {
   };
 
   const handleReenviarParaCliente = async () => {
-    if (!planId || !plan) return;
+    if (!plan || !planId) return;
     setSaving(true);
     try {
-      // Buscar email do cliente
       const clientSnap = await getDoc(doc(db, 'clients', plan.clientId));
       const clientData = clientSnap.exists() ? clientSnap.data() : null;
       const targetEmail = clientData?.email?.toLowerCase() || clientEmail;
       const targetName = clientData?.name || targetEmail;
 
-      // Atualizar status dos posts em_revisao para pendente
+      if (!targetEmail) throw new Error('Email do cliente não encontrado');
+
       const planRef = doc(db, 'content_plans', planId);
-      const updatedPosts = plan.posts.map(post => {
-        if (post.status === 'em_revisao') {
-          return { ...post, status: 'pendente' as const };
-        }
-        return post;
-      });
-      
+      const planSnap = await getDoc(planRef);
+      const planData = planSnap.data();
+      const updatedPosts = (planData?.posts || []).map((p: any) => 
+        p.status === 'em_revisao' ? { ...p, status: 'pendente' } : p
+      );
+
       await updateDoc(planRef, {
         posts: updatedPosts,
         status: 'aguardando_cliente',
         updatedAt: serverTimestamp()
       });
 
-      // Criar notificação para o cliente
       await addDoc(collection(db, 'tasks'), {
         nome: `PLANEJAMENTO REVISADO: ${plan.name}`,
         prioridade: 'alta',
@@ -413,7 +465,7 @@ export default function ContentPlanDetails() {
         delegadoNome: targetName,
         vistoPeloDelegado: false,
         descricao: `O planejamento "${plan.name}" foi revisado pelo redator e está pronto para sua avaliação.`,
-        planId: plan.id,
+        planId: planId,
         tipo: 'planejamento_revisado'
       });
 
@@ -421,7 +473,8 @@ export default function ContentPlanDetails() {
       toast.success('Planejamento reenviado para o cliente!');
       navigate('/projetos');
     } catch (error) {
-      toast.error('Erro ao reenviar');
+      console.error(error);
+      toast.error('Erro ao reenviar para o cliente.');
     } finally {
       setSaving(false);
     }
@@ -439,6 +492,16 @@ export default function ContentPlanDetails() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const startEditing = () => {
+    if (!selectedPost) return;
+    setEditingCaption(selectedPost.caption || '');
+    setEditingCta(selectedPost.cta || '');
+    setEditingHashtags(selectedPost.hashtags || '');
+    setEditingSlides(selectedPost.slides || []);
+    setEditorComment('');
+    setIsEditing(true);
   };
 
   const getTypeStyles = (type: string) => {
@@ -464,7 +527,6 @@ export default function ContentPlanDetails() {
 
   if (loading || !plan) return <div className="min-h-[60vh] flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-[#ff5351]" /></div>;
 
-  // Posts visíveis na sidebar dependem do modo
   const sidebarPosts = isEquipe 
     ? plan.posts.filter(p => p.status === 'aprovado' || p.status === 'validado_equipe')
     : isInternal && plan.status === 'devolvido'
@@ -486,13 +548,11 @@ export default function ContentPlanDetails() {
     ? plan.posts.filter(p => p.status === 'reprovado' || p.status === 'descartado')
     : [];
 
-  // Cálculos para o modal de conclusão
   const aprovados = plan?.posts?.filter(p => p.status === 'aprovado').length || 0;
   const reprovados = plan?.posts?.filter(p => 
     p.status === 'reprovado' || p.status === 'descartado'
   ).length || 0;
 
-  // Verifica se todos os posts reprovados/em_revisao foram editados (todos em_revisao)
   const postsReprovados = plan.posts.filter(p => 
     p.status === 'reprovado' || p.status === 'em_revisao'
   );
@@ -541,7 +601,6 @@ export default function ContentPlanDetails() {
           </div>
 
           <div className="flex-1 overflow-y-auto custom-scrollbar">
-            {/* GRUPO 1: PENDENTES / APROVADOS / EM_REVISAO */}
             {pendingPosts.map((post) => (
               <button 
                 key={post.id}
@@ -564,7 +623,6 @@ export default function ContentPlanDetails() {
               </button>
             ))}
 
-            {/* GRUPO REPROVADOS (modo redator devolvido) */}
             {isInternal && plan.status === 'devolvido' && reprovedPosts.length > 0 && (
               <div className="mt-2">
                 <div className="w-full p-3 flex items-center justify-between text-red-500">
@@ -596,7 +654,6 @@ export default function ContentPlanDetails() {
               </div>
             )}
 
-            {/* GRUPO EM REVISÃO (modo redator devolvido) */}
             {isInternal && plan.status === 'devolvido' && emRevisaoPosts.length > 0 && (
               <div className="mt-2">
                 <div className="w-full p-3 flex items-center justify-between text-amber-500">
@@ -628,7 +685,6 @@ export default function ContentPlanDetails() {
               </div>
             )}
 
-            {/* GRUPO VALIDADOS (modo equipe) */}
             {isEquipe && validatedPosts.length > 0 && (
               <div className="mt-2">
                 <button 
@@ -669,7 +725,6 @@ export default function ContentPlanDetails() {
               </div>
             )}
 
-            {/* SEPARADOR E GRUPO 2: APROVADOS (modo cliente) */}
             {!isEquipe && !isInternal && approvedPosts.length > 0 && (
               <div className="mt-2">
                 <button 
@@ -710,7 +765,6 @@ export default function ContentPlanDetails() {
               </div>
             )}
 
-            {/* GRUPO 3: REPROVADOS E DESCARTADOS (modo cliente) */}
             {!isEquipe && !isInternal && reprovedOrDiscardedPosts.length > 0 && (
               <div className="mt-2">
                 <button 
@@ -790,47 +844,94 @@ export default function ContentPlanDetails() {
 
                 <section className="space-y-3 text-left">
                   <label className="text-[10px] font-black text-[#ff5351] tracking-[0.3em] uppercase block">Legenda</label>
-                  <div 
-                    contentEditable={isEditing}
-                    onInput={(e) => setEditingText(e.currentTarget.innerText)}
-                    className={cn(
-                      "bg-[#1a1a1a] border rounded-xl p-6 text-xs text-white leading-relaxed font-medium transition-all outline-none",
-                      isEditing ? "border-[#ff5351] ring-4 ring-[#ff5351]/10" : "border-zinc-800"
-                    )}
-                    style={{ whiteSpace: 'pre-wrap' }}
-                  >
-                    {selectedPost.caption}
-                  </div>
-                  {isEditing && (
-                    <div className="flex justify-end gap-3 mt-4">
-                       <button onClick={() => setIsEditing(false)} className="px-4 py-2 bg-zinc-800 text-zinc-400 text-[10px] font-black uppercase rounded-lg">Cancelar</button>
-                       {isEquipe ? (
-                         <button onClick={handleEditByEquipe} disabled={saving} className="px-6 py-2 bg-white text-black text-[10px] font-black uppercase rounded-lg hover:bg-[#ff5351] hover:text-white transition-all">{saving ? 'Salvando...' : 'Salvar e Validar'}</button>
-                       ) : isInternal ? (
-                         <button onClick={handleEditByRedator} disabled={saving} className="px-6 py-2 bg-white text-black text-[10px] font-black uppercase rounded-lg hover:bg-[#ff5351] hover:text-white transition-all">{saving ? 'Salvando...' : 'Salvar Edição'}</button>
-                       ) : (
-                         <button onClick={() => handleUpdateStatus(selectedPost.id, 'editado', undefined, editingText)} className="px-6 py-2 bg-white text-black text-[10px] font-black uppercase rounded-lg hover:bg-[#ff5351] hover:text-white transition-all">Confirmar Edição</button>
-                       )}
+                  {isEditing ? (
+                    <textarea
+                      value={editingCaption}
+                      onChange={e => setEditingCaption(e.target.value)}
+                      rows={6}
+                      className="w-full bg-[#1a1a1a] border border-[#ff5351] ring-4 ring-[#ff5351]/10 rounded-xl p-6 text-xs text-white leading-relaxed font-medium outline-none resize-none"
+                      style={{ whiteSpace: 'pre-wrap' }}
+                    />
+                  ) : (
+                    <div className="bg-[#1a1a1a] border border-zinc-800 rounded-xl p-6 text-xs text-white leading-relaxed font-medium">
+                      {selectedPost.caption}
                     </div>
                   )}
                 </section>
 
-                {/* SLIDES DO CARROSSEL */}
-                {selectedPost.type === 'CARROSSEL' && selectedPost.slides && selectedPost.slides.length > 0 && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 text-left">
+                  <section className="space-y-3">
+                    <label className="text-[10px] font-black text-[#ff5351] tracking-[0.3em] uppercase flex items-center gap-2 block"><Target className="w-3 h-3" /> Chamada para Ação</label>
+                    {isEditing ? (
+                      <input
+                        type="text"
+                        value={editingCta}
+                        onChange={e => setEditingCta(e.target.value)}
+                        className="w-full bg-[#1a1a1a] border border-[#ff5351] ring-4 ring-[#ff5351]/10 rounded-xl p-4 text-sm text-white font-black uppercase outline-none"
+                      />
+                    ) : (
+                      <p className="text-white font-black uppercase text-sm">{selectedPost.cta || "-"}</p>
+                    )}
+                  </section>
+                  <section className="space-y-3">
+                    <label className="text-[10px] font-black text-[#ff5351] tracking-[0.3em] uppercase flex items-center gap-2 block"><Hash className="w-3 h-3" /> Hashtags</label>
+                    {isEditing ? (
+                      <input
+                        type="text"
+                        value={editingHashtags}
+                        onChange={e => setEditingHashtags(e.target.value)}
+                        className="w-full bg-[#1a1a1a] border border-[#ff5351] ring-4 ring-[#ff5351]/10 rounded-xl p-4 text-sm text-white font-black uppercase outline-none"
+                      />
+                    ) : (
+                      <p className="text-white font-black uppercase text-xs">{selectedPost.hashtags || "-"}</p>
+                    )}
+                  </section>
+                </div>
+
+                {selectedPost.type === 'CARROSSEL' && (selectedPost.slides || editingSlides.length > 0) && (
                   <section className="space-y-3 text-left">
                     <label className="text-[10px] font-black text-[#ff5351] tracking-[0.3em] uppercase block">
-                      Slides ({selectedPost.slides.length})
+                      Slides ({isEditing ? editingSlides.length : (selectedPost.slides?.length || 0)})
                     </label>
                     <div className="space-y-2">
-                      {selectedPost.slides.map((slide, idx) => (
+                      {(isEditing ? editingSlides : (selectedPost.slides || [])).map((slide, idx) => (
                         <div key={idx} className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-3">
-                          <div className="text-[10px] font-black uppercase text-white mb-1">
-                            Slide {idx + 1} — {slide.title}
-                          </div>
-                          {slide.description && (
-                            <div className="text-[11px] text-zinc-400 leading-relaxed">
-                              {slide.description}
+                          {isEditing ? (
+                            <div className="space-y-2">
+                              <input
+                                type="text"
+                                value={slide.title}
+                                onChange={e => {
+                                  const updated = [...editingSlides];
+                                  updated[idx] = { ...updated[idx], title: e.target.value };
+                                  setEditingSlides(updated);
+                                }}
+                                className="w-full bg-zinc-900 border border-zinc-700 rounded-lg p-2 text-[10px] text-white font-black uppercase outline-none focus:border-[#ff5351]"
+                                placeholder={`Título do Slide ${idx + 1}`}
+                              />
+                              <textarea
+                                value={slide.description}
+                                onChange={e => {
+                                  const updated = [...editingSlides];
+                                  updated[idx] = { ...updated[idx], description: e.target.value };
+                                  setEditingSlides(updated);
+                                }}
+                                rows={2}
+                                className="w-full bg-zinc-900 border border-zinc-700 rounded-lg p-2 text-[11px] text-zinc-400 outline-none focus:border-[#ff5351] resize-none"
+                                placeholder="Descrição do slide..."
+                              />
                             </div>
+                          ) : (
+                            <>
+                              <div className="text-[10px] font-black uppercase text-white mb-1">
+                                Slide {idx + 1} — {slide.title}
+                              </div>
+                              {slide.description && (
+                                <div className="text-[11px] text-zinc-400 leading-relaxed">
+                                  {slide.description}
+                                </div>
+                              )}
+                            </>
                           )}
                         </div>
                       ))}
@@ -838,23 +939,25 @@ export default function ContentPlanDetails() {
                   </section>
                 )}
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 text-left">
-                  <section className="space-y-3">
-                    <label className="text-[10px] font-black text-[#ff5351] tracking-[0.3em] uppercase flex items-center gap-2 block"><Target className="w-3 h-3" /> Chamada para Ação</label>
-                    <p className="text-white font-black uppercase text-sm">{selectedPost.cta || "-"}</p>
-                  </section>
-                  <section className="space-y-3">
-                    <label className="text-[10px] font-black text-[#ff5351] tracking-[0.3em] uppercase flex items-center gap-2 block"><Hash className="w-3 h-3" /> Hashtags</label>
-                    <p className="text-white font-black uppercase text-xs">{selectedPost.hashtags || "-"}</p>
-                  </section>
-                </div>
-
                 {selectedPost.roteiro && (
                   <section className="space-y-3 text-left">
                     <label className="text-[10px] font-black text-[#ff5351] tracking-[0.3em] uppercase flex items-center gap-2 block"><Zap className="w-3 h-3" /> Roteiro</label>
                     <div className="bg-black/30 border border-zinc-800 rounded-xl p-6 text-zinc-400 text-xs leading-relaxed whitespace-pre-wrap italic font-medium">
                        {selectedPost.roteiro}
                     </div>
+                  </section>
+                )}
+
+                {isEditing && isInternal && (
+                  <section className="space-y-3 text-left">
+                    <label className="text-[10px] font-black text-[#ff5351] tracking-[0.3em] uppercase block">Comentário para o cliente (opcional)</label>
+                    <textarea
+                      value={editorComment}
+                      onChange={e => setEditorComment(e.target.value)}
+                      rows={3}
+                      placeholder="Ex: Ajustei o tom da legenda conforme solicitado..."
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-4 text-sm text-white focus:border-[#ff5351] outline-none resize-none"
+                    />
                   </section>
                 )}
 
@@ -874,7 +977,6 @@ export default function ContentPlanDetails() {
                   </section>
                 )}
 
-                {/* HISTÓRICO DE AÇÕES */}
                 {selectedPost.approvals && selectedPost.approvals.length > 0 && (
                   <section className="space-y-3 text-left">
                     <label className="text-[10px] font-black text-[#ff5351] tracking-[0.3em] uppercase block">Histórico de Ações</label>
@@ -929,7 +1031,7 @@ export default function ContentPlanDetails() {
                         <Check className="w-4 h-4" /> Validar Post
                       </button>
                       <button 
-                        onClick={() => { setIsEditing(true); setEditingText(selectedPost.caption); }}
+                        onClick={startEditing}
                         className="h-12 px-6 bg-zinc-800 text-zinc-400 rounded-xl font-black uppercase tracking-widest text-[10px] hover:text-white transition-all flex items-center gap-2 border border-zinc-700"
                       >
                         <Edit3 className="w-4 h-4" /> Alterar Texto
@@ -945,12 +1047,23 @@ export default function ContentPlanDetails() {
 
                   {isInternal && (
                     <>
-                      <button 
-                        onClick={() => { setIsEditing(true); setEditingText(selectedPost.caption); }}
-                        className="h-12 px-6 bg-zinc-800 text-zinc-400 rounded-xl font-black uppercase tracking-widest text-[10px] hover:text-white transition-all flex items-center gap-2 border border-zinc-700"
-                      >
-                        <Edit3 className="w-4 h-4" /> Editar Texto
-                      </button>
+                      {isEditing ? (
+                        <>
+                          <button onClick={() => setIsEditing(false)} className="h-12 px-6 bg-zinc-800 text-zinc-400 rounded-xl font-black uppercase tracking-widest text-[10px] hover:text-white transition-all flex items-center gap-2 border border-zinc-700">
+                            <X className="w-4 h-4" /> Cancelar
+                          </button>
+                          <button onClick={handleEditByRedator} disabled={saving} className="h-12 px-6 bg-white text-black rounded-xl font-black uppercase tracking-widest text-[10px] hover:bg-[#ff5351] hover:text-white transition-all flex items-center gap-2">
+                            {saving ? 'Salvando...' : 'Salvar Edição'}
+                          </button>
+                        </>
+                      ) : (
+                        <button 
+                          onClick={startEditing}
+                          className="h-12 px-6 bg-zinc-800 text-zinc-400 rounded-xl font-black uppercase tracking-widest text-[10px] hover:text-white transition-all flex items-center gap-2 border border-zinc-700"
+                        >
+                          <Edit3 className="w-4 h-4" /> Editar Texto
+                        </button>
+                      )}
                     </>
                   )}
 
@@ -970,7 +1083,7 @@ export default function ContentPlanDetails() {
                         <X className="w-4 h-4" /> Reprovar
                       </button>
                       <button 
-                        onClick={() => { setIsEditing(true); setEditingText(selectedPost.caption); setShowReprovalInput(false); }}
+                        onClick={startEditing}
                         className="h-12 px-6 bg-zinc-800 text-zinc-400 rounded-xl font-black uppercase tracking-widest text-[10px] hover:text-white transition-all flex items-center gap-2 border border-zinc-700"
                       >
                         <Edit3 className="w-4 h-4" /> Sugerir Edição
@@ -991,7 +1104,6 @@ export default function ContentPlanDetails() {
         </main>
       </div>
 
-      {/* MODAL DE CONCLUSÃO */}
       {showCompletionModal && (
         <div className="fixed inset-0 z-[400] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setShowCompletionModal(false)} />
@@ -1082,7 +1194,6 @@ export default function ContentPlanDetails() {
         </div>
       )}
 
-      {/* MODAL DE REPROVAÇÃO */}
       {showReprovalModal && selectedPost && (
         <div className="fixed inset-0 z-[500] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setShowReprovalModal(false)} />
