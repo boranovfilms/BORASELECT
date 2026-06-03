@@ -11,7 +11,7 @@ import { modelosService, WorkflowModel, Stage, DEMAND_TYPE_LABELS, DemandType } 
 import { cn } from '../lib/utils';
 
 export default function ConfigurarFluxo() {
-  const { clientId, demandType } = useParams<{ clientId: string; demandType: string }>();
+  const { id: clientId, demandType } = useParams<{ id: string; demandType: string }>();
   const navigate = useNavigate();
   
   const [loading, setLoading] = useState(true);
