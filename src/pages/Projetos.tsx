@@ -130,6 +130,7 @@ export default function Projetos() {
       case 'em_revisao': return 'text-red-400 border-red-500/30 bg-red-500/10';
       case 'em_producao': return 'text-violet-400 border-violet-500/30 bg-violet-500/10';
       case 'devolvido': return 'text-red-400 border-red-500/30 bg-red-500/10';
+      case 'aguardando_validacao_equipe': return 'text-violet-400 border-violet-500/30 bg-violet-500/10';
       case 'rascunho': return 'text-zinc-400 border-zinc-700 bg-zinc-800/50';
       default: return 'text-zinc-500 border-zinc-700 bg-zinc-800/50';
     }
@@ -138,6 +139,7 @@ export default function Projetos() {
   const getStatusLabel = (status: string) => {
     const labels: Record<string, string> = {
       'aguardando_cliente': 'Aguardando Cliente',
+      'aguardando_validacao_equipe': 'Aguardando Equipe',
       'aprovado': 'Aprovado',
       'em_revisao': 'Em Revisão',
       'em_producao': 'Em Produção',
@@ -257,6 +259,20 @@ export default function Projetos() {
       );
     }
     
+    if (status === 'aguardando_validacao_equipe') {
+      return (
+        <div className="flex items-center justify-center gap-2">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-violet-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-violet-500"></span>
+          </span>
+          <span className="px-3 py-1 rounded-full border text-[9px] font-black uppercase tracking-widest text-violet-400 border-violet-500/30 bg-violet-500/10">
+            Aguardando sua validação
+          </span>
+        </div>
+      );
+    }
+    
     if (status === 'aprovado') {
       return (
         <div className="flex items-center justify-center gap-2">
@@ -277,7 +293,7 @@ export default function Projetos() {
   // Handler de clique na linha para visão da equipe
   const handleEquipeRowClick = (item: any) => {
     if (item.type !== 'Planejamento') return navigate(item.route);
-    if (item.status === 'aprovado') return navigate(item.route);
+    if (item.status === 'aguardando_validacao_equipe') return navigate(item.route);
     return undefined;
   };
 
