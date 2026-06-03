@@ -37,6 +37,23 @@ export interface ContentPost {
   strategicFunction: string | null;
   status: 'pendente' | 'aprovado' | 'reprovado' | 'em_revisao';
   approvals: PostApproval[];
+  tasks?: MicroTask[];
+  fase?: string;
+}
+
+export type TaskDept = 'video' | 'design' | 'redacao' | 'midia_social';
+
+export interface MicroTask {
+  id: string;
+  dept: TaskDept;
+  deptLabel: string;
+  responsibleEmail: string;
+  responsibleName: string;
+  tags: string[];
+  description: string;
+  status: 'pendente' | 'em_andamento' | 'concluido';
+  dependsOn: TaskDept | null;
+  createdAt: string;
 }
 
 export interface ContentPlan {
@@ -259,5 +276,31 @@ export const contentPlanService = {
 
   async deletePlan(id: string) {
     await deleteDoc(doc(db, 'content_plans', id));
+  },
+
+  async delegatePost(
+    planId: string,
+    postId: string,
+    tasks: MicroTask[]
+  ): Promise<void> {
+    const planRef = doc(db, 'content_plans', planId);
+    const planSnap = await getDoc(planRef);
+    if (!planSnap.exists()) throw new Error('Planejamento não encontrado');
+    
+    const planData = planSnap.data() as ContentPlan;
+    const updatedPosts = planData.posts.map(post => {
+      if (post.id !== postId) return post;
+      return {
+        ...post,
+        tasks: tasks,
+        status: 'em_revisao' as const,
+        fase: 'producao'
+      };
+    });
+    
+    await updateDoc(planRef, {
+      posts: updatedPosts,
+      updatedAt: serverTimestamp()
+    });
   }
 };
