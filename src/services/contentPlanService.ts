@@ -79,11 +79,11 @@ export interface ContentPlan {
 
 export function parsePostsFromText(text: string): ContentPost[] {
   const posts: ContentPost[] = [];
-  const blocks = text.split(/(?=📅\s*\*?\*?CONTEÚDO\s+\d+)/i);
+  const blocks = text.split(/(?=(?:📅\s*)?\*?\*?Conteúdo\s+\d+\s*[-—])/i);
 
   blocks.forEach((block, index) => {
     if (!block.trim()) return;
-    const headerMatch = block.match(/CONTEÚDO\s+(\d+)\s*[—-]\s*([A-Z]+)\s*[|]\s*(\d{2}\/\d{2}\/\d{4})/i);
+    const headerMatch = block.match(/Conteúdo\s+(\d+)\s*[-—]\s*(\w+)\s*[|]\s*(\d{2}\/\d{2}\/\d{4})/i);
     if (!headerMatch) return;
 
     const number = parseInt(headerMatch[1]);
@@ -102,8 +102,8 @@ export function parsePostsFromText(text: string): ContentPost[] {
     };
     const type = typeMap[rawType] || 'FEED';
 
-    const headlineMatch = block.match(/(?:Headline|Tema do Reel)\s*\n\s*(.+)/i);
-    const headline = headlineMatch ? headlineMatch[1].trim().replace(/\*/g, '') : '';
+    const headlineMatch = block.match(/(?:Headline|Tema do Reel)[:\s]*\n([\s\S]*?)(?=\n(?:Slide|Legenda|CTA|Hashtags|Conteúdo|\d+[-—])|$)/i);
+    const headline = headlineMatch ? headlineMatch[1].trim().replace(/\*/g, '').replace(/\n/g, ' ') : '';
 
     const captionMatch = block.match(/Legenda[:\s]*\n([\s\S]*?)(?=\n🎯|\n\*\*CTA|\nCTA|\n\*\*Hashtags|\nHashtags|$)/i);
     const caption = captionMatch ? captionMatch[1].trim().replace(/\*/g, '') : '';
