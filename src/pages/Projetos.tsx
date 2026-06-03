@@ -161,6 +161,7 @@ export default function Projetos() {
   };
 
   const isInternal = ['master', 'admin', 'editor', 'designer', 'redator', 'midia_social'].includes(userRole);
+  const isEquipe = userRole === 'equipe';
 
   const filteredAdminProjects = useMemo(() => {
     return adminProjects.filter(p => {
@@ -230,6 +231,54 @@ export default function Projetos() {
         </span>
       </div>
     );
+  };
+
+  // Badge de status para visão da equipe do cliente
+  const renderEquipeStatusBadge = (status: string) => {
+    if (status === 'aguardando_cliente' || status === 'rascunho') {
+      return (
+        <div className="flex items-center justify-center gap-2">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+          </span>
+          <span className="px-3 py-1 rounded-full border text-[9px] font-black uppercase tracking-widest text-amber-400 border-amber-500/30 bg-amber-500/10">
+            ⚠ Aguardando aprovação do responsável
+          </span>
+        </div>
+      );
+    }
+    
+    if (status === 'devolvido') {
+      return (
+        <span className="px-3 py-1 rounded-full border text-[9px] font-black uppercase tracking-widest text-zinc-400 border-zinc-700 bg-zinc-800/50">
+          🔄 Em correção pelo redator
+        </span>
+      );
+    }
+    
+    if (status === 'aprovado') {
+      return (
+        <div className="flex items-center justify-center gap-2">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+          </span>
+          <span className="px-3 py-1 rounded-full border text-[9px] font-black uppercase tracking-widest text-amber-400 border-amber-500/30 bg-amber-500/10">
+            Aguardando sua validação
+          </span>
+        </div>
+      );
+    }
+    
+    return renderStatusBadge(status);
+  };
+
+  // Handler de clique na linha para visão da equipe
+  const handleEquipeRowClick = (item: any) => {
+    if (item.type !== 'Planejamento') return navigate(item.route);
+    if (item.status === 'aprovado') return navigate(item.route);
+    return undefined;
   };
 
   if (isModalOpen) {
@@ -345,7 +394,7 @@ export default function Projetos() {
         ) : (
           <DataTable 
             data={filteredClientItems}
-            onRowClick={(item) => {
+            onRowClick={isEquipe ? handleEquipeRowClick : (item) => {
               if (item.type !== 'Planejamento') return navigate(item.route);
               if (item.status === 'aguardando_cliente') return navigate(item.route);
               return navigate(`/planejamento/${item.id}/tarefas`);
@@ -364,7 +413,7 @@ export default function Projetos() {
                 )
               },
               { header: 'Tipo', accessor: (item) => getTypeBadge(item.type), align: 'center' },
-              { header: 'Status', accessor: (item) => renderStatusBadge(item.status), align: 'center' },
+              { header: 'Status', accessor: (item) => isEquipe ? renderEquipeStatusBadge(item.status) : renderStatusBadge(item.status), align: 'center' },
               { 
                 header: 'Progresso', 
                 accessor: (item) => renderProgresso(item),
