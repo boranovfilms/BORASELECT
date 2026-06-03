@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   CheckSquare, Plus, Clock, User, Shield, X, Save, Loader2, Check, Edit, Trash2, MessageSquare, ChevronDown, UserPlus
 } from 'lucide-react';
@@ -12,6 +13,7 @@ import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { DataTable } from '../components/ui/DataTable';
 
 export default function Tarefas() {
+  const navigate = useNavigate();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [allUsers, setAllUsers] = useState<{email: string, name: string}[]>([]);
   const [loading, setLoading] = useState(true);
@@ -59,6 +61,8 @@ export default function Tarefas() {
     }
   };
 
+  const PLAN_TIPOS = ['validacao_planejamento', 'planejamento_revisado', 'planejamento_validado_equipe'];
+
   useEffect(() => {
     const loadUsers = async () => {
       try {
@@ -82,6 +86,11 @@ export default function Tarefas() {
       const allTasks = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Task));
 
       const filtered = allTasks.filter(task => {
+        const taskAny = task as any;
+
+        // Excluir notificações de planejamento da lista de tarefas diárias
+        if (PLAN_TIPOS.includes(taskAny.tipo)) return false;
+
         const creatorEmail = (task.responsavelCriacaoEmail || '').toLowerCase().trim();
         const delegateEmail = (task.delegadoPara || '').toLowerCase().trim();
         if (task.delegadoPara) return creatorEmail === userEmail || delegateEmail === userEmail;
@@ -117,6 +126,20 @@ export default function Tarefas() {
     return () => unsubscribe();
   }, []);
 
+  const handleTaskClick = async (task: Task) => {
+    const taskAny = task as any;
+
+    // Se for notificação de planejamento, navegar para o planejamento
+    if (PLAN_TIPOS.includes(taskAny.tipo) && taskAny.planId) {
+      try { await taskService.markAsSeen(task.id!); } catch(e) {}
+      navigate(`/planejamento/${taskAny.planId}`);
+      return;
+    }
+
+    // Comportamento normal — abre formulário de edição
+    handleEditTask(task);
+  };
+
   const handleSaveTask = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTask.nome) return toast.error('O nome da tarefa é obrigatório.');
@@ -125,8 +148,6 @@ export default function Tarefas() {
       const currentUser = auth.currentUser;
       const responsavel = (currentUser?.displayName || 'Você');
       const delegadoObj = allUsers.find(u => u.email === newTask.delegadoPara);
-      
-      // Visibilidade automática: se delegou = compartilhada, senão = particular
       const visibilidadeAutomatica = newTask.delegadoPara ? 'compartilhada' : 'particular';
       
       const taskData = { 
@@ -275,7 +296,7 @@ export default function Tarefas() {
       <DataTable 
         data={tasks.filter(t => (activeTab === 'pendentes' && t.status === 'pendente') || (activeTab === 'executadas' && t.status === 'executada'))}
         loading={loading}
-        onRowClick={(task) => handleEditTask(task)}
+        onRowClick={(task) => handleTaskClick(task)}
         columns={[
           ...(activeTab === 'pendentes' ? [{ 
             header: '', 
