@@ -186,6 +186,30 @@ export default function ContentPlanDetails() {
     }
   };
 
+  const notifyRedator = async () => {
+    if (!plan || !planId) return;
+    try {
+      await addDoc(collection(db, 'tasks'), {
+        nome: `PLANEJAMENTO VALIDADO PELA EQUIPE: ${plan.name}`,
+        prioridade: 'alta',
+        status: 'pendente',
+        dataCriacao: serverTimestamp(),
+        responsavelCriacao: auth.currentUser?.displayName || 'Equipe',
+        responsavelCriacaoEmail: auth.currentUser?.email || '',
+        responsavelTarefa: 'Boranov',
+        tipoAcesso: 'particular',
+        delegadoPara: 'boranovfilms@gmail.com',
+        delegadoNome: 'Boranov',
+        vistoPeloDelegado: false,
+        descricao: `O planejamento "${plan.name}" foi validado pela equipe e está pronto para delegação.`,
+        planId: planId,
+        tipo: 'planejamento_validado_equipe'
+      });
+    } catch (e) {
+      console.warn('Erro ao notificar redator:', e);
+    }
+  };
+
   const handleUpdateStatus = async (postId: string, action: 'aprovado' | 'reprovado' | 'editado', comment?: string, newText?: string) => {
     if (!planId || !plan) return;
     setSaving(true);
@@ -312,7 +336,8 @@ export default function ContentPlanDetails() {
           setShowCompletionModal(true);
           setCompletionMode('equipe');
           await contentPlanService.updateStatus(planId, 'aprovado_equipe');
-          await notifyAdmin();
+          await loadData();
+          await notifyRedator();
         } else {
           const nextApproved = updatedPlan.posts.find(p => p.status === 'aprovado');
           if (nextApproved) {
@@ -346,7 +371,8 @@ export default function ContentPlanDetails() {
           setShowCompletionModal(true);
           setCompletionMode('equipe');
           await contentPlanService.updateStatus(planId, 'aprovado_equipe');
-          await notifyAdmin();
+          await loadData();
+          await notifyRedator();
         } else {
           const nextApproved = updatedPlan.posts.find(p => p.status === 'aprovado');
           if (nextApproved) {
@@ -727,12 +753,14 @@ export default function ContentPlanDetails() {
                   {idx < getTimelineEvents().length - 1 && (
                     <div className="absolute left-4 top-8 bottom-0 w-px bg-zinc-800" />
                   )}
+                  
                   <div className={cn(
                     "w-8 h-8 rounded-full border-2 flex items-center justify-center flex-shrink-0 z-10",
                     evento.color
                   )}>
                     {evento.icon}
                   </div>
+                  
                   <div className="flex-1 pt-1">
                     <p className="text-white font-black uppercase text-xs">{evento.title}</p>
                     <p className="text-zinc-500 text-[10px] font-bold uppercase tracking-widest mt-1">{evento.date}</p>
@@ -1233,7 +1261,7 @@ export default function ContentPlanDetails() {
                     ✓ Validação completa!
                   </span>
                   <p className="text-zinc-500 text-xs leading-relaxed">
-                    Validação concluída! O administrador foi notificado para iniciar a produção.
+                    Validação concluída! O redator foi notificado para iniciar a produção.
                   </p>
                 </div>
               </>
