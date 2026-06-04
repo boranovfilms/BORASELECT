@@ -89,7 +89,35 @@ export default function ConfigurarFluxo() {
         } catch (e) {}
       }
 
-      setTeamMembers([...boranovMembers, ...clientTeam]);
+      // Adicionar Master (admin@boraselect.com.br)
+      const masterMember = [{
+        id: 'master',
+        name: 'BORANOV MASTER',
+        email: 'admin@boraselect.com.br',
+        role: 'master',
+        jobTitle: 'Master',
+        photoUrl: null,
+        grupo: 'Master'
+      }];
+
+      // Buscar o cliente principal (dono da conta)
+      const clientPrincipal: any[] = [];
+      if (clientSnap.exists()) {
+        const cData = clientSnap.data();
+        if (cData.email) {
+          clientPrincipal.push({
+            id: clientId,
+            name: cData.name || cData.email,
+            email: cData.email,
+            role: 'cliente',
+            jobTitle: 'Responsável',
+            photoUrl: cData.logoUrl || null,
+            grupo: 'Cliente Principal'
+          });
+        }
+      }
+
+      setTeamMembers([...masterMember, ...boranovMembers, ...clientPrincipal, ...clientTeam]);
 
     } catch (error) {
       console.error(error);
@@ -308,12 +336,34 @@ export default function ConfigurarFluxo() {
                               <div className="p-4 text-center text-zinc-600 text-xs font-bold uppercase">Nenhum membro disponível</div>
                             ) : (
                               <>
-                                {boranovAvailable.length > 0 && (
+                                {availableForStage.filter(m => m.grupo === 'Master').length > 0 && (
+                                  <>
+                                    <div className="px-3 py-2 text-[8px] font-black uppercase tracking-widest text-emerald-400 bg-zinc-950/50">
+                                      Master
+                                    </div>
+                                    {availableForStage.filter(m => m.grupo === 'Master').map((member) => (
+                                      <button
+                                        key={member.id}
+                                        onClick={() => addApprover(stage.id, member.email)}
+                                        className="w-full p-3 flex items-center gap-3 hover:bg-zinc-800/50 transition-all text-left"
+                                      >
+                                        <div className="w-8 h-8 rounded-full bg-emerald-900/30 border border-emerald-500/20 flex items-center justify-center shrink-0">
+                                          <User className="w-4 h-4 text-emerald-400" />
+                                        </div>
+                                        <div>
+                                          <p className="text-white text-[10px] font-black uppercase">{member.name}</p>
+                                          <p className="text-emerald-600 text-[8px] font-bold uppercase tracking-wider">Master</p>
+                                        </div>
+                                      </button>
+                                    ))}
+                                  </>
+                                )}
+                                {availableForStage.filter(m => m.grupo === 'Equipe Boranov').length > 0 && (
                                   <>
                                     <div className="px-3 py-2 text-[8px] font-black uppercase tracking-widest text-[#ff5351] bg-zinc-950/50">
                                       Equipe Boranov
                                     </div>
-                                    {boranovAvailable.map((member) => (
+                                    {availableForStage.filter(m => m.grupo === 'Equipe Boranov').map((member) => (
                                       <button
                                         key={member.id}
                                         onClick={() => addApprover(stage.id, member.email)}
@@ -334,12 +384,38 @@ export default function ConfigurarFluxo() {
                                     ))}
                                   </>
                                 )}
-                                {clienteAvailable.length > 0 && (
+                                {availableForStage.filter(m => m.grupo === 'Cliente Principal').length > 0 && (
+                                  <>
+                                    <div className="px-3 py-2 text-[8px] font-black uppercase tracking-widest text-amber-500 bg-zinc-950/50 border-t border-zinc-800">
+                                      Cliente Principal
+                                    </div>
+                                    {availableForStage.filter(m => m.grupo === 'Cliente Principal').map((member) => (
+                                      <button
+                                        key={member.id}
+                                        onClick={() => addApprover(stage.id, member.email)}
+                                        className="w-full p-3 flex items-center gap-3 hover:bg-zinc-800/50 transition-all text-left"
+                                      >
+                                        <div className="w-8 h-8 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center overflow-hidden shrink-0">
+                                          {member.photoUrl ? (
+                                            <img src={member.photoUrl} className="w-full h-full object-cover" alt="" />
+                                          ) : (
+                                            <User className="w-4 h-4 text-zinc-600" />
+                                          )}
+                                        </div>
+                                        <div>
+                                          <p className="text-white text-[10px] font-black uppercase">{member.name}</p>
+                                          <p className="text-zinc-600 text-[8px] font-bold uppercase tracking-wider">Responsável da Conta</p>
+                                        </div>
+                                      </button>
+                                    ))}
+                                  </>
+                                )}
+                                {availableForStage.filter(m => m.grupo === 'Equipe Cliente').length > 0 && (
                                   <>
                                     <div className="px-3 py-2 text-[8px] font-black uppercase tracking-widest text-zinc-500 bg-zinc-950/50 border-t border-zinc-800">
                                       Equipe Cliente
                                     </div>
-                                    {clienteAvailable.map((member) => (
+                                    {availableForStage.filter(m => m.grupo === 'Equipe Cliente').map((member) => (
                                       <button
                                         key={member.id}
                                         onClick={() => addApprover(stage.id, member.email)}
