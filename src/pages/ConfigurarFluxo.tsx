@@ -67,7 +67,29 @@ export default function ConfigurarFluxo() {
         where('role', '==', 'equipe')
       );
       const teamSnap = await getDocs(teamQuery);
-      setTeamMembers(teamSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      const clientTeam = teamSnap.docs.map(d => ({ 
+        id: d.id, 
+        ...d.data(), 
+        grupo: 'Equipe Cliente' 
+      }));
+
+      // Buscar equipe interna Boranov
+      const boranovRoles = ['master', 'admin', 'redator', 'editor', 'designer', 'midia_social', 'fotografo', 'produtor'];
+      const boranovMembers: any[] = [];
+      for (const role of boranovRoles) {
+        try {
+          const bq = query(collection(db, 'clients'), where('role', '==', role));
+          const bsnap = await getDocs(bq);
+          bsnap.docs.forEach(d => {
+            const data = d.data();
+            if (data.email) {
+              boranovMembers.push({ id: d.id, ...data, grupo: 'Equipe Boranov' });
+            }
+          });
+        } catch (e) {}
+      }
+
+      setTeamMembers([...boranovMembers, ...clientTeam]);
 
     } catch (error) {
       console.error(error);
@@ -206,6 +228,8 @@ export default function ConfigurarFluxo() {
             const isExpanded = expandedStages.has(stage.id);
             const stageApprovers = workflowApprovers[stage.id] || [];
             const availableForStage = teamMembers.filter(m => !stageApprovers.includes(m.email));
+            const boranovAvailable = availableForStage.filter(m => m.grupo === 'Equipe Boranov');
+            const clienteAvailable = availableForStage.filter(m => m.grupo === 'Equipe Cliente');
 
             return (
               <div key={stage.id} className="border border-zinc-800 rounded-2xl overflow-hidden">
@@ -254,7 +278,9 @@ export default function ConfigurarFluxo() {
                               </div>
                               <div>
                                 <p className="text-white text-[10px] font-black uppercase">{member?.name || email}</p>
-                                <p className="text-zinc-600 text-[8px] font-bold uppercase tracking-wider">{member?.jobTitle || member?.role || 'Membro'}</p>
+                                <p className="text-zinc-600 text-[8px] font-bold uppercase tracking-wider">
+                                  {member?.grupo || ''} · {member?.jobTitle || member?.role || 'Membro'}
+                                </p>
                               </div>
                             </div>
                             <button
@@ -277,29 +303,64 @@ export default function ConfigurarFluxo() {
                               <X className="w-3.5 h-3.5" />
                             </button>
                           </div>
-                          <div className="max-h-48 overflow-y-auto">
+                          <div className="max-h-56 overflow-y-auto">
                             {availableForStage.length === 0 ? (
                               <div className="p-4 text-center text-zinc-600 text-xs font-bold uppercase">Nenhum membro disponível</div>
                             ) : (
-                              availableForStage.map((member) => (
-                                <button
-                                  key={member.id}
-                                  onClick={() => addApprover(stage.id, member.email)}
-                                  className="w-full p-3 flex items-center gap-3 hover:bg-zinc-800/50 transition-all text-left"
-                                >
-                                  <div className="w-8 h-8 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center overflow-hidden shrink-0">
-                                    {member.photoUrl ? (
-                                      <img src={member.photoUrl} className="w-full h-full object-cover" alt="" />
-                                    ) : (
-                                      <User className="w-4 h-4 text-zinc-600" />
-                                    )}
-                                  </div>
-                                  <div>
-                                    <p className="text-white text-[10px] font-black uppercase">{member.name}</p>
-                                    <p className="text-zinc-600 text-[8px] font-bold uppercase tracking-wider">{member.jobTitle || member.role}</p>
-                                  </div>
-                                </button>
-                              ))
+                              <>
+                                {boranovAvailable.length > 0 && (
+                                  <>
+                                    <div className="px-3 py-2 text-[8px] font-black uppercase tracking-widest text-[#ff5351] bg-zinc-950/50">
+                                      Equipe Boranov
+                                    </div>
+                                    {boranovAvailable.map((member) => (
+                                      <button
+                                        key={member.id}
+                                        onClick={() => addApprover(stage.id, member.email)}
+                                        className="w-full p-3 flex items-center gap-3 hover:bg-zinc-800/50 transition-all text-left"
+                                      >
+                                        <div className="w-8 h-8 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center overflow-hidden shrink-0">
+                                          {member.photoUrl ? (
+                                            <img src={member.photoUrl} className="w-full h-full object-cover" alt="" />
+                                          ) : (
+                                            <User className="w-4 h-4 text-zinc-600" />
+                                          )}
+                                        </div>
+                                        <div>
+                                          <p className="text-white text-[10px] font-black uppercase">{member.name}</p>
+                                          <p className="text-zinc-600 text-[8px] font-bold uppercase tracking-wider">{member.jobTitle || member.role}</p>
+                                        </div>
+                                      </button>
+                                    ))}
+                                  </>
+                                )}
+                                {clienteAvailable.length > 0 && (
+                                  <>
+                                    <div className="px-3 py-2 text-[8px] font-black uppercase tracking-widest text-zinc-500 bg-zinc-950/50 border-t border-zinc-800">
+                                      Equipe Cliente
+                                    </div>
+                                    {clienteAvailable.map((member) => (
+                                      <button
+                                        key={member.id}
+                                        onClick={() => addApprover(stage.id, member.email)}
+                                        className="w-full p-3 flex items-center gap-3 hover:bg-zinc-800/50 transition-all text-left"
+                                      >
+                                        <div className="w-8 h-8 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center overflow-hidden shrink-0">
+                                          {member.photoUrl ? (
+                                            <img src={member.photoUrl} className="w-full h-full object-cover" alt="" />
+                                          ) : (
+                                            <User className="w-4 h-4 text-zinc-600" />
+                                          )}
+                                        </div>
+                                        <div>
+                                          <p className="text-white text-[10px] font-black uppercase">{member.name}</p>
+                                          <p className="text-zinc-600 text-[8px] font-bold uppercase tracking-wider">{member.jobTitle || member.role}</p>
+                                        </div>
+                                      </button>
+                                    ))}
+                                  </>
+                                )}
+                              </>
                             )}
                           </div>
                         </div>
