@@ -36,13 +36,12 @@ function calcularFasePost(post: ContentPost): { faseId: string; label: string; c
   const total = tasks.length;
   const concluidas = tasks.filter((t: any) => t.status === 'concluido').length;
   const percent = Math.round((concluidas / total) * 100);
-
   const emAndamento = tasks.find((t: any) => t.status === 'em_andamento');
 
   if (percent === 100) {
     return {
       faseId: 'concluido',
-      label: emAndamento?.deptLabel || 'Concluído',
+      label: 'Concluído',
       color: 'text-emerald-400',
       bg: 'bg-emerald-500/10',
       border: 'border-emerald-500/20',
@@ -75,8 +74,7 @@ function calcularFasePost(post: ContentPost): { faseId: string; label: string; c
 }
 
 function isPostConcluido(post: ContentPost): boolean {
-  const fase = calcularFasePost(post);
-  return fase.percent === 100;
+  return calcularFasePost(post).percent === 100;
 }
 
 function formatDate(dateStr: string): { data: string; diaSemana: string; isUrgente: boolean } {
@@ -105,8 +103,8 @@ export default function PlanejamentoTarefas() {
   const [clientName, setClientName] = useState('');
   const [loading, setLoading] = useState(true);
   const [userRole, setUserRole] = useState('cliente');
+  const [roleLoaded, setRoleLoaded] = useState(false); // ✅ NOVO
 
-  // Estados do modal de delegação
   const [showDelegModal, setShowDelegModal] = useState(false);
   const [selectedPost, setSelectedPost] = useState<ContentPost | null>(null);
   const [selectedDepts, setSelectedDepts] = useState<TaskDept[]>([]);
@@ -128,10 +126,12 @@ export default function PlanejamentoTarefas() {
 
   const loadUserRole = async () => {
     const currentEmail = auth.currentUser?.email?.toLowerCase();
-    if (!currentEmail) return;
+    if (!currentEmail) { setRoleLoaded(true); return; }
     try {
-      if (currentEmail === 'admin@boraselect.com.br') {
+      // ✅ Admin detectado diretamente
+      if (currentEmail === 'admin@boraselect.com.br' || currentEmail === 'boranovfilms@gmail.com') {
         setUserRole('master');
+        setRoleLoaded(true);
         return;
       }
       const q = query(collection(db, 'clients'), where('email', '==', currentEmail));
@@ -141,6 +141,8 @@ export default function PlanejamentoTarefas() {
       }
     } catch (e) {
       console.warn('Erro ao carregar role:', e);
+    } finally {
+      setRoleLoaded(true); // ✅ Sempre marca como carregado
     }
   };
 
@@ -278,18 +280,11 @@ export default function PlanejamentoTarefas() {
   return (
     <div className="max-w-7xl mx-auto text-left pb-20">
       <header className="mb-8">
-        <button
-          onClick={() => navigate(-1)}
-          className="flex items-center gap-2 text-[#ff5351] text-[10px] font-black uppercase tracking-widest mb-4 hover:brightness-110 transition-all"
-        >
+        <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-[#ff5351] text-[10px] font-black uppercase tracking-widest mb-4 hover:brightness-110 transition-all">
           <ArrowLeft className="w-4 h-4" /> Voltar
         </button>
-        <p className="text-[10px] font-black uppercase tracking-widest text-[#ff5351] mb-1">
-          PLANEJAMENTO · {clientName}
-        </p>
-        <h1 className="text-3xl font-black text-white uppercase italic tracking-tighter">
-          {plan.name}
-        </h1>
+        <p className="text-[10px] font-black uppercase tracking-widest text-[#ff5351] mb-1">PLANEJAMENTO · {clientName}</p>
+        <h1 className="text-3xl font-black text-white uppercase italic tracking-tighter">{plan.name}</h1>
         <p className="text-zinc-500 text-sm mt-1">{plan.monthReference}</p>
       </header>
 
@@ -306,11 +301,7 @@ export default function PlanejamentoTarefas() {
             const concluido = isPostConcluido(post);
             const emAndamento = !concluido && idx === concluidos;
             return (
-              <div
-                key={post.id}
-                title={`Post ${post.number}`}
-                className={cn('w-4 h-1.5 rounded-sm transition-all', concluido ? 'bg-[#ff5351]' : emAndamento ? 'bg-amber-500' : 'bg-zinc-800')}
-              />
+              <div key={post.id} title={`Post ${post.number}`} className={cn('w-4 h-1.5 rounded-sm transition-all', concluido ? 'bg-[#ff5351]' : emAndamento ? 'bg-amber-500' : 'bg-zinc-800')} />
             );
           })}
         </div>
@@ -386,7 +377,10 @@ export default function PlanejamentoTarefas() {
                     </td>
 
                     <td className="px-6 py-5 text-center">
-                      {isInternal ? (
+                      {/* ✅ Aguarda roleLoaded antes de renderizar botão */}
+                      {!roleLoaded ? (
+                        <Loader2 className="w-4 h-4 animate-spin text-zinc-600 mx-auto" />
+                      ) : isInternal ? (
                         hasTasks ? (
                           <button
                             onClick={() => toast.success('Em breve: visualização de tarefas!')}
@@ -431,21 +425,13 @@ export default function PlanejamentoTarefas() {
             </header>
 
             <div className="overflow-y-auto px-6 py-5 space-y-6">
-              {/* SEÇÃO 1 — DEPARTAMENTOS */}
               <div className="space-y-3">
                 <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500">Departamentos</p>
                 <div className="grid grid-cols-2 gap-3">
                   {DEPTS.map(dept => {
                     const isSelected = selectedDepts.includes(dept.id);
                     return (
-                      <button
-                        key={dept.id}
-                        onClick={() => toggleDept(dept.id)}
-                        className={cn(
-                          'p-4 rounded-2xl border text-left transition-all',
-                          isSelected ? 'border-[#ff5351] bg-[#ff5351]/5' : 'border-zinc-800 bg-zinc-900/30 hover:border-zinc-700'
-                        )}
-                      >
+                      <button key={dept.id} onClick={() => toggleDept(dept.id)} className={cn('p-4 rounded-2xl border text-left transition-all', isSelected ? 'border-[#ff5351] bg-[#ff5351]/5' : 'border-zinc-800 bg-zinc-900/30 hover:border-zinc-700')}>
                         <div className="flex items-start justify-between mb-2">
                           <span className="text-2xl">{dept.icon}</span>
                           {isSelected && <div className="w-5 h-5 rounded-full bg-[#ff5351] flex items-center justify-center"><Zap className="w-3 h-3 text-white" /></div>}
@@ -458,7 +444,6 @@ export default function PlanejamentoTarefas() {
                 </div>
               </div>
 
-              {/* SEÇÃO 2 — RESPONSÁVEL + TAGS + DESCRIÇÃO */}
               {selectedDepts.length > 0 && (
                 <div className="space-y-4">
                   <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500">Configuração por Departamento</p>
@@ -474,11 +459,7 @@ export default function PlanejamentoTarefas() {
                         <div className="space-y-1">
                           <label className="text-[8px] font-black uppercase tracking-widest text-zinc-600">Responsável</label>
                           <div className="relative">
-                            <select
-                              value={deptResponsibles[deptId] || ''}
-                              onChange={e => setDeptResponsibles(prev => ({ ...prev, [deptId]: e.target.value }))}
-                              className="w-full h-10 bg-zinc-900 border border-zinc-800 rounded-xl px-3 text-white text-xs focus:border-[#ff5351] outline-none appearance-none cursor-pointer"
-                            >
+                            <select value={deptResponsibles[deptId] || ''} onChange={e => setDeptResponsibles(prev => ({ ...prev, [deptId]: e.target.value }))} className="w-full h-10 bg-zinc-900 border border-zinc-800 rounded-xl px-3 text-white text-xs focus:border-[#ff5351] outline-none appearance-none cursor-pointer">
                               <option value="">Selecionar...</option>
                               {teamMembers.map(m => (
                                 <option key={m.id} value={m.email}>{m.name} ({m.jobTitle || m.role})</option>
@@ -495,14 +476,7 @@ export default function PlanejamentoTarefas() {
                             {deptInfo.tags.map(tag => {
                               const isActive = (deptTags[deptId] || []).includes(tag);
                               return (
-                                <button
-                                  key={tag}
-                                  onClick={() => toggleTag(deptId, tag)}
-                                  className={cn(
-                                    'px-2 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest transition-all',
-                                    isActive ? 'bg-[#ff5351] text-white' : 'bg-zinc-900 border border-zinc-800 text-zinc-500 hover:text-zinc-300'
-                                  )}
-                                >
+                                <button key={tag} onClick={() => toggleTag(deptId, tag)} className={cn('px-2 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest transition-all', isActive ? 'bg-[#ff5351] text-white' : 'bg-zinc-900 border border-zinc-800 text-zinc-500 hover:text-zinc-300')}>
                                   {tag}
                                 </button>
                               );
@@ -512,13 +486,7 @@ export default function PlanejamentoTarefas() {
 
                         <div className="space-y-1">
                           <label className="text-[8px] font-black uppercase tracking-widest text-zinc-600">Descrição / Briefing</label>
-                          <textarea
-                            value={deptDescriptions[deptId] || ''}
-                            onChange={e => setDeptDescriptions(prev => ({ ...prev, [deptId]: e.target.value }))}
-                            rows={2}
-                            placeholder="Detalhes da tarefa..."
-                            className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-3 text-white text-xs focus:border-[#ff5351] outline-none resize-none"
-                          />
+                          <textarea value={deptDescriptions[deptId] || ''} onChange={e => setDeptDescriptions(prev => ({ ...prev, [deptId]: e.target.value }))} rows={2} placeholder="Detalhes da tarefa..." className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-3 text-white text-xs focus:border-[#ff5351] outline-none resize-none" />
                         </div>
                       </div>
                     );
@@ -526,30 +494,19 @@ export default function PlanejamentoTarefas() {
                 </div>
               )}
 
-              {/* SEÇÃO 3 — DEPENDÊNCIAS */}
               {selectedDepts.includes('design') && selectedDepts.includes('video') && (
                 <div className="space-y-3">
                   <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500">Dependências</p>
                   <div className="space-y-2">
                     <label className="flex items-center gap-3 p-3 bg-zinc-900/30 border border-zinc-800 rounded-xl cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={depArteDependeVideo}
-                        onChange={e => setDepArteDependeVideo(e.target.checked)}
-                        className="w-4 h-4 accent-[#ff5351]"
-                      />
+                      <input type="checkbox" checked={depArteDependeVideo} onChange={e => setDepArteDependeVideo(e.target.checked)} className="w-4 h-4 accent-[#ff5351]" />
                       <div>
                         <p className="text-white text-xs font-black uppercase">Arte depende do Vídeo</p>
                         <p className="text-zinc-500 text-[8px]">Designer aguarda Editor finalizar</p>
                       </div>
                     </label>
                     <label className="flex items-center gap-3 p-3 bg-zinc-900/30 border border-zinc-800 rounded-xl cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={depVideoDependeArte}
-                        onChange={e => setDepVideoDependeArte(e.target.checked)}
-                        className="w-4 h-4 accent-[#ff5351]"
-                      />
+                      <input type="checkbox" checked={depVideoDependeArte} onChange={e => setDepVideoDependeArte(e.target.checked)} className="w-4 h-4 accent-[#ff5351]" />
                       <div>
                         <p className="text-white text-xs font-black uppercase">Vídeo depende da Arte</p>
                         <p className="text-zinc-500 text-[8px]">Editor aguarda Designer finalizar</p>
@@ -561,17 +518,10 @@ export default function PlanejamentoTarefas() {
             </div>
 
             <footer className="px-6 py-4 border-t border-zinc-800 flex gap-3 shrink-0">
-              <button
-                onClick={() => setShowDelegModal(false)}
-                className="flex-1 h-11 bg-zinc-900 border border-zinc-800 text-zinc-500 rounded-xl text-[10px] font-black uppercase tracking-widest hover:text-white transition-all"
-              >
+              <button onClick={() => setShowDelegModal(false)} className="flex-1 h-11 bg-zinc-900 border border-zinc-800 text-zinc-500 rounded-xl text-[10px] font-black uppercase tracking-widest hover:text-white transition-all">
                 Cancelar
               </button>
-              <button
-                onClick={handleSaveDeleg}
-                disabled={saving || selectedDepts.length === 0}
-                className="flex-1 h-11 bg-[#ff5351] text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:brightness-110 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-              >
+              <button onClick={handleSaveDeleg} disabled={saving || selectedDepts.length === 0} className="flex-1 h-11 bg-[#ff5351] text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:brightness-110 transition-all disabled:opacity-50 flex items-center justify-center gap-2">
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                 Confirmar Delegação
               </button>
