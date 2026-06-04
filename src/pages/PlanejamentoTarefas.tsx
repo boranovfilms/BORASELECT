@@ -163,13 +163,30 @@ export default function PlanejamentoTarefas() {
         setClientName(clientSnap.data().name || '');
       }
 
+      // Membros da equipe do cliente
       const q = query(
         collection(db, 'clients'),
         where('clienteId', '==', planData.clientId),
         where('role', '==', 'equipe')
       );
       const snap = await getDocs(q);
-      setTeamMembers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      const clientTeam = snap.docs.map(d => ({ id: d.id, ...d.data(), grupo: 'Equipe Cliente' }));
+
+      // Membros internos Boranov
+      const boranovRoles = ['master', 'admin', 'redator', 'editor', 'designer', 'midia_social', 'fotografo', 'produtor'];
+      const boranovMembers: any[] = [];
+      for (const role of boranovRoles) {
+        try {
+          const bq = query(collection(db, 'clients'), where('role', '==', role));
+          const bsnap = await getDocs(bq);
+          bsnap.docs.forEach(d => {
+            const data = d.data();
+            if (data.email) boranovMembers.push({ id: d.id, ...data, grupo: 'Equipe Boranov' });
+          });
+        } catch (e) {}
+      }
+
+      setTeamMembers([...clientTeam, ...boranovMembers]);
     } catch (error) {
       console.error(error);
       toast.error('Erro ao carregar dados');
@@ -461,10 +478,16 @@ export default function PlanejamentoTarefas() {
                           <div className="relative">
                             <select value={deptResponsibles[deptId] || ''} onChange={e => setDeptResponsibles(prev => ({ ...prev, [deptId]: e.target.value }))} className="w-full h-10 bg-zinc-900 border border-zinc-800 rounded-xl px-3 text-white text-xs focus:border-[#ff5351] outline-none appearance-none cursor-pointer">
                               <option value="">Selecionar...</option>
-                              {teamMembers.map(m => (
-                                <option key={m.id} value={m.email}>{m.name} ({m.jobTitle || m.role})</option>
-                              ))}
-                              <option value="boranov">Equipe Boranov</option>
+                              <optgroup label="— Equipe Boranov —">
+                                {teamMembers.filter(m => m.grupo === 'Equipe Boranov').map(m => (
+                                  <option key={m.id} value={m.email}>{m.name} ({m.role})</option>
+                                ))}
+                              </optgroup>
+                              <optgroup label="— Equipe Cliente —">
+                                {teamMembers.filter(m => m.grupo === 'Equipe Cliente').map(m => (
+                                  <option key={m.id} value={m.email}>{m.name} ({m.jobTitle || m.role})</option>
+                                ))}
+                              </optgroup>
                             </select>
                             <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-600 pointer-events-none" />
                           </div>
