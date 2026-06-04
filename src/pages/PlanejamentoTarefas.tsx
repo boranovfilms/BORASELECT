@@ -7,24 +7,6 @@ import { auth, db } from '../lib/firebase';
 import { contentPlanService, ContentPlan, ContentPost, MicroTask, TaskDept } from '../services/contentPlanService';
 import { cn } from '../lib/utils';
 
-const FASES = [
-  { id: 'aguardando', label: 'Aguardando', color: 'text-zinc-500', bg: 'bg-zinc-800', border: 'border-zinc-700', barColor: 'bg-zinc-600' },
-  { id: 'producao', label: 'Em Produção', color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/20', barColor: 'bg-amber-500' },
-  { id: 'arquivo_anexado', label: 'Arquivo Anexado', color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/20', barColor: 'bg-blue-500' },
-  { id: 'em_aprovacao', label: 'Em Aprovação', color: 'text-purple-400', bg: 'bg-purple-500/10', border: 'border-purple-500/20', barColor: 'bg-purple-500' },
-  { id: 'programado', label: 'Postagem Programada', color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20', barColor: 'bg-emerald-500' },
-  { id: 'concluido', label: 'Concluído', color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20', barColor: 'bg-emerald-500' }
-];
-
-const FASE_PERCENT = {
-  aguardando: 0,
-  producao: 25,
-  arquivo_anexado: 50,
-  em_aprovacao: 75,
-  programado: 100,
-  concluido: 100
-};
-
 const DEPTS = [
   { id: 'video' as TaskDept, icon: '🎬', name: 'Edição de Vídeo', sub: 'Gravação e edição',
     tags: ['Gravação', 'Edição', 'Color Grade', 'Motion', 'Corte', 'Vinheta'] },
@@ -36,20 +18,65 @@ const DEPTS = [
     tags: ['Programar Post', 'Programar Story', 'Programar Reel', 'Impulsionar'] },
 ];
 
-function getPostFase(post: ContentPost): string {
-  if ((post as any).fase) return (post as any).fase;
-  if (post.status === 'aprovado') return 'programado';
-  if (post.status === 'reprovado' || post.status === 'em_revisao') return 'em_aprovacao';
-  return 'aguardando';
+function calcularFasePost(post: ContentPost): { faseId: string; label: string; color: string; bg: string; border: string; barColor: string; percent: number } {
+  const tasks = (post as any).tasks || [];
+
+  if (!tasks || tasks.length === 0) {
+    return {
+      faseId: 'aguardando',
+      label: 'Aguardando Delegação',
+      color: 'text-zinc-500',
+      bg: 'bg-zinc-800',
+      border: 'border-zinc-700',
+      barColor: 'bg-zinc-600',
+      percent: 0
+    };
+  }
+
+  const total = tasks.length;
+  const concluidas = tasks.filter((t: any) => t.status === 'concluido').length;
+  const percent = Math.round((concluidas / total) * 100);
+
+  const emAndamento = tasks.find((t: any) => t.status === 'em_andamento');
+
+  if (percent === 100) {
+    return {
+      faseId: 'concluido',
+      label: emAndamento?.deptLabel || 'Concluído',
+      color: 'text-emerald-400',
+      bg: 'bg-emerald-500/10',
+      border: 'border-emerald-500/20',
+      barColor: 'bg-emerald-500',
+      percent: 100
+    };
+  }
+
+  if (percent > 0 || emAndamento) {
+    return {
+      faseId: 'producao',
+      label: emAndamento?.deptLabel || 'Em Produção',
+      color: 'text-amber-400',
+      bg: 'bg-amber-500/10',
+      border: 'border-amber-500/20',
+      barColor: 'bg-amber-500',
+      percent
+    };
+  }
+
+  return {
+    faseId: 'aguardando',
+    label: 'Aguardando Delegação',
+    color: 'text-zinc-500',
+    bg: 'bg-zinc-800',
+    border: 'border-zinc-700',
+    barColor: 'bg-zinc-600',
+    percent: 0
+  };
 }
 
 function isPostConcluido(post: ContentPost): boolean {
-  const fase = getPostFase(post);
-  return fase === 'programado' || fase === 'concluido';
-}
-
-function getFaseConfig(faseId: string) {
-  return FASES.find(f => f.id === faseId) || FASES[0];
+  const fase = calcularFasePost(post);
+  return fase.percent === 100;
 }
 
 function formatDate(dateStr: string): { data: string; diaSemana: string; isUrgente: boolean } {
@@ -304,11 +331,9 @@ export default function PlanejamentoTarefas() {
             </thead>
             <tbody>
               {postsOrdenados.map((post) => {
-                const faseId = getPostFase(post);
-                const faseConfig = getFaseConfig(faseId);
-                const percent = FASE_PERCENT[faseId as keyof typeof FASE_PERCENT] || 0;
+                const fase = calcularFasePost(post);
                 const dateInfo = formatDate(post.publishDate);
-                const hasTasks = post.tasks && post.tasks.length > 0;
+                const hasTasks = (post as any).tasks && (post as any).tasks.length > 0;
 
                 return (
                   <tr key={post.id} className="border-b border-zinc-800/50 hover:bg-zinc-900/30 transition-all">
@@ -342,9 +367,9 @@ export default function PlanejamentoTarefas() {
 
                     <td className="px-6 py-5 text-center">
                       <div className="flex items-center justify-center gap-2">
-                        <span className={cn('w-2 h-2 rounded-full', faseConfig.barColor)} />
-                        <span className={cn('px-2 py-1 rounded-lg border text-[8px] font-black uppercase tracking-widest', faseConfig.bg, faseConfig.color, faseConfig.border)}>
-                          {faseConfig.label}
+                        <span className={cn('w-2 h-2 rounded-full', fase.barColor)} />
+                        <span className={cn('px-2 py-1 rounded-lg border text-[8px] font-black uppercase tracking-widest', fase.bg, fase.color, fase.border)}>
+                          {fase.label}
                         </span>
                       </div>
                     </td>
@@ -353,19 +378,9 @@ export default function PlanejamentoTarefas() {
                       <div className="space-y-2">
                         <div className="flex items-center gap-3">
                           <div className="flex-1 h-1 bg-zinc-800 rounded-full overflow-hidden">
-                            <div className={cn('h-full rounded-full transition-all duration-500', faseConfig.barColor)} style={{ width: `${percent}%` }} />
+                            <div className={cn('h-full rounded-full transition-all duration-500', fase.barColor)} style={{ width: `${fase.percent}%` }} />
                           </div>
-                          <span className={cn('text-[10px] font-black w-8 text-right', faseConfig.color)}>{percent}%</span>
-                        </div>
-                        <div className="flex gap-1">
-                          {FASES.slice(0, 4).map((fase, idx) => {
-                            const faseIndex = FASES.findIndex(f => f.id === faseId);
-                            const isActive = idx <= faseIndex && faseIndex < 5;
-                            const isCurrent = fase.id === faseId;
-                            return (
-                              <div key={fase.id} className={cn('w-8 h-1.5 rounded-sm transition-all', isActive ? faseConfig.barColor : 'bg-zinc-800', isCurrent && 'ring-1 ring-white/20')} title={fase.label} />
-                            );
-                          })}
+                          <span className={cn('text-[10px] font-black w-8 text-right', fase.color)}>{fase.percent}%</span>
                         </div>
                       </div>
                     </td>
@@ -388,8 +403,8 @@ export default function PlanejamentoTarefas() {
                           </button>
                         )
                       ) : (
-                        <span className={cn('px-2 py-1 rounded-lg border text-[8px] font-black uppercase tracking-widest', faseConfig.bg, faseConfig.color, faseConfig.border)}>
-                          {faseConfig.label}
+                        <span className={cn('px-2 py-1 rounded-lg border text-[8px] font-black uppercase tracking-widest', fase.bg, fase.color, fase.border)}>
+                          {fase.label}
                         </span>
                       )}
                     </td>
