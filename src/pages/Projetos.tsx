@@ -131,6 +131,7 @@ export default function Projetos() {
       case 'em_producao': return 'text-violet-400 border-violet-500/30 bg-violet-500/10';
       case 'devolvido': return 'text-red-400 border-red-500/30 bg-red-500/10';
       case 'aguardando_validacao_equipe': return 'text-violet-400 border-violet-500/30 bg-violet-500/10';
+      case 'aprovado_equipe': return 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10';
       case 'rascunho': return 'text-zinc-400 border-zinc-700 bg-zinc-800/50';
       default: return 'text-zinc-500 border-zinc-700 bg-zinc-800/50';
     }
@@ -138,13 +139,14 @@ export default function Projetos() {
 
   const getStatusLabel = (status: string) => {
     const labels: Record<string, string> = {
-      'aguardando_cliente': 'Aguardando Cliente',
+      'aguardando_cliente': 'Aguardando sua aprovação',
       'aguardando_validacao_equipe': 'Aguardando Equipe',
       'aprovado': 'Aprovado',
+      'aprovado_equipe': 'Aprovado ✓',
       'em_revisao': 'Em Revisão',
       'em_producao': 'Em Produção',
-      'concluido': 'Concluído',
-      'devolvido': 'Devolvido',
+      'concluido': 'Concluído ✓',
+      'devolvido': 'Em correção',
       'rascunho': 'Rascunho',
       'Em Seleção': 'Em Seleção',
       'Finalizado': 'Finalizado',
@@ -164,6 +166,7 @@ export default function Projetos() {
 
   const isInternal = ['master', 'admin', 'editor', 'designer', 'redator', 'midia_social'].includes(userRole);
   const isEquipe = userRole === 'equipe';
+  const isCliente = userRole === 'cliente';
 
   const filteredAdminProjects = useMemo(() => {
     return adminProjects.filter(p => {
@@ -210,15 +213,15 @@ export default function Projetos() {
       );
     }
     
-    if (status === 'aprovado') {
+    if (status === 'aprovado' || status === 'aprovado_equipe') {
       return <span className="text-zinc-600 text-sm">—</span>;
     }
     
     return <span className="text-zinc-600 text-sm">—</span>;
   };
 
-  // Badge de status com bolinha pulsando para aguardando_cliente
-  const renderStatusBadge = (status: string) => {
+  // Badge de status para cliente
+  const renderClienteStatusBadge = (status: string) => {
     const isPulsing = status === 'aguardando_cliente';
     return (
       <div className="flex items-center justify-center gap-2">
@@ -273,27 +276,30 @@ export default function Projetos() {
       );
     }
     
-    if (status === 'aprovado') {
-      return (
-        <div className="flex items-center justify-center gap-2">
-          <span className="relative flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
-          </span>
-          <span className="px-3 py-1 rounded-full border text-[9px] font-black uppercase tracking-widest text-amber-400 border-amber-500/30 bg-amber-500/10">
-            Aguardando sua validação
-          </span>
-        </div>
-      );
+    if (status === 'aprovado_equipe' || status === 'em_producao' || status === 'concluido') {
+      return renderClienteStatusBadge(status);
     }
     
-    return renderStatusBadge(status);
+    return renderClienteStatusBadge(status);
   };
 
   // Handler de clique na linha para visão da equipe
   const handleEquipeRowClick = (item: any) => {
     if (item.type !== 'Planejamento') return navigate(item.route);
     if (item.status === 'aguardando_validacao_equipe') return navigate(item.route);
+    if (item.status === 'aprovado_equipe' || item.status === 'em_producao' || item.status === 'concluido') {
+      return navigate(`/planejamento/${item.id}?modo=visualizar`);
+    }
+    return undefined;
+  };
+
+  // Handler de clique na linha para visão do cliente
+  const handleClienteRowClick = (item: any) => {
+    if (item.type !== 'Planejamento') return navigate(item.route);
+    if (item.status === 'aguardando_cliente') return navigate(item.route);
+    if (item.status === 'aprovado_equipe' || item.status === 'em_producao' || item.status === 'concluido') {
+      return navigate(`/planejamento/${item.id}?modo=visualizar`);
+    }
     return undefined;
   };
 
@@ -410,11 +416,7 @@ export default function Projetos() {
         ) : (
           <DataTable 
             data={filteredClientItems}
-            onRowClick={isEquipe ? handleEquipeRowClick : (item) => {
-              if (item.type !== 'Planejamento') return navigate(item.route);
-              if (item.status === 'aguardando_cliente') return navigate(item.route);
-              return navigate(`/planejamento/${item.id}/tarefas`);
-            }}
+            onRowClick={isEquipe ? handleEquipeRowClick : handleClienteRowClick}
             emptyMessage="Nenhuma entrega encontrada."
             columns={[
               {
@@ -429,7 +431,7 @@ export default function Projetos() {
                 )
               },
               { header: 'Tipo', accessor: (item) => getTypeBadge(item.type), align: 'center' },
-              { header: 'Status', accessor: (item) => isEquipe ? renderEquipeStatusBadge(item.status) : renderStatusBadge(item.status), align: 'center' },
+              { header: 'Status', accessor: (item) => isEquipe ? renderEquipeStatusBadge(item.status) : renderClienteStatusBadge(item.status), align: 'center' },
               { 
                 header: 'Progresso', 
                 accessor: (item) => renderProgresso(item),
