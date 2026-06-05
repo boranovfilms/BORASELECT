@@ -84,7 +84,7 @@ export default function AppLayout({ children, userRole = 'cliente', userName = '
     const userEmail = user.email.toLowerCase().trim();
 
     const q = query(
-      collection(db, 'tasks'),
+      collection(db, 'tarefas'),
       where('delegadoPara', '==', userEmail),
       where('vistoPeloDelegado', '==', false),
       where('status', '==', 'pendente')
