@@ -45,7 +45,7 @@ export default function Projetos() {
       if (cleanEmail === 'admin@boraselect.com.br') {
         role = 'master';
       } else {
-        const q = query(collection(db, 'clients'), where('email', '==', cleanEmail));
+        const q = query(collection(db, 'clientes'), where('email', '==', cleanEmail));
         const snap = await getDocs(q);
         if (!snap.empty) {
           role = snap.docs[0].data().role || 'cliente';
