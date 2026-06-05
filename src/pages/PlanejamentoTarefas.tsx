@@ -134,7 +134,7 @@ export default function PlanejamentoTarefas() {
         setRoleLoaded(true);
         return;
       }
-      const q = query(collection(db, 'clients'), where('email', '==', currentEmail));
+      const q = query(collection(db, 'clientes'), where('email', '==', currentEmail));
       const snap = await getDocs(q);
       if (!snap.empty) {
         setUserRole(snap.docs[0].data().role || 'cliente');
@@ -158,14 +158,14 @@ export default function PlanejamentoTarefas() {
       }
       setPlan(planData);
 
-      const clientSnap = await getDoc(doc(db, 'clients', planData.clientId));
+      const clientSnap = await getDoc(doc(db, 'clientes', planData.clientId));
       if (clientSnap.exists()) {
         setClientName(clientSnap.data().name || '');
       }
 
       // Membros da equipe do cliente
       const q = query(
-        collection(db, 'clients'),
+        collection(db, 'clientes'),
         where('clienteId', '==', planData.clientId),
         where('role', '==', 'equipe')
       );
@@ -177,7 +177,7 @@ export default function PlanejamentoTarefas() {
       const boranovMembers: any[] = [];
       for (const role of boranovRoles) {
         try {
-          const bq = query(collection(db, 'clients'), where('role', '==', role));
+          const bq = query(collection(db, 'clientes'), where('role', '==', role));
           const bsnap = await getDocs(bq);
           bsnap.docs.forEach(d => {
             const data = d.data();
