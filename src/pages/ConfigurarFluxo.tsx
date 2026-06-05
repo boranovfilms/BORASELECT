@@ -46,7 +46,7 @@ export default function ConfigurarFluxo() {
     setLoading(true);
     try {
       const [clientSnap, modelsData] = await Promise.all([
-        getDoc(doc(db, 'clients', clientId)),
+        getDoc(doc(db, 'clientes', clientId)),
         modelosService.getModelos()
       ]);
 
@@ -62,7 +62,7 @@ export default function ConfigurarFluxo() {
 
       // Buscar membros da equipe do cliente
       const teamQuery = query(
-        collection(db, 'clients'), 
+        collection(db, 'clientes'), 
         where('clienteId', '==', clientId), 
         where('role', '==', 'equipe')
       );
@@ -78,7 +78,7 @@ export default function ConfigurarFluxo() {
       const boranovMembers: any[] = [];
       for (const role of boranovRoles) {
         try {
-          const bq = query(collection(db, 'clients'), where('role', '==', role));
+          const bq = query(collection(db, 'clientes'), where('role', '==', role));
           const bsnap = await getDocs(bq);
           bsnap.docs.forEach(d => {
             const data = d.data();
@@ -154,7 +154,7 @@ export default function ConfigurarFluxo() {
     if (!clientId || !demandType) return;
     setSaving(true);
     try {
-      const clientRef = doc(db, 'clients', clientId);
+      const clientRef = doc(db, 'clientes', clientId);
       const clientSnap = await getDoc(clientRef);
       const cData = clientSnap.data() || {};
       
