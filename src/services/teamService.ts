@@ -1,57 +1,69 @@
-import { collection, query, where, getDocs, addDoc, deleteDoc, doc, updateDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, addDoc, deleteDoc, doc, updateDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 
 export interface TeamMember {
   id?: string;
   name: string;
-  email: string;
-  phone: string;
-  role: string;
-  clienteId?: string;
+  email: string;a
+  phone?: string;
+  jobTitle?: string;
+  role: string; // 'master' | 'redator' | 'designer' | 'editor' | 'midia_social'
   status: 'pending' | 'confirmed';
   createdAt?: any;
+  updatedAt?: any;
+  photoUrl?: string;
 }
 
 export const teamService = {
-  async getTeamMembers() {
-    const snapshot = await getDocs(collection(db, 'clients'));
-    return snapshot.docs
-      .map(doc => ({ id: doc.id, ...doc.data() } as TeamMember))
-      .filter(m => m.role && !['cliente', 'equipe', 'master'].includes(m.role));
+
+  // Busca todos os membros da equipe Boranov
+  async getTeamMembers(): Promise<TeamMember[]> {
+    const snapshot = await getDocs(collection(db, 'boraselect'));
+    return snapshot.docs.map(d => ({ id: d.id, ...d.data() })) as TeamMember[];
   },
 
-  async getClientTeamMembers(clienteId: string) {
+  // Busca membros da equipe de um cliente específico
+  async getClientTeamMembers(companyId: string): Promise<TeamMember[]> {
     const q = query(
-      collection(db, 'clients'),
-      where('role', '==', 'equipe'),
-      where('clienteId', '==', clienteId)
+      collection(db, 'clientes'),
+      where('type', '==', 'membro'),
+      where('companyId', '==', companyId)
     );
     const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    })) as TeamMember[];
+    return snapshot.docs.map(d => ({ id: d.id, ...d.data() })) as TeamMember[];
   },
 
-  async createTeamMember(member: Omit<TeamMember, 'id' | 'createdAt'>) {
-    const docRef = await addDoc(collection(db, 'clients'), {
+  // Cria membro da equipe Boranov
+  async createTeamMember(member: Omit<TeamMember, 'id' | 'createdAt'>): Promise<string> {
+    const ref = collection(db, 'boraselect');
+    const newDocRef = doc(ref);
+    await setDoc(newDocRef, {
       ...member,
+      id: newDocRef.id,
+      email: member.email.toLowerCase().trim(),
       status: 'pending',
-      createdAt: new Date()
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
     });
-    return docRef.id;
+    return newDocRef.id;
   },
 
-  // NOVO MÉTODO: Atualiza um membro existente sem duplicar
-  async updateTeamMember(id: string, data: Partial<TeamMember>) {
-    const docRef = doc(db, 'clients', id);
+  // Atualiza membro da equipe Boranov
+  async updateTeamMember(id: string, data: Partial<TeamMember>): Promise<void> {
+    const docRef = doc(db, 'boraselect', id);
     await updateDoc(docRef, {
       ...data,
-      updatedAt: new Date()
+      updatedAt: serverTimestamp()
     });
   },
 
-  async deleteTeamMemberAuth(email: string) {
+  // Deleta membro da equipe Boranov
+  async deleteTeamMember(id: string): Promise<void> {
+    await deleteDoc(doc(db, 'boraselect', id));
+  },
+
+  // Deleta autenticação do membro
+  async deleteTeamMemberAuth(email: string): Promise<any> {
     try {
       const response = await fetch('/api-v2/auth/delete-user', {
         method: 'POST',
@@ -66,7 +78,28 @@ export const teamService = {
     }
   },
 
-  async deleteTeamMember(id: string) {
-    await deleteDoc(doc(db, 'clients', id));
+  // Busca usuário por email em qualquer coleção (boraselect ou clientes)
+  async getUserByEmail(email: string): Promise<{ role: string; companyId?: string } | null> {
+    const cleanEmail = email.toLowerCase().trim();
+
+    // Primeiro busca na equipe Boranov
+    const boranovSnap = await getDocs(
+      query(collection(db, 'boraselect'), where('email', '==', cleanEmail))
+    );
+    if (!boranovSnap.empty) {
+      const data = boranovSnap.docs[0].data();
+      return { role: data.role };
+    }
+
+    // Depois busca nos clientes
+    const clientesSnap = await getDocs(
+      query(collection(db, 'clientes'), where('email', '==', cleanEmail))
+    );
+    if (!clientesSnap.empty) {
+      const data = clientesSnap.docs[0].data();
+      return { role: data.role, companyId: data.companyId || data.id };
+    }
+
+    return null;
   }
 };
