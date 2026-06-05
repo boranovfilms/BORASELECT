@@ -17,7 +17,7 @@ export interface PostApproval {
   userId: string;
   userName: string;
   userEmail: string;
-  action: 'aprovado' | 'reprovado' | 'editado' | 'editado_equipe' | 'validado_equipe' | 'editado_redator';
+  action: 'aprovado' | 'reprovado' | 'editado' | 'editado_equipe' | 'validado_equipe' | 'editado_redator' | 'descartado';
   comment: string | null;
   textBefore: string | null;
   textAfter: string | null;
@@ -120,7 +120,6 @@ export function parsePostsFromText(text: string): ContentPost[] {
     const funcaoMatch = block.match(/Função estratégica\s*\n\s*(.+)/i);
     const strategicFunction = funcaoMatch ? funcaoMatch[1].trim().replace(/\*/g, '') : null;
 
-    // Extrai slides (para Carrossel)
     let slides: SlideData[] | undefined = undefined;
     if (type === 'CARROSSEL') {
       slides = [];
@@ -155,8 +154,9 @@ export function parsePostsFromText(text: string): ContentPost[] {
 }
 
 export const contentPlanService = {
+
   async createPlan(data: Partial<ContentPlan>) {
-    const docRef = await addDoc(collection(db, 'content_plans'), {
+    const docRef = await addDoc(collection(db, 'demandas'), {
       clientId: data.clientId,
       name: data.name,
       monthReference: data.monthReference || '',
@@ -186,13 +186,17 @@ export const contentPlanService = {
   },
 
   async getPlansByClient(clientId: string) {
-    const q = query(collection(db, 'content_plans'), where('clientId', '==', clientId));
+    const q = query(collection(db, 'demandas'), where('clientId', '==', clientId));
     const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ContentPlan));
+    return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as ContentPlan));
   },
 
   async getPlansByClientEmail(email: string) {
-    const qClient = query(collection(db, 'clients'), where('email', '==', email.toLowerCase().trim()));
+    const qClient = query(
+      collection(db, 'clientes'),
+      where('email', '==', email.toLowerCase().trim()),
+      where('type', '==', 'empresa')
+    );
     const clientSnap = await getDocs(qClient);
     if (clientSnap.empty) return [];
     const clientId = clientSnap.docs[0].id;
@@ -200,7 +204,7 @@ export const contentPlanService = {
   },
 
   async getPlanById(planId: string) {
-    const docRef = doc(db, 'content_plans', planId);
+    const docRef = doc(db, 'demandas', planId);
     const snap = await getDoc(docRef);
     return snap.exists() ? { id: snap.id, ...snap.data() } as ContentPlan : null;
   },
@@ -208,12 +212,12 @@ export const contentPlanService = {
   async updatePostStatus(
     planId: string,
     postId: string,
-    action: 'aprovado' | 'reprovado' | 'editado',
+    action: 'aprovado' | 'reprovado' | 'editado' | 'descartado',
     currentUser: any,
     comment?: string,
     newCaption?: string
   ) {
-    const planRef = doc(db, 'content_plans', planId);
+    const planRef = doc(db, 'demandas', planId);
     const planSnap = await getDoc(planRef);
     if (!planSnap.exists()) throw new Error('Planejamento não encontrado');
 
@@ -249,20 +253,13 @@ export const contentPlanService = {
     return allApproved;
   },
 
-  async updatePostByEquipe(
-    planId: string,
-    postId: string,
-    newCaption: string,
-    currentUser: any
-  ) {
-    const planRef = doc(db, 'content_plans', planId);
+  async updatePostByEquipe(planId: string, postId: string, newCaption: string, currentUser: any) {
+    const planRef = doc(db, 'demandas', planId);
     const planSnap = await getDoc(planRef);
     if (!planSnap.exists()) throw new Error('Planejamento não encontrado');
 
     const planData = planSnap.data() as ContentPlan;
-    const posts = planData.posts || [];
-
-    const updatedPosts = posts.map(post => {
+    const updatedPosts = planData.posts.map(post => {
       if (post.id !== postId) return post;
       const approval: PostApproval = {
         userId: currentUser.uid,
@@ -274,33 +271,19 @@ export const contentPlanService = {
         textAfter: newCaption,
         date: new Date().toISOString()
       };
-      return {
-        ...post,
-        caption: newCaption,
-        status: 'validado_equipe',
-        approvals: [...(post.approvals || []), approval]
-      };
+      return { ...post, caption: newCaption, status: 'validado_equipe', approvals: [...(post.approvals || []), approval] };
     });
 
-    await updateDoc(planRef, {
-      posts: updatedPosts,
-      updatedAt: serverTimestamp()
-    });
+    await updateDoc(planRef, { posts: updatedPosts, updatedAt: serverTimestamp() });
   },
 
-  async validatePostByEquipe(
-    planId: string,
-    postId: string,
-    currentUser: any
-  ) {
-    const planRef = doc(db, 'content_plans', planId);
+  async validatePostByEquipe(planId: string, postId: string, currentUser: any) {
+    const planRef = doc(db, 'demandas', planId);
     const planSnap = await getDoc(planRef);
     if (!planSnap.exists()) throw new Error('Planejamento não encontrado');
 
     const planData = planSnap.data() as ContentPlan;
-    const posts = planData.posts || [];
-
-    const updatedPosts = posts.map(post => {
+    const updatedPosts = planData.posts.map(post => {
       if (post.id !== postId) return post;
       const approval: PostApproval = {
         userId: currentUser.uid,
@@ -312,60 +295,14 @@ export const contentPlanService = {
         textAfter: null,
         date: new Date().toISOString()
       };
-      return {
-        ...post,
-        status: 'validado_equipe',
-        approvals: [...(post.approvals || []), approval]
-      };
+      return { ...post, status: 'validado_equipe', approvals: [...(post.approvals || []), approval] };
     });
 
-    await updateDoc(planRef, {
-      posts: updatedPosts,
-      updatedAt: serverTimestamp()
-    });
-  },
-
-  async updatePostByRedator(
-    planId: string,
-    postId: string,
-    newCaption: string,
-    currentUser: any
-  ) {
-    const planRef = doc(db, 'content_plans', planId);
-    const planSnap = await getDoc(planRef);
-    if (!planSnap.exists()) throw new Error('Planejamento não encontrado');
-
-    const planData = planSnap.data() as ContentPlan;
-    const posts = planData.posts || [];
-
-    const updatedPosts = posts.map(post => {
-      if (post.id !== postId) return post;
-      const approval: PostApproval = {
-        userId: currentUser.uid,
-        userName: currentUser.displayName || currentUser.email,
-        userEmail: currentUser.email,
-        action: 'editado_redator',
-        comment: 'Correção solicitada pelo cliente',
-        textBefore: post.caption,
-        textAfter: newCaption,
-        date: new Date().toISOString()
-      };
-      return {
-        ...post,
-        caption: newCaption,
-        status: post.status === 'reprovado' ? 'em_revisao' : post.status,
-        approvals: [...(post.approvals || []), approval]
-      };
-    });
-
-    await updateDoc(planRef, {
-      posts: updatedPosts,
-      updatedAt: serverTimestamp()
-    });
+    await updateDoc(planRef, { posts: updatedPosts, updatedAt: serverTimestamp() });
   },
 
   async updatePlanText(planId: string, newText: string, currentUser: any) {
-    const planRef = doc(db, 'content_plans', planId);
+    const planRef = doc(db, 'demandas', planId);
     const planSnap = await getDoc(planRef);
     if (!planSnap.exists()) throw new Error('Planejamento não encontrado');
     const planData = planSnap.data() as ContentPlan;
@@ -391,7 +328,7 @@ export const contentPlanService = {
   },
 
   async updateStatus(planId: string, newStatus: ContentPlanStatus, reason?: string) {
-    const planRef = doc(db, 'content_plans', planId);
+    const planRef = doc(db, 'demandas', planId);
     await updateDoc(planRef, {
       status: newStatus,
       rejectionReason: reason || '',
@@ -399,45 +336,21 @@ export const contentPlanService = {
     });
   },
 
-  async validateByMember(planId: string, userEmail: string) {
-    const planRef = doc(db, 'content_plans', planId);
-    const planSnap = await getDoc(planRef);
-    const planData = planSnap.data() as ContentPlan;
-    if (!planData.validations.includes(userEmail)) {
-      await updateDoc(planRef, {
-        validations: arrayUnion(userEmail),
-        updatedAt: serverTimestamp()
-      });
-    }
-  },
-
   async deletePlan(id: string) {
-    await deleteDoc(doc(db, 'content_plans', id));
+    await deleteDoc(doc(db, 'demandas', id));
   },
 
-  async delegatePost(
-    planId: string,
-    postId: string,
-    tasks: MicroTask[]
-  ): Promise<void> {
-    const planRef = doc(db, 'content_plans', planId);
+  async delegatePost(planId: string, postId: string, tasks: MicroTask[]): Promise<void> {
+    const planRef = doc(db, 'demandas', planId);
     const planSnap = await getDoc(planRef);
     if (!planSnap.exists()) throw new Error('Planejamento não encontrado');
-    
+
     const planData = planSnap.data() as ContentPlan;
     const updatedPosts = planData.posts.map(post => {
       if (post.id !== postId) return post;
-      return {
-        ...post,
-        tasks: tasks,
-        status: 'em_revisao' as const,
-        fase: 'producao'
-      };
+      return { ...post, tasks, status: 'em_revisao' as const, fase: 'producao' };
     });
-    
-    await updateDoc(planRef, {
-      posts: updatedPosts,
-      updatedAt: serverTimestamp()
-    });
+
+    await updateDoc(planRef, { posts: updatedPosts, updatedAt: serverTimestamp() });
   }
 };
