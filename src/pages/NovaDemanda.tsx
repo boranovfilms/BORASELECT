@@ -20,7 +20,7 @@ export default function NovaDemanda() {
     async function loadClient() {
       if (!clientId) return;
       try {
-        const docRef = doc(db, 'clients', clientId);
+        const docRef = doc(db, 'clientes', clientId);
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
           const cData = docSnap.data();
