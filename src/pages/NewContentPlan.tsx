@@ -59,7 +59,7 @@ export default function NewContentPlan() {
     async function loadClient() {
       if (!clientId) return;
       try {
-        const docRef = doc(db, 'clients', clientId);
+        const docRef = doc(db, 'clientes', clientId);
         const snap = await getDoc(docRef);
         if (snap.exists()) {
           setClientName(snap.data().name || '');
