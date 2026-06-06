@@ -20,7 +20,6 @@ export default function Register() {
   useEffect(() => {
     const emailParam = searchParams.get('email');
     if (emailParam) {
-      // Force logout to ensure a clean registration session
       auth.signOut();
       setEmail(emailParam);
       validateInviteDirectly(emailParam);
@@ -32,20 +31,28 @@ export default function Register() {
   const validateInviteDirectly = async (emailToValidate: string) => {
     try {
       const cleanEmail = emailToValidate.toLowerCase().trim();
-      console.log('Validating invite for:', cleanEmail);
-      const q = query(collection(db, 'clientes'), where('email', '==', cleanEmail));
-      const snapshot = await getDocs(q);
-      
-      if (!snapshot.empty) {
+
+      // Busca em 'clientes' (empresas e membros)
+      const qClientes = query(collection(db, 'clientes'), where('email', '==', cleanEmail));
+      const snapClientes = await getDocs(qClientes);
+      if (!snapClientes.empty) {
         setIsValidated(true);
-      } else {
-        console.warn('No invite found for:', cleanEmail);
-        toast.error('Este e-mail não possui um convite válido.');
+        return;
       }
+
+      // Busca em 'boraselect' (equipe Boranov)
+      const qBora = query(collection(db, 'boraselect'), where('email', '==', cleanEmail));
+      const snapBora = await getDocs(qBora);
+      if (!snapBora.empty) {
+        setIsValidated(true);
+        return;
+      }
+
+      toast.error('Este e-mail não possui um convite válido.');
     } catch (error: any) {
       console.error('Invite validation error:', error);
       if (error.code === 'permission-denied' || error.message?.includes('permission')) {
-        toast.error('Erro de permissão ao validar seu convite. O administrador precisa ajustar as regras do banco.');
+        toast.error('Erro de permissão ao validar seu convite.');
       } else {
         toast.error('Erro ao validar convite: ' + (error.message || 'Erro desconhecido'));
       }
@@ -55,8 +62,6 @@ export default function Register() {
   };
 
   const validateInvite = async () => {
-    // This function is still here to avoid breaking other calls, 
-    // but the main logic is moved to validateInviteDirectly
     if (!email) return;
     validateInviteDirectly(email);
   };
@@ -77,7 +82,6 @@ export default function Register() {
       const cleanEmail = email.toLowerCase().trim();
       await createUserWithEmailAndPassword(auth, cleanEmail, password);
       
-      // Mark all client records with this email as confirmed
       try {
         await clientService.updateClientStatusByEmail(cleanEmail, 'confirmed');
       } catch (statusErr) {
@@ -89,8 +93,6 @@ export default function Register() {
     } catch (err: any) {
       console.error(err);
       if (err.code === 'auth/email-already-in-use') {
-        // If email is in use, it means they are already registered in Firebase Auth
-        // We should ensure their status is updated in Firestore just in case there was a mismatch
         try {
           await clientService.updateClientStatusByEmail(email.toLowerCase().trim(), 'confirmed');
         } catch (statusErr) {
@@ -141,10 +143,10 @@ export default function Register() {
       <div className="max-w-md w-full space-y-10">
         <div className="space-y-3 text-center">
           <div className="flex justify-center mb-6">
-             <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-[#ff5351]" />
-                <span className="text-sm font-black tracking-tighter uppercase text-white">BORA SELECT</span>
-             </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-[#ff5351]" />
+              <span className="text-sm font-black tracking-tighter uppercase text-white">BORA SELECT</span>
+            </div>
           </div>
           <h2 className="text-4xl font-bold text-white tracking-tight">Ativar Acesso.</h2>
           <p className="text-zinc-500 font-medium">Você foi convidado! Crie sua senha para acessar seus projetos.</p>
