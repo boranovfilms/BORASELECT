@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Calendar, Loader2, Zap, Eye, X, Save, ChevronDown } from 'lucide-react';
 import { toast } from 'react-hot-toast';
-import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
 import { contentPlanService, ContentPlan, ContentPost, MicroTask, TaskDept } from '../services/contentPlanService';
 import { cn } from '../lib/utils';
@@ -260,8 +260,8 @@ export default function PlanejamentoTarefas() {
           id: `task_${dept}_${Date.now()}`,
           dept,
           deptLabel: deptInfo.name,
-          responsibleEmail: deptResponsibles[dept] || '',
-          responsibleName: deptResponsibles[dept] || '',
+          responsibleEmail: '',
+          responsibleName: '',
           tags: deptTags[dept] || [],
           description: deptDescriptions[dept] || '',
           status: 'pendente' as const,
@@ -271,6 +271,45 @@ export default function PlanejamentoTarefas() {
       });
 
       await contentPlanService.delegatePost(plan!.id!, selectedPost.id, tasks);
+
+      const deptToRole: Record<string, string> = {
+        video: 'editor',
+        design: 'designer',
+        redacao: 'redator',
+        midia_social: 'midia_social'
+      };
+
+      for (const dept of selectedDepts) {
+        const deptInfo = DEPTS.find(d => d.id === dept)!;
+        const roleToNotify = deptToRole[dept];
+        const membrosSnap = await getDocs(
+          query(collection(db, 'boraselect'), where('role', '==', roleToNotify))
+        );
+        
+        const notifPromises = membrosSnap.docs.map(docMembro => {
+          const membro = docMembro.data();
+          return addDoc(collection(db, 'tarefas'), {
+            nome: `NOVA TAREFA: ${deptInfo.name} — ${selectedPost.headline}`,
+            prioridade: 'alta',
+            status: 'pendente',
+            dataCriacao: serverTimestamp(),
+            responsavelCriacao: auth.currentUser?.displayName || 'Redator',
+            responsavelCriacaoEmail: auth.currentUser?.email || '',
+            responsavelTarefa: membro.name || membro.email,
+            tipoAcesso: 'particular',
+            delegadoPara: membro.email?.toLowerCase(),
+            delegadoNome: membro.name || membro.email,
+            vistoPeloDelegado: false,
+            descricao: deptDescriptions[dept] || `Nova tarefa de ${deptInfo.name} para o post "${selectedPost.headline}"`,
+            planId: plan!.id,
+            postId: selectedPost.id,
+            dept: dept,
+            tipo: 'tarefa_departamento'
+          });
+        });
+        await Promise.all(notifPromises);
+      }
+
       toast.success('Tarefas delegadas com sucesso!');
       setShowDelegModal(false);
       setSelectedDepts([]);
@@ -281,6 +320,7 @@ export default function PlanejamentoTarefas() {
       setDepVideoDependeArte(false);
       loadData();
     } catch (error) {
+      console.error(error);
       toast.error('Erro ao delegar tarefas.');
     } finally {
       setSaving(false);
@@ -472,26 +512,6 @@ export default function PlanejamentoTarefas() {
                         <div className="flex items-center gap-2">
                           <span>{deptInfo.icon}</span>
                           <p className="text-white font-black uppercase text-xs">{deptInfo.name}</p>
-                        </div>
-
-                        <div className="space-y-1">
-                          <label className="text-[8px] font-black uppercase tracking-widest text-zinc-600">Responsável</label>
-                          <div className="relative">
-                            <select value={deptResponsibles[deptId] || ''} onChange={e => setDeptResponsibles(prev => ({ ...prev, [deptId]: e.target.value }))} className="w-full h-10 bg-zinc-900 border border-zinc-800 rounded-xl px-3 text-white text-xs focus:border-[#ff5351] outline-none appearance-none cursor-pointer">
-                              <option value="">Selecionar...</option>
-                              <optgroup label="— Equipe Boranov —">
-                                {teamMembers.filter(m => m.grupo === 'Equipe Boranov').map(m => (
-                                  <option key={m.id} value={m.email}>{m.name} ({m.role})</option>
-                                ))}
-                              </optgroup>
-                              <optgroup label="— Equipe Cliente —">
-                                {teamMembers.filter(m => m.grupo === 'Equipe Cliente').map(m => (
-                                  <option key={m.id} value={m.email}>{m.name} ({m.jobTitle || m.role})</option>
-                                ))}
-                              </optgroup>
-                            </select>
-                            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-600 pointer-events-none" />
-                          </div>
                         </div>
 
                         <div className="space-y-1">
