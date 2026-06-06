@@ -6,6 +6,7 @@ import { doc, getDoc, collection, query, where, getDocs, addDoc, serverTimestamp
 import { auth, db } from '../lib/firebase';
 import { contentPlanService, ContentPlan, ContentPost, MicroTask, TaskDept } from '../services/contentPlanService';
 import { cn } from '../lib/utils';
+import { notificacaoService } from '../services/notificacaoService';
 
 const DEPTS = [
   { id: 'video' as TaskDept, icon: '🎬', name: 'Edição de Vídeo', sub: 'Gravação e edição',
@@ -288,23 +289,13 @@ export default function PlanejamentoTarefas() {
         
         const notifPromises = membrosSnap.docs.map(docMembro => {
           const membro = docMembro.data();
-          return addDoc(collection(db, 'tarefas'), {
-            nome: `NOVA TAREFA: ${deptInfo.name} — ${selectedPost.headline}`,
-            prioridade: 'alta',
-            status: 'pendente',
-            dataCriacao: serverTimestamp(),
-            responsavelCriacao: auth.currentUser?.displayName || 'Redator',
-            responsavelCriacaoEmail: auth.currentUser?.email || '',
-            responsavelTarefa: membro.name || membro.email,
-            tipoAcesso: 'particular',
-            delegadoPara: membro.email?.toLowerCase(),
-            delegadoNome: membro.name || membro.email,
-            vistoPeloDelegado: false,
-            descricao: deptDescriptions[dept] || `Nova tarefa de ${deptInfo.name} para o post "${selectedPost.headline}"`,
+          return notificacaoService.criar({
+            para: membro.email?.toLowerCase(),
+            tipo: 'producao',
+            titulo: `NOVA TAREFA: ${deptInfo.name} — ${selectedPost.headline}`,
+            descricao: deptDescriptions[dept] || `Nova tarefa de ${deptInfo.name} para o post \"${selectedPost.headline}\"`,
             planId: plan!.id,
-            postId: selectedPost.id,
-            dept: dept,
-            tipo: 'tarefa_departamento'
+            postId: selectedPost.id
           });
         });
         await Promise.all(notifPromises);
@@ -329,32 +320,32 @@ export default function PlanejamentoTarefas() {
 
   if (loading || !plan) {
     return (
-      <div className="min-h-[60vh] flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-[#ff5351]" />
+      <div className=\"min-h-[60vh] flex items-center justify-center\">
+        <Loader2 className=\"w-8 h-8 animate-spin text-[#ff5351]\" />
       </div>
     );
   }
 
   return (
-    <div className="max-w-7xl mx-auto text-left pb-20">
-      <header className="mb-8">
-        <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-[#ff5351] text-[10px] font-black uppercase tracking-widest mb-4 hover:brightness-110 transition-all">
-          <ArrowLeft className="w-4 h-4" /> Voltar
+    <div className=\"max-w-7xl mx-auto text-left pb-20\">
+      <header className=\"mb-8\">
+        <button onClick={() => navigate(-1)} className=\"flex items-center gap-2 text-[#ff5351] text-[10px] font-black uppercase tracking-widest mb-4 hover:brightness-110 transition-all\">
+          <ArrowLeft className=\"w-4 h-4\" /> Voltar
         </button>
-        <p className="text-[10px] font-black uppercase tracking-widest text-[#ff5351] mb-1">PLANEJAMENTO · {clientName}</p>
-        <h1 className="text-3xl font-black text-white uppercase italic tracking-tighter">{plan.name}</h1>
-        <p className="text-zinc-500 text-sm mt-1">{plan.monthReference}</p>
+        <p className=\"text-[10px] font-black uppercase tracking-widest text-[#ff5351] mb-1\">PLANEJAMENTO · {clientName}</p>
+        <h1 className=\"text-3xl font-black text-white uppercase italic tracking-tighter\">{plan.name}</h1>
+        <p className=\"text-zinc-500 text-sm mt-1\">{plan.monthReference}</p>
       </header>
 
-      <div className="bg-[#1f1f1f] border border-zinc-800 rounded-3xl p-6 mb-8">
-        <div className="flex items-center justify-between mb-4">
-          <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Progresso Geral</span>
-          <span className="text-2xl font-black italic text-[#ff5351]">{porcentagemGeral}%</span>
+      <div className=\"bg-[#1f1f1f] border border-zinc-800 rounded-3xl p-6 mb-8\">
+        <div className=\"flex items-center justify-between mb-4\">
+          <span className=\"text-[10px] font-black uppercase tracking-widest text-zinc-500\">Progresso Geral</span>
+          <span className=\"text-2xl font-black italic text-[#ff5351]\">{porcentagemGeral}%</span>
         </div>
-        <div className="w-full h-1 bg-zinc-800 rounded-full overflow-hidden mb-4">
-          <div className="h-full bg-[#ff5351] rounded-full transition-all duration-700" style={{ width: `${porcentagemGeral}%` }} />
+        <div className=\"w-full h-1 bg-zinc-800 rounded-full overflow-hidden mb-4\">
+          <div className=\"h-full bg-[#ff5351] rounded-full transition-all duration-700\" style={{ width: `${porcentagemGeral}%` }} />
         </div>
-        <div className="flex flex-wrap gap-1">
+        <div className=\"flex flex-wrap gap-1\">
           {postsOrdenados.map((post, idx) => {
             const concluido = isPostConcluido(post);
             const emAndamento = !concluido && idx === concluidos;
@@ -365,17 +356,17 @@ export default function PlanejamentoTarefas() {
         </div>
       </div>
 
-      <div className="bg-[#1f1f1f] border border-zinc-800 rounded-3xl overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
+      <div className=\"bg-[#1f1f1f] border border-zinc-800 rounded-3xl overflow-hidden\">
+        <div className=\"overflow-x-auto\">
+          <table className=\"w-full\">
             <thead>
-              <tr className="border-b border-zinc-800">
-                <th className="text-left px-6 py-4 text-[9px] font-black uppercase tracking-widest text-zinc-500">POST</th>
-                <th className="text-center px-6 py-4 text-[9px] font-black uppercase tracking-widest text-zinc-500">TIPO</th>
-                <th className="text-center px-6 py-4 text-[9px] font-black uppercase tracking-widest text-zinc-500">DATA POSTAGEM</th>
-                <th className="text-center px-6 py-4 text-[9px] font-black uppercase tracking-widest text-zinc-500">FASE ATUAL</th>
-                <th className="text-left px-6 py-4 text-[9px] font-black uppercase tracking-widest text-zinc-500">PROGRESSO</th>
-                <th className="text-center px-6 py-4 text-[9px] font-black uppercase tracking-widest text-zinc-500">AÇÃO</th>
+              <tr className=\"border-b border-zinc-800\">
+                <th className=\"text-left px-6 py-4 text-[9px] font-black uppercase tracking-widest text-zinc-500\">POST</th>
+                <th className=\"text-center px-6 py-4 text-[9px] font-black uppercase tracking-widest text-zinc-500\">TIPO</th>
+                <th className=\"text-center px-6 py-4 text-[9px] font-black uppercase tracking-widest text-zinc-500\">DATA POSTAGEM</th>
+                <th className=\"text-center px-6 py-4 text-[9px] font-black uppercase tracking-widest text-zinc-500\">FASE ATUAL</th>
+                <th className=\"text-left px-6 py-4 text-[9px] font-black uppercase tracking-widest text-zinc-500\">PROGRESSO</th>
+                <th className=\"text-center px-6 py-4 text-[9px] font-black uppercase tracking-widest text-zinc-500\">AÇÃO</th>
               </tr>
             </thead>
             <tbody>
@@ -385,37 +376,37 @@ export default function PlanejamentoTarefas() {
                 const hasTasks = (post as any).tasks && (post as any).tasks.length > 0;
 
                 return (
-                  <tr key={post.id} className="border-b border-zinc-800/50 hover:bg-zinc-900/30 transition-all">
-                    <td className="px-6 py-5">
-                      <div className="flex items-start gap-3">
-                        <span className="text-[10px] font-black text-zinc-600 mt-0.5">#{String(post.number).padStart(2, '0')}</span>
+                  <tr key={post.id} className=\"border-b border-zinc-800/50 hover:bg-zinc-900/30 transition-all\">
+                    <td className=\"px-6 py-5\">
+                      <div className=\"flex items-start gap-3\">
+                        <span className=\"text-[10px] font-black text-zinc-600 mt-0.5\">#{String(post.number).padStart(2, '0')}</span>
                         <div>
-                          <p className="text-white font-black uppercase text-sm leading-tight">{post.headline || 'Sem título'}</p>
-                          <p className="text-zinc-500 text-[10px] mt-1 line-clamp-2">{post.caption}</p>
+                          <p className=\"text-white font-black uppercase text-sm leading-tight\">{post.headline || 'Sem título'}</p>
+                          <p className=\"text-zinc-500 text-[10px] mt-1 line-clamp-2\">{post.caption}</p>
                         </div>
                       </div>
                     </td>
 
-                    <td className="px-6 py-5 text-center">
+                    <td className=\"px-6 py-5 text-center\">
                       <span className={cn('px-2 py-1 rounded-lg border text-[8px] font-black uppercase tracking-widest', getTypeStyles(post.type))}>
                         {post.type}
                       </span>
                     </td>
 
-                    <td className="px-6 py-5 text-center">
-                      <div className="flex flex-col items-center">
+                    <td className=\"px-6 py-5 text-center\">
+                      <div className=\"flex flex-col items-center\">
                         <span className={cn('text-xs font-black uppercase', dateInfo.isUrgente ? 'text-amber-400' : 'text-white')}>
                           {dateInfo.data}
                         </span>
-                        <span className="text-[9px] text-zinc-500 mt-0.5">{dateInfo.diaSemana}</span>
+                        <span className=\"text-[9px] text-zinc-500 mt-0.5\">{dateInfo.diaSemana}</span>
                         {dateInfo.isUrgente && (
-                          <span className="text-[7px] font-black uppercase tracking-widest text-amber-500 mt-1">URGENTE</span>
+                          <span className=\"text-[7px] font-black uppercase tracking-widest text-amber-500 mt-1\">URGENTE</span>
                         )}
                       </div>
                     </td>
 
-                    <td className="px-6 py-5 text-center">
-                      <div className="flex items-center justify-center gap-2">
+                    <td className=\"px-6 py-5 text-center\">
+                      <div className=\"flex items-center justify-center gap-2\">
                         <span className={cn('w-2 h-2 rounded-full', fase.barColor)} />
                         <span className={cn('px-2 py-1 rounded-lg border text-[8px] font-black uppercase tracking-widest', fase.bg, fase.color, fase.border)}>
                           {fase.label}
@@ -423,10 +414,10 @@ export default function PlanejamentoTarefas() {
                       </div>
                     </td>
 
-                    <td className="px-6 py-5">
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-3">
-                          <div className="flex-1 h-1 bg-zinc-800 rounded-full overflow-hidden">
+                    <td className=\"px-6 py-5\">
+                      <div className=\"space-y-2\">
+                        <div className=\"flex items-center gap-3\">
+                          <div className=\"flex-1 h-1 bg-zinc-800 rounded-full overflow-hidden\">
                             <div className={cn('h-full rounded-full transition-all duration-500', fase.barColor)} style={{ width: `${fase.percent}%` }} />
                           </div>
                           <span className={cn('text-[10px] font-black w-8 text-right', fase.color)}>{fase.percent}%</span>
@@ -434,24 +425,22 @@ export default function PlanejamentoTarefas() {
                       </div>
                     </td>
 
-                    <td className="px-6 py-5 text-center">
+                    <td className=\"px-6 py-5 text-center\">
                       {/* ✅ Aguarda roleLoaded antes de renderizar botão */}
                       {!roleLoaded ? (
-                        <Loader2 className="w-4 h-4 animate-spin text-zinc-600 mx-auto" />
+                        <Loader2 className=\"w-4 h-4 animate-spin text-zinc-600 mx-auto\" />
                       ) : isInternal ? (
                         hasTasks ? (
                           <button
                             onClick={() => toast.success('Em breve: visualização de tarefas!')}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 border border-zinc-800 rounded-xl text-[9px] font-black uppercase tracking-widest text-zinc-400 hover:text-white hover:border-[#ff5351] transition-all"
-                          >
-                            <Eye className="w-3 h-3" /> Ver
+                            className=\"inline-flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 border border-zinc-800 rounded-xl text-[9px] font-black uppercase tracking-widest text-zinc-400 hover:text-white hover:border-[#ff5351] transition-all\"
+                          >\n                            <Eye className=\"w-3 h-3\" /> Ver
                           </button>
                         ) : (
                           <button
                             onClick={() => openDelegModal(post)}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#ff5351] text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:brightness-110 transition-all"
-                          >
-                            <Zap className="w-3 h-3" /> Delegar
+                            className=\"inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#ff5351] text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:brightness-110 transition-all\"
+                          >\n                            <Zap className=\"w-3 h-3\" /> Delegar
                           </button>
                         )
                       ) : (
@@ -470,32 +459,32 @@ export default function PlanejamentoTarefas() {
 
       {/* MODAL DE DELEGAÇÃO */}
       {showDelegModal && selectedPost && (
-        <div className="fixed inset-0 z-[400] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#141414] border border-zinc-800 rounded-[24px] w-full max-w-[580px] max-h-[88vh] flex flex-col">
-            <header className="px-6 py-4 border-b border-zinc-800 flex items-center justify-between shrink-0">
+        <div className=\"fixed inset-0 z-[400] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4\">
+          <div className=\"bg-[#141414] border border-zinc-800 rounded-[24px] w-full max-w-[580px] max-h-[88vh] flex flex-col\">
+            <header className=\"px-6 py-4 border-b border-zinc-800 flex items-center justify-between shrink-0\">
               <div>
-                <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500">POST {String(selectedPost.number).padStart(2, '0')} · {selectedPost.type}</p>
-                <h3 className="text-lg font-black text-white uppercase italic">Delegar Tarefas</h3>
+                <p className=\"text-[9px] font-black uppercase tracking-widest text-zinc-500\">POST {String(selectedPost.number).padStart(2, '0')} · {selectedPost.type}</p>
+                <h3 className=\"text-lg font-black text-white uppercase italic\">Delegar Tarefas</h3>
               </div>
-              <button onClick={() => setShowDelegModal(false)} className="p-2 hover:bg-zinc-800 rounded-lg text-zinc-500">
-                <X className="w-5 h-5" />
+              <button onClick={() => setShowDelegModal(false)} className=\"p-2 hover:bg-zinc-800 rounded-lg text-zinc-500\">
+                <X className=\"w-5 h-5\" />
               </button>
             </header>
 
-            <div className="overflow-y-auto px-6 py-5 space-y-6">
-              <div className="space-y-3">
-                <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500">Departamentos</p>
-                <div className="grid grid-cols-2 gap-3">
+            <div className=\"overflow-y-auto px-6 py-5 space-y-6\">
+              <div className=\"space-y-3\">
+                <p className=\"text-[9px] font-black uppercase tracking-widest text-zinc-500\">Departamentos</p>
+                <div className=\"grid grid-cols-2 gap-3\">
                   {DEPTS.map(dept => {
                     const isSelected = selectedDepts.includes(dept.id);
                     return (
                       <button key={dept.id} onClick={() => toggleDept(dept.id)} className={cn('p-4 rounded-2xl border text-left transition-all', isSelected ? 'border-[#ff5351] bg-[#ff5351]/5' : 'border-zinc-800 bg-zinc-900/30 hover:border-zinc-700')}>
-                        <div className="flex items-start justify-between mb-2">
-                          <span className="text-2xl">{dept.icon}</span>
-                          {isSelected && <div className="w-5 h-5 rounded-full bg-[#ff5351] flex items-center justify-center"><Zap className="w-3 h-3 text-white" /></div>}
+                        <div className=\"flex items-start justify-between mb-2\">
+                          <span className=\"text-2xl\">{dept.icon}</span>
+                          {isSelected && <div className=\"w-5 h-5 rounded-full bg-[#ff5351] flex items-center justify-center\"><Zap className=\"w-3 h-3 text-white\" /></div>}
                         </div>
-                        <p className="text-white font-black uppercase text-xs">{dept.name}</p>
-                        <p className="text-zinc-500 text-[9px] mt-0.5">{dept.sub}</p>
+                        <p className=\"text-white font-black uppercase text-xs\">{dept.name}</p>
+                        <p className=\"text-zinc-500 text-[9px] mt-0.5\">{dept.sub}</p>
                       </button>
                     );
                   })}
@@ -503,20 +492,20 @@ export default function PlanejamentoTarefas() {
               </div>
 
               {selectedDepts.length > 0 && (
-                <div className="space-y-4">
-                  <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500">Configuração por Departamento</p>
+                <div className=\"space-y-4\">
+                  <p className=\"text-[9px] font-black uppercase tracking-widest text-zinc-500\">Configuração por Departamento</p>
                   {selectedDepts.map(deptId => {
                     const deptInfo = DEPTS.find(d => d.id === deptId)!;
                     return (
-                      <div key={deptId} className="bg-zinc-900/30 border border-zinc-800 rounded-2xl p-4 space-y-3">
-                        <div className="flex items-center gap-2">
+                      <div key={deptId} className=\"bg-zinc-900/30 border border-zinc-800 rounded-2xl p-4 space-y-3\">
+                        <div className=\"flex items-center gap-2\">
                           <span>{deptInfo.icon}</span>
-                          <p className="text-white font-black uppercase text-xs">{deptInfo.name}</p>
+                          <p className=\"text-white font-black uppercase text-xs\">{deptInfo.name}</p>
                         </div>
 
-                        <div className="space-y-1">
-                          <label className="text-[8px] font-black uppercase tracking-widest text-zinc-600">Tags</label>
-                          <div className="flex flex-wrap gap-1.5">
+                        <div className=\"space-y-1\">
+                          <label className=\"text-[8px] font-black uppercase tracking-widest text-zinc-600\">Tags</label>
+                          <div className=\"flex flex-wrap gap-1.5\">
                             {deptInfo.tags.map(tag => {
                               const isActive = (deptTags[deptId] || []).includes(tag);
                               return (
@@ -528,9 +517,9 @@ export default function PlanejamentoTarefas() {
                           </div>
                         </div>
 
-                        <div className="space-y-1">
-                          <label className="text-[8px] font-black uppercase tracking-widest text-zinc-600">Descrição / Briefing</label>
-                          <textarea value={deptDescriptions[deptId] || ''} onChange={e => setDeptDescriptions(prev => ({ ...prev, [deptId]: e.target.value }))} rows={2} placeholder="Detalhes da tarefa..." className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-3 text-white text-xs focus:border-[#ff5351] outline-none resize-none" />
+                        <div className=\"space-y-1\">
+                          <label className=\"text-[8px] font-black uppercase tracking-widest text-zinc-600\">Descrição / Briefing</label>
+                          <textarea value={deptDescriptions[deptId] || ''} onChange={e => setDeptDescriptions(prev => ({ ...prev, [deptId]: e.target.value }))} rows={2} placeholder=\"Detalhes da tarefa...\" className=\"w-full bg-zinc-900 border border-zinc-800 rounded-xl p-3 text-white text-xs focus:border-[#ff5351] outline-none resize-none\" />
                         </div>
                       </div>
                     );
@@ -539,21 +528,21 @@ export default function PlanejamentoTarefas() {
               )}
 
               {selectedDepts.includes('design') && selectedDepts.includes('video') && (
-                <div className="space-y-3">
-                  <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500">Dependências</p>
-                  <div className="space-y-2">
-                    <label className="flex items-center gap-3 p-3 bg-zinc-900/30 border border-zinc-800 rounded-xl cursor-pointer">
-                      <input type="checkbox" checked={depArteDependeVideo} onChange={e => setDepArteDependeVideo(e.target.checked)} className="w-4 h-4 accent-[#ff5351]" />
+                <div className=\"space-y-3\">
+                  <p className=\"text-[9px] font-black uppercase tracking-widest text-zinc-500\">Dependências</p>
+                  <div className=\"space-y-2\">
+                    <label className=\"flex items-center gap-3 p-3 bg-zinc-900/30 border border-zinc-800 rounded-xl cursor-pointer\">
+                      <input type=\"checkbox\" checked={depArteDependeVideo} onChange={e => setDepArteDependeVideo(e.target.checked)} className=\"w-4 h-4 accent-[#ff5351]\" />
                       <div>
-                        <p className="text-white text-xs font-black uppercase">Arte depende do Vídeo</p>
-                        <p className="text-zinc-500 text-[8px]">Designer aguarda Editor finalizar</p>
+                        <p className=\"text-white text-xs font-black uppercase\">Arte depende do Vídeo</p>
+                        <p className=\"text-zinc-500 text-[8px]\">Designer aguarda Editor finalizar</p>
                       </div>
                     </label>
-                    <label className="flex items-center gap-3 p-3 bg-zinc-900/30 border border-zinc-800 rounded-xl cursor-pointer">
-                      <input type="checkbox" checked={depVideoDependeArte} onChange={e => setDepVideoDependeArte(e.target.checked)} className="w-4 h-4 accent-[#ff5351]" />
+                    <label className=\"flex items-center gap-3 p-3 bg-zinc-900/30 border border-zinc-800 rounded-xl cursor-pointer\">
+                      <input type=\"checkbox\" checked={depVideoDependeArte} onChange={e => setDepVideoDependeArte(e.target.checked)} className=\"w-4 h-4 accent-[#ff5351]\" />
                       <div>
-                        <p className="text-white text-xs font-black uppercase">Vídeo depende da Arte</p>
-                        <p className="text-zinc-500 text-[8px]">Editor aguarda Designer finalizar</p>
+                        <p className=\"text-white text-xs font-black uppercase\">Vídeo depende da Arte</p>
+                        <p className=\"text-zinc-500 text-[8px]\">Editor aguarda Designer finalizar</p>
                       </div>
                     </label>
                   </div>
@@ -561,12 +550,12 @@ export default function PlanejamentoTarefas() {
               )}
             </div>
 
-            <footer className="px-6 py-4 border-t border-zinc-800 flex gap-3 shrink-0">
-              <button onClick={() => setShowDelegModal(false)} className="flex-1 h-11 bg-zinc-900 border border-zinc-800 text-zinc-500 rounded-xl text-[10px] font-black uppercase tracking-widest hover:text-white transition-all">
+            <footer className=\"px-6 py-4 border-t border-zinc-800 flex gap-3 shrink-0\">
+              <button onClick={() => setShowDelegModal(false)} className=\"flex-1 h-11 bg-zinc-900 border border-zinc-800 text-zinc-500 rounded-xl text-[10px] font-black uppercase tracking-widest hover:text-white transition-all\">
                 Cancelar
               </button>
-              <button onClick={handleSaveDeleg} disabled={saving || selectedDepts.length === 0} className="flex-1 h-11 bg-[#ff5351] text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:brightness-110 transition-all disabled:opacity-50 flex items-center justify-center gap-2">
-                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              <button onClick={handleSaveDeleg} disabled={saving || selectedDepts.length === 0} className=\"flex-1 h-11 bg-[#ff5351] text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:brightness-110 transition-all disabled:opacity-50 flex items-center justify-center gap-2\">
+                {saving ? <Loader2 className=\"w-4 h-4 animate-spin\" /> : <Save className=\"w-4 h-4\" />}
                 Confirmar Delegação
               </button>
             </footer>
