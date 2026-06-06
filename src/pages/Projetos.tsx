@@ -7,9 +7,8 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { projectService, Project } from '../services/projectService';
 import { clientService, Client } from '../services/clientService';
-import { contentPlanService } from '../services/contentPlanService';
 import { auth, db } from '../lib/firebase';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { collection, query, where, getDocs, onSnapshot } from 'firebase/firestore';
 import { cn } from '../lib/utils';
 import { format } from 'date-fns';
 import NewProjectModal from '../components/NewProjectModal';
@@ -25,78 +24,104 @@ export default function Projetos() {
   const [selectedType, setSelectedType] = useState<string>('todos');
   const [searchTerm, setSearchTerm] = useState('');
   const [userRole, setUserRole] = useState<string>('cliente');
+  const [userClientId, setUserClientId] = useState<string | null>(null);
   
   const navigate = useNavigate();
 
   useEffect(() => {
-    checkUserRoleAndLoad();
+    initializeUser();
   }, []);
 
-  const checkUserRoleAndLoad = async () => {
+  const initializeUser = async () => {
     setLoading(true);
     const currentUser = auth.currentUser;
     if (!currentUser) return;
 
     try {
       const cleanEmail = currentUser.email?.toLowerCase().trim();
-      
-      // REGRA DE IDENTIFICAÇÃO DE ROLE IGUAL AO APP.TSX
       let role = 'cliente';
+      let clientId: string | null = null;
+
       if (cleanEmail === 'admin@boraselect.com.br') {
         role = 'master';
       } else {
-        const q = query(collection(db, 'clientes'), where('email', '==', cleanEmail));
-        const snap = await getDocs(q);
-        if (!snap.empty) {
-          role = snap.docs[0].data().role || 'cliente';
+        // ✅ Busca em boraselect primeiro
+        const qBora = query(collection(db, 'boraselect'), where('email', '==', cleanEmail));
+        const snapBora = await getDocs(qBora);
+        if (!snapBora.empty) {
+          role = snapBora.docs[0].data().role || 'redator';
+        } else {
+          // ✅ Depois em clientes
+          const qClientes = query(collection(db, 'clientes'), where('email', '==', cleanEmail));
+          const snapClientes = await getDocs(qClientes);
+          if (!snapClientes.empty) {
+            const data = snapClientes.docs[0].data();
+            role = data.role || 'cliente';
+            clientId = data.companyId || snapClientes.docs[0].id;
+          }
         }
       }
+
       setUserRole(role);
+      setUserClientId(clientId);
 
       const isInternal = ['master', 'admin', 'editor', 'designer', 'redator', 'midia_social'].includes(role);
 
       if (isInternal) {
-        const [adminData, allClients] = await Promise.all([
-          projectService.getProjects().catch(() => []),
-          clientService.searchClients('').catch(() => [])
-        ]);
-        setAdminProjects(adminData);
+        const allClients = await clientService.searchClients('').catch(() => []);
         setClients(allClients);
+        // Admin: escuta projetos em tempo real
+        const unsubscribe = onSnapshot(collection(db, 'projects'), (snap) => {
+          const projects = snap.docs.map(d => ({ id: d.id, ...d.data() })) as Project[];
+          setAdminProjects(projects);
+          setLoading(false);
+        });
+        return () => unsubscribe();
       } else {
-        const [clientProjects, clientPlans] = await Promise.all([
-          projectService.getProjectsForClient().catch(() => []),
-          contentPlanService.getPlansByClientEmail(currentUser.email!)
-        ]);
+        // Cliente/Equipe: escuta demandas em tempo real
+        const companyId = clientId;
+        if (!companyId) { setLoading(false); return; }
 
-        const unified = [
-          ...clientProjects.map(p => ({
-            id: p.id,
-            name: p.title,
-            type: p.category === 'Fotos' ? 'Fotos' : 'Podcast',
-            status: p.status,
-            updatedAt: p.updatedAt,
-            raw: p,
-            route: `/review/${p.id}`
-          })),
-          ...clientPlans
-            .filter(p => p.status !== 'rascunho')
-            .map(p => ({
-              id: p.id,
-              name: p.name,
-              type: 'Planejamento',
-              status: p.status,
-              updatedAt: p.updatedAt,
-              raw: p,
-              route: `/planejamento/${p.id}`
-            }))
-        ];
-        setUnifiedItems(unified);
+        const unsubscribe = onSnapshot(
+          query(collection(db, 'demandas'), where('clientId', '==', companyId)),
+          async (snap) => {
+            const plans = snap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
+            
+            // Projetos do cliente (podcast/fotos)
+            const clientProjects = await projectService.getProjectsForClient().catch(() => []);
+
+            const unified = [
+              ...clientProjects.map((p: any) => ({
+                id: p.id,
+                name: p.title,
+                type: p.category === 'Fotos' ? 'Fotos' : 'Podcast',
+                status: p.status,
+                updatedAt: p.updatedAt,
+                raw: p,
+                route: `/review/${p.id}`
+              })),
+              ...plans
+                .filter(p => p.status !== 'rascunho')
+                .map(p => ({
+                  id: p.id,
+                  name: p.name,
+                  type: 'Planejamento',
+                  status: p.status,
+                  updatedAt: p.updatedAt,
+                  raw: p,
+                  route: `/planejamento/${p.id}`
+                }))
+            ];
+            setUnifiedItems(unified);
+            setLoading(false);
+          }
+        );
+        return () => unsubscribe();
       }
 
     } catch (error) {
       console.error(error);
       toast.error('Erro ao carregar dados.');
-    } finally {
       setLoading(false);
     }
   };
@@ -114,7 +139,6 @@ export default function Projetos() {
       try {
         await projectService.deleteProject(projectId);
         toast.success('Excluído!');
-        checkUserRoleAndLoad();
       } catch (error) {
         toast.error('Erro ao excluir.');
       }
@@ -184,24 +208,19 @@ export default function Projetos() {
     });
   }, [unifiedItems, selectedType, searchTerm]);
 
-  // Renderiza coluna de progresso para visão cliente
   const renderProgresso = (item: any) => {
     const status = item.status;
-    
     if (status === 'em_producao') {
-      const faseAtual = 'EDIÇÃO';
-      const porcentagem = 65;
       return (
         <div className="text-left min-w-[120px]">
-          <p className="text-[9px] font-black uppercase tracking-widest text-[#ff5351] mb-1">FASE ATUAL: {faseAtual}</p>
+          <p className="text-[9px] font-black uppercase tracking-widest text-[#ff5351] mb-1">Em Produção</p>
           <div className="w-full h-1 bg-zinc-800 rounded-full overflow-hidden">
-            <div className="h-full bg-[#ff5351] rounded-full transition-all duration-500" style={{ width: `${porcentagem}%` }} />
+            <div className="h-full bg-[#ff5351] rounded-full transition-all duration-500" style={{ width: '50%' }} />
           </div>
-          <p className="text-[9px] font-black text-zinc-500 mt-1">{porcentagem}%</p>
+          <p className="text-[9px] font-black text-zinc-500 mt-1">50%</p>
         </div>
       );
     }
-    
     if (status === 'concluido') {
       return (
         <div className="text-left min-w-[120px]">
@@ -212,15 +231,9 @@ export default function Projetos() {
         </div>
       );
     }
-    
-    if (status === 'aprovado' || status === 'aprovado_equipe') {
-      return <span className="text-zinc-600 text-sm">—</span>;
-    }
-    
     return <span className="text-zinc-600 text-sm">—</span>;
   };
 
-  // Badge de status para cliente
   const renderClienteStatusBadge = (status: string) => {
     const isPulsing = status === 'aguardando_cliente';
     return (
@@ -238,7 +251,6 @@ export default function Projetos() {
     );
   };
 
-  // Badge de status para visão da equipe do cliente
   const renderEquipeStatusBadge = (status: string) => {
     if (status === 'aguardando_cliente' || status === 'rascunho') {
       return (
@@ -253,7 +265,6 @@ export default function Projetos() {
         </div>
       );
     }
-    
     if (status === 'devolvido') {
       return (
         <span className="px-3 py-1 rounded-full border text-[9px] font-black uppercase tracking-widest text-zinc-400 border-zinc-700 bg-zinc-800/50">
@@ -261,7 +272,6 @@ export default function Projetos() {
         </span>
       );
     }
-    
     if (status === 'aguardando_validacao_equipe') {
       return (
         <div className="flex items-center justify-center gap-2">
@@ -275,36 +285,25 @@ export default function Projetos() {
         </div>
       );
     }
-    
-    if (status === 'aprovado_equipe' || status === 'em_producao' || status === 'concluido') {
-      return renderClienteStatusBadge(status);
-    }
-    
     return renderClienteStatusBadge(status);
   };
 
-  // Handler de clique na linha para visão da equipe
   const handleEquipeRowClick = (item: any) => {
     if (item.type !== 'Planejamento') return navigate(item.route);
     if (item.status === 'aguardando_validacao_equipe') return navigate(item.route);
-    if (item.status === 'aprovado_equipe' || item.status === 'em_producao' || item.status === 'concluido') {
-      return navigate(`/planejamento/${item.id}?modo=visualizar`);
-    }
+    if (['aprovado_equipe', 'em_producao', 'concluido'].includes(item.status)) return navigate(`/planejamento/${item.id}?modo=visualizar`);
     return undefined;
   };
 
-  // Handler de clique na linha para visão do cliente
   const handleClienteRowClick = (item: any) => {
     if (item.type !== 'Planejamento') return navigate(item.route);
     if (item.status === 'aguardando_cliente') return navigate(item.route);
-    if (item.status === 'aprovado_equipe' || item.status === 'em_producao' || item.status === 'concluido') {
-      return navigate(`/planejamento/${item.id}?modo=visualizar`);
-    }
+    if (['aprovado_equipe', 'em_producao', 'concluido'].includes(item.status)) return navigate(`/planejamento/${item.id}?modo=visualizar`);
     return undefined;
   };
 
   if (isModalOpen) {
-    return <NewProjectModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onSuccess={checkUserRoleAndLoad} />;
+    return <NewProjectModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onSuccess={() => {}} />;
   }
 
   return (
@@ -328,13 +327,7 @@ export default function Projetos() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in duration-500">
         <div className="relative">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
-          <input 
-            type="text" 
-            placeholder="Buscar por nome..." 
-            value={searchTerm}
-            onChange={e => setSearchTerm(e.target.value)}
-            className="w-full bg-[#1a1a1a] border border-zinc-800 rounded-2xl pl-12 pr-4 py-4 text-white focus:border-[#ff5351] outline-none shadow-xl text-sm transition-all"
-          />
+          <input type="text" placeholder="Buscar por nome..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full bg-[#1a1a1a] border border-zinc-800 rounded-2xl pl-12 pr-4 py-4 text-white focus:border-[#ff5351] outline-none shadow-xl text-sm transition-all" />
         </div>
 
         {isInternal ? (
@@ -342,11 +335,7 @@ export default function Projetos() {
             <div className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center gap-2 pointer-events-none">
               <User className={cn("w-4 h-4 transition-colors", selectedClientEmail ? "text-[#ff5351]" : "text-zinc-500")} />
             </div>
-            <select 
-              value={selectedClientEmail || ''} 
-              onChange={e => setSelectedClientEmail(e.target.value || null)}
-              className="w-full bg-[#1a1a1a] border border-zinc-800 rounded-2xl pl-12 pr-10 py-4 text-white focus:border-[#ff5351] outline-none appearance-none cursor-pointer text-sm shadow-xl"
-            >
+            <select value={selectedClientEmail || ''} onChange={e => setSelectedClientEmail(e.target.value || null)} className="w-full bg-[#1a1a1a] border border-zinc-800 rounded-2xl pl-12 pr-10 py-4 text-white focus:border-[#ff5351] outline-none appearance-none cursor-pointer text-sm shadow-xl">
               <option value="">Todos os clientes</option>
               {clients.map(client => (
                 <option key={client.id} value={client.email}>{client.name}</option>
@@ -357,14 +346,7 @@ export default function Projetos() {
         ) : (
           <div className="flex bg-[#1a1a1a] border border-zinc-800 rounded-2xl p-1 shadow-xl">
             {['todos', 'Planejamento', 'Podcast', 'Fotos'].map((type) => (
-              <button
-                key={type}
-                onClick={() => setSelectedType(type)}
-                className={cn(
-                  "flex-1 py-3 px-4 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
-                  selectedType === type ? "bg-[#ff5351] text-white shadow-lg" : "text-zinc-500 hover:text-zinc-300"
-                )}
-              >
+              <button key={type} onClick={() => setSelectedType(type)} className={cn("flex-1 py-3 px-4 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all", selectedType === type ? "bg-[#ff5351] text-white shadow-lg" : "text-zinc-500 hover:text-zinc-300")}>
                 {type === 'todos' ? 'Tudo' : type}
               </button>
             ))}
@@ -432,21 +414,21 @@ export default function Projetos() {
               },
               { header: 'Tipo', accessor: (item) => getTypeBadge(item.type), align: 'center' },
               { header: 'Status', accessor: (item) => isEquipe ? renderEquipeStatusBadge(item.status) : renderClienteStatusBadge(item.status), align: 'center' },
-              { 
-                header: 'Progresso', 
-                accessor: (item) => renderProgresso(item),
-                align: 'center'
-              },
+              { header: 'Progresso', accessor: (item) => renderProgresso(item), align: 'center' },
               {
                 header: 'Última Atualização',
                 accessor: (item) => {
-                  const date = item.updatedAt?.toDate ? item.updatedAt.toDate() : new Date(item.updatedAt);
-                  return (
-                    <div className="flex items-center gap-2 text-zinc-500 text-xs font-mono uppercase">
-                      <Clock className="w-3.5 h-3.5" />
-                      {new Intl.DateTimeFormat('pt-BR').format(date)}
-                    </div>
-                  );
+                  try {
+                    const date = item.updatedAt?.toDate ? item.updatedAt.toDate() : new Date(item.updatedAt);
+                    return (
+                      <div className="flex items-center gap-2 text-zinc-500 text-xs font-mono uppercase">
+                        <Clock className="w-3.5 h-3.5" />
+                        {new Intl.DateTimeFormat('pt-BR').format(date)}
+                      </div>
+                    );
+                  } catch {
+                    return <span className="text-zinc-600">—</span>;
+                  }
                 }
               }
             ]}
