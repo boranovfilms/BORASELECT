@@ -29,7 +29,6 @@ export default function AppLayout({ children, userRole = 'cliente', userName = '
   const [uploadingWatermark, setUploadingWatermark] = React.useState(false);
   const [savingSettings, setSavingSettings] = React.useState(false);
   
-  // Estados de Notificação Global
   const [pendingNotifications, setPendingNotifications] = React.useState<Notificacao[]>([]);
   const [showNotificationDropdown, setShowNotificationDropdown] = React.useState(false);
   const audioContext = React.useRef<AudioContext | null>(null);
@@ -39,7 +38,7 @@ export default function AppLayout({ children, userRole = 'cliente', userName = '
   const firstName = effectiveName.split(' ')[0].toUpperCase();
   const initials = effectiveName.split(' ').filter(Boolean).map(n => n[0]).join('').slice(0, 2).toUpperCase() || 'BS';
 
-  React.useEffect(() => { 
+  React.useEffect(() => {
     loadSettings();
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
@@ -62,7 +61,6 @@ export default function AppLayout({ children, userRole = 'cliente', userName = '
       }
       const ctx = audioContext.current;
       if (ctx.state === 'suspended') ctx.resume();
-      
       [523, 659, 784].forEach((freq, i) => {
         const o = ctx.createOscillator();
         const g = ctx.createGain();
@@ -79,7 +77,6 @@ export default function AppLayout({ children, userRole = 'cliente', userName = '
     }
   };
 
-  // Monitoramento Global de Notificações Automáticas
   React.useEffect(() => {
     if (!user?.email) return;
     const userEmail = user.email.toLowerCase().trim();
@@ -113,9 +110,7 @@ export default function AppLayout({ children, userRole = 'cliente', userName = '
     try {
       await notificacaoService.marcarComoVisto(notif.id!);
     } catch(e) {}
-    
     setShowNotificationDropdown(false);
-    
     if (notif.planId) {
       navigate(`/planejamento/${notif.planId}`);
     } else {
@@ -144,8 +139,11 @@ export default function AppLayout({ children, userRole = 'cliente', userName = '
   ];
 
   const navItems = ALL_MODULES.filter(mod => {
-    if (mod.id === 'planejamentos' && userRole === 'cliente') return false; // Removido do menu cliente
-    if (mod.id === 'painel_master' && userRole === 'master') return true;\n    if (mod.id === 'diagnostico' && userRole === 'master') return true;\n    if (mod.id === 'teleprompter' && userRole === 'master') return true;\n    return permissions[mod.id]?.[userRole] === true;
+    if (mod.id === 'planejamentos' && userRole === 'cliente') return false;
+    if (mod.id === 'painel_master' && userRole === 'master') return true;
+    if (mod.id === 'diagnostico' && userRole === 'master') return true;
+    if (mod.id === 'teleprompter' && userRole === 'master') return true;
+    return permissions[mod.id]?.[userRole] === true;
   });
 
   if (navItems.length === 0) {
@@ -163,9 +161,118 @@ export default function AppLayout({ children, userRole = 'cliente', userName = '
         </div>
 
         <div className="flex items-center gap-2 md:gap-4 relative" ref={dropdownRef}>
-          <button \n            onClick={() => navigate('/teleprompter')}\n            className="flex md:hidden p-2 text-zinc-400 hover:text-white transition-all group\"\n            title=\"Teleprompter\"\n          >\n            <Tv className=\"w-6 h-6\" />\n          </button>
+          <button
+            onClick={() => navigate('/teleprompter')}
+            className="flex md:hidden p-2 text-zinc-400 hover:text-white transition-all group"
+            title="Teleprompter"
+          >
+            <Tv className="w-6 h-6" />
+          </button>
 
-          <button \n            onClick={() => setShowNotificationDropdown(!showNotificationDropdown)}\n            className=\"relative p-2 text-zinc-400 hover:text-white transition-all group\"\n          >\n            <Bell className={cn(\n              \"w-6 h-6 transition-all\", \n              pendingNotifications.length > 0 && \"text-[#ff5351] animate-[bell_2s_infinite_ease-in-out]\"\n            )} />\n            \n            {pendingNotifications.length > 0 && (\n              <span className=\"absolute top-1 right-1 w-4 h-4 bg-[#ff5351] text-white text-[9px] font-black rounded-full flex items-center justify-center border-2 border-black animate-in zoom-in duration-300\">\n                {pendingNotifications.length}\n              </span>\n            )}\n            \n            <style>{`\n              @keyframes bell {\n                0%, 100% { transform: rotate(0deg); }\n                10%, 30%, 50% { transform: rotate(15deg); }\n                20%, 40%, 60% { transform: rotate(-15deg); }\n                70%, 80%, 90% { transform: rotate(0deg); }\n              }\n            `}</style>\n          </button>
+          <button
+            onClick={() => setShowNotificationDropdown(!showNotificationDropdown)}
+            className="relative p-2 text-zinc-400 hover:text-white transition-all group"
+          >
+            <Bell className={cn(
+              "w-6 h-6 transition-all",
+              pendingNotifications.length > 0 && "text-[#ff5351] animate-[bell_2s_infinite_ease-in-out]"
+            )} />
+            
+            {pendingNotifications.length > 0 && (
+              <span className="absolute top-1 right-1 w-4 h-4 bg-[#ff5351] text-white text-[9px] font-black rounded-full flex items-center justify-center border-2 border-black animate-in zoom-in duration-300">
+                {pendingNotifications.length}
+              </span>
+            )}
+            
+            <style>{`
+              @keyframes bell {
+                0%, 100% { transform: rotate(0deg); }
+                10%, 30%, 50% { transform: rotate(15deg); }
+                20%, 40%, 60% { transform: rotate(-15deg); }
+                70%, 80%, 90% { transform: rotate(0deg); }
+              }
+            `}</style>
+          </button>
 
           {showNotificationDropdown && (
-            <div className=\"absolute top-full right-0 mt-2 w-80 bg-[#1a1a1a] border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200 z-[300]\">\n              <div className=\"p-4 border-b border-zinc-800 flex items-center justify-between\">\n                <span className=\"text-[10px] font-black uppercase tracking-widest text-white italic\">Notificações</span>\n                {pendingNotifications.length > 0 && (\n                  <span className=\"px-2 py-0.5 bg-[#ff5351] text-white text-[9px] font-black rounded-full\">{pendingNotifications.length}</span>\n                )}\n              </div>\n              \n              <div className=\"max-h-64 overflow-y-auto custom-scrollbar\">\n                {pendingNotifications.length === 0 ? (\n                  <div className=\"p-8 text-center text-zinc-600\">\n                    <CheckSquare className=\"w-8 h-8 mx-auto mb-2 opacity-20\" />\n                    <p className=\"text-xs font-bold uppercase tracking-widest\">Tudo limpo!</p>\n                  </div>\n                ) : (\n                  pendingNotifications.map((notif) => (\n                    <button\n                      key={notif.id}\n                      onClick={() => handleNotificationClick(notif)}\n                      className=\"w-full p-4 text-left border-b border-zinc-800/50 hover:bg-[#ff5351]/5 transition-all flex items-start gap-3 group/item\"\n                    >\n                      <div className=\"w-2 h-2 rounded-full bg-[#ff5351] mt-1.5 shadow-[0_0_8px_rgba(255,83,81,0.4)]\" />\n                      <div className=\"flex-1 overflow-hidden\">\n                        <p className=\"text-xs font-bold text-white uppercase truncate group-hover/item:text-[#ff5351] transition-colors\">{notif.titulo}</p>\n                        <p className=\"text-[9px] text-zinc-500 font-black uppercase tracking-widest mt-1\">\n                          {notif.descricao}\n                        </p>\n                      </div>\n                      <ChevronRight className=\"w-4 h-4 text-zinc-700 group-hover/item:text-[#ff5351] transition-colors\" />\n                    </button>\n                  ))\n                )}\n              </div>\n\n              <button \n                onClick={() => { setShowNotificationDropdown(false); navigate('/tarefas'); }}\n                className=\"w-full p-4 bg-zinc-900/50 text-[10px] font-black uppercase tracking-widest text-zinc-400 hover:text-white hover:bg-zinc-800 transition-all border-t border-zinc-800 flex items-center justify-center gap-2\"\n              >\n                Ver todas as tarefas <ArrowRight className=\"w-3 h-3\" />\n              </button>\n            </div>\n          )}\n        </div>\n      </header>\n\n      <div className=\"flex pt-16\">\n        <aside className=\"hidden lg:flex flex-col w-64 fixed left-0 top-16 bottom-0 bg-[#0e0e0e] border-r border-zinc-800 p-4\">\n          <div className=\"mb-8 px-2 flex items-center gap-4\">\n            <div className=\"w-12 h-12 rounded-full overflow-hidden border border-zinc-700 bg-zinc-800\">\n              {user?.photoURL ? (\n                <img src={user.photoURL} alt=\"Avatar\" className=\"w-full h-full object-cover\" />\n              ) : (\n                <div className=\"w-full h-full flex items-center justify-center text-[#ff5351] font-black text-sm\">{initials}</div>\n              )}\n            </div>\n            <div>\n              <div className=\"text-sm font-bold text-white truncate max-w-[140px]\">{firstName}</div>\n              <div className=\"text-[10px] uppercase tracking-widest text-[#ff5351] font-black italic\">{userRole}</div>\n            </div>\n          </div>\n\n          <nav className=\"flex-1 space-y-1\">\n            {navItems.map((item) => (\n              <NavLink key={item.id} to={item.path} className={({ isActive }) => cn('flex items-center gap-3 px-4 py-3 rounded-lg transition-all text-sm font-medium', isActive ? 'bg-zinc-800/50 text-[#ff5351] border-l-2 border-[#ff5351]' : 'text-zinc-400 hover:text-white hover:bg-zinc-800')}>\n                <item.icon className=\"w-4 h-4\" />{item.label}\n              </NavLink>\n            ))}\n          </nav>\n\n          <div className=\"mt-auto pt-4 border-t border-zinc-800 space-y-1\">\n            <button onClick={handleLogout} className=\"w-full flex items-center gap-3 px-4 py-3 text-zinc-400 hover:text-[#ff5351] transition-all text-sm font-medium\"><LogOut className=\"w-4 h-4\" />Logout</button>\n          </div>\n        </aside>\n\n        <main className=\"flex-1 lg:ml-64 p-8\">\n          <div className=\"max-w-7xl mx-auto\">{children}</div>\n        </main>\n      </div>\n    </div>\n  );\n}\n
+            <div className="absolute top-full right-0 mt-2 w-80 bg-[#1a1a1a] border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200 z-[300]">
+              <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
+                <span className="text-[10px] font-black uppercase tracking-widest text-white italic">Notificações</span>
+                {pendingNotifications.length > 0 && (
+                  <span className="px-2 py-0.5 bg-[#ff5351] text-white text-[9px] font-black rounded-full">{pendingNotifications.length}</span>
+                )}
+              </div>
+              
+              <div className="max-h-64 overflow-y-auto">
+                {pendingNotifications.length === 0 ? (
+                  <div className="p-8 text-center text-zinc-600">
+                    <CheckSquare className="w-8 h-8 mx-auto mb-2 opacity-20" />
+                    <p className="text-xs font-bold uppercase tracking-widest">Tudo limpo!</p>
+                  </div>
+                ) : (
+                  pendingNotifications.map((notif) => (
+                    <button
+                      key={notif.id}
+                      onClick={() => handleNotificationClick(notif)}
+                      className="w-full p-4 text-left border-b border-zinc-800/50 hover:bg-[#ff5351]/5 transition-all flex items-start gap-3 group/item"
+                    >
+                      <div className="w-2 h-2 rounded-full bg-[#ff5351] mt-1.5 shadow-[0_0_8px_rgba(255,83,81,0.4)]" />
+                      <div className="flex-1 overflow-hidden">
+                        <p className="text-xs font-bold text-white uppercase truncate group-hover/item:text-[#ff5351] transition-colors">{notif.titulo}</p>
+                        <p className="text-[9px] text-zinc-500 font-black uppercase tracking-widest mt-1">{notif.descricao}</p>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-zinc-700 group-hover/item:text-[#ff5351] transition-colors" />
+                    </button>
+                  ))
+                )}
+              </div>
+
+              <button
+                onClick={() => { setShowNotificationDropdown(false); navigate('/tarefas'); }}
+                className="w-full p-4 bg-zinc-900/50 text-[10px] font-black uppercase tracking-widest text-zinc-400 hover:text-white hover:bg-zinc-800 transition-all border-t border-zinc-800 flex items-center justify-center gap-2"
+              >
+                Ver todas as tarefas <ArrowRight className="w-3 h-3" />
+              </button>
+            </div>
+          )}
+        </div>
+      </header>
+
+      <div className="flex pt-16">
+        <aside className="hidden lg:flex flex-col w-64 fixed left-0 top-16 bottom-0 bg-[#0e0e0e] border-r border-zinc-800 p-4">
+          <div className="mb-8 px-2 flex items-center gap-4">
+            <div className="w-12 h-12 rounded-full overflow-hidden border border-zinc-700 bg-zinc-800">
+              {user?.photoURL ? (
+                <img src={user.photoURL} alt="Avatar" className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-[#ff5351] font-black text-sm">{initials}</div>
+              )}
+            </div>
+            <div>
+              <div className="text-sm font-bold text-white truncate max-w-[140px]">{firstName}</div>
+              <div className="text-[10px] uppercase tracking-widest text-[#ff5351] font-black italic">{userRole}</div>
+            </div>
+          </div>
+
+          <nav className="flex-1 space-y-1">
+            {navItems.map((item) => (
+              <NavLink key={item.id} to={item.path} className={({ isActive }) => cn('flex items-center gap-3 px-4 py-3 rounded-lg transition-all text-sm font-medium', isActive ? 'bg-zinc-800/50 text-[#ff5351] border-l-2 border-[#ff5351]' : 'text-zinc-400 hover:text-white hover:bg-zinc-800')}>
+                <item.icon className="w-4 h-4" />{item.label}
+              </NavLink>
+            ))}
+          </nav>
+
+          <div className="mt-auto pt-4 border-t border-zinc-800 space-y-1">
+            <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-3 text-zinc-400 hover:text-[#ff5351] transition-all text-sm font-medium">
+              <LogOut className="w-4 h-4" />Logout
+            </button>
+          </div>
+        </aside>
+
+        <main className="flex-1 lg:ml-64 p-8">
+          <div className="max-w-7xl mx-auto">{children}</div>
+        </main>
+      </div>
+    </div>
+  );
+}
