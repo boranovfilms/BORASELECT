@@ -31,10 +31,7 @@ export default function ConfigurarFluxo() {
 
   useEffect(() => {
     async function loadModel() {
-      if (!selectedModelId) {
-        setSelectedModel(null);
-        return;
-      }
+      if (!selectedModelId) { setSelectedModel(null); return; }
       const model = await modelosService.getModelo(selectedModelId);
       setSelectedModel(model);
     }
@@ -53,43 +50,30 @@ export default function ConfigurarFluxo() {
       if (clientSnap.exists()) {
         const cData = clientSnap.data();
         setClientName(cData.name || '');
-        const wfModels = cData.workflowModels || {};
-        setSelectedModelId(wfModels[demandType] || '');
+        setSelectedModelId((cData.workflowModels || {})[demandType] || '');
         setWorkflowApprovers(cData.workflowApprovers || {});
       }
 
       setAvailableModels(modelsData);
 
-      // Buscar membros da equipe do cliente
+      // ✅ Equipe do cliente — busca em 'clientes' com type === 'membro' e companyId
       const teamQuery = query(
-        collection(db, 'clientes'), 
-        where('clienteId', '==', clientId), 
-        where('role', '==', 'equipe')
+        collection(db, 'clientes'),
+        where('type', '==', 'membro'),
+        where('companyId', '==', clientId)
       );
       const teamSnap = await getDocs(teamQuery);
-      const clientTeam = teamSnap.docs.map(d => ({ 
-        id: d.id, 
-        ...d.data(), 
-        grupo: 'Equipe Cliente' 
+      const clientTeam = teamSnap.docs.map(d => ({
+        id: d.id, ...d.data(), grupo: 'Equipe Cliente'
       }));
 
-      // Buscar equipe interna Boranov
-      const boranovRoles = ['master', 'admin', 'redator', 'editor', 'designer', 'midia_social', 'fotografo', 'produtor'];
-      const boranovMembers: any[] = [];
-      for (const role of boranovRoles) {
-        try {
-          const bq = query(collection(db, 'clientes'), where('role', '==', role));
-          const bsnap = await getDocs(bq);
-          bsnap.docs.forEach(d => {
-            const data = d.data();
-            if (data.email) {
-              boranovMembers.push({ id: d.id, ...data, grupo: 'Equipe Boranov' });
-            }
-          });
-        } catch (e) {}
-      }
+      // ✅ Equipe Boranov — busca em 'boraselect'
+      const boranovSnap = await getDocs(collection(db, 'boraselect'));
+      const boranovMembers = boranovSnap.docs.map(d => ({
+        id: d.id, ...d.data(), grupo: 'Equipe Boranov'
+      }));
 
-      // Adicionar Master (admin@boraselect.com.br)
+      // ✅ Master fixo
       const masterMember = [{
         id: 'master',
         name: 'BORANOV MASTER',
@@ -100,7 +84,7 @@ export default function ConfigurarFluxo() {
         grupo: 'Master'
       }];
 
-      // Buscar o cliente principal (dono da conta)
+      // ✅ Cliente principal (dono da conta)
       const clientPrincipal: any[] = [];
       if (clientSnap.exists()) {
         const cData = clientSnap.data();
@@ -157,19 +141,12 @@ export default function ConfigurarFluxo() {
       const clientRef = doc(db, 'clientes', clientId);
       const clientSnap = await getDoc(clientRef);
       const cData = clientSnap.data() || {};
-      
       const currentWorkflowModels = cData.workflowModels || {};
-      const updatedWorkflowModels = {
-        ...currentWorkflowModels,
-        [demandType]: selectedModelId || null
-      };
-
       await updateDoc(clientRef, {
-        workflowModels: updatedWorkflowModels,
-        workflowApprovers: workflowApprovers,
+        workflowModels: { ...currentWorkflowModels, [demandType]: selectedModelId || null },
+        workflowApprovers,
         updatedAt: new Date().toISOString()
       });
-
       toast.success('Configuração salva!');
       navigate(-1);
     } catch (error) {
@@ -199,19 +176,14 @@ export default function ConfigurarFluxo() {
   return (
     <div className="max-w-4xl mx-auto space-y-10 pb-20 text-left">
       <header className="space-y-4">
-        <button 
-          onClick={() => navigate(-1)}
-          className="flex items-center gap-2 text-[#ff5351] hover:opacity-80 transition-all text-xs font-black uppercase tracking-widest"
-        >
+        <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-[#ff5351] hover:opacity-80 transition-all text-xs font-black uppercase tracking-widest">
           <ArrowLeft className="w-4 h-4" /> Voltar
         </button>
         <div>
           <p className="text-[#ff5351] text-xs font-black uppercase tracking-[0.2em] mb-2">
             CONFIGURAR FLUXO · {clientName.toUpperCase()}
           </p>
-          <h1 className="text-5xl font-black text-white uppercase italic tracking-tight leading-none">
-            {demandLabel}
-          </h1>
+          <h1 className="text-5xl font-black text-white uppercase italic tracking-tight leading-none">{demandLabel}</h1>
         </div>
       </header>
 
@@ -226,11 +198,7 @@ export default function ConfigurarFluxo() {
           </div>
         </div>
         <div className="relative">
-          <select
-            value={selectedModelId}
-            onChange={(e) => setSelectedModelId(e.target.value)}
-            className="w-full h-14 bg-zinc-900 border border-zinc-800 rounded-2xl px-5 text-white focus:border-[#ff5351] outline-none appearance-none cursor-pointer font-bold uppercase text-sm"
-          >
+          <select value={selectedModelId} onChange={(e) => setSelectedModelId(e.target.value)} className="w-full h-14 bg-zinc-900 border border-zinc-800 rounded-2xl px-5 text-white focus:border-[#ff5351] outline-none appearance-none cursor-pointer font-bold uppercase text-sm">
             <option value="">Nenhum modelo vinculado</option>
             {availableModels.map(model => (
               <option key={model.id} value={model.id}>{model.name}</option>
@@ -256,15 +224,10 @@ export default function ConfigurarFluxo() {
             const isExpanded = expandedStages.has(stage.id);
             const stageApprovers = workflowApprovers[stage.id] || [];
             const availableForStage = teamMembers.filter(m => !stageApprovers.includes(m.email));
-            const boranovAvailable = availableForStage.filter(m => m.grupo === 'Equipe Boranov');
-            const clienteAvailable = availableForStage.filter(m => m.grupo === 'Equipe Cliente');
 
             return (
               <div key={stage.id} className="border border-zinc-800 rounded-2xl overflow-hidden">
-                <button
-                  onClick={() => toggleStage(stage.id)}
-                  className="w-full p-5 flex items-center justify-between bg-zinc-900/30 hover:bg-zinc-900/50 transition-all"
-                >
+                <button onClick={() => toggleStage(stage.id)} className="w-full p-5 flex items-center justify-between bg-zinc-900/30 hover:bg-zinc-900/50 transition-all">
                   <div className="flex items-center gap-4">
                     <div className="w-8 h-8 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center text-[10px] font-black text-zinc-500">
                       {(stage.order || 0) + 1}
@@ -298,11 +261,7 @@ export default function ConfigurarFluxo() {
                           <div key={email} className="flex items-center justify-between p-3 bg-zinc-900/50 border border-zinc-800 rounded-xl">
                             <div className="flex items-center gap-3">
                               <div className="w-8 h-8 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center overflow-hidden shrink-0">
-                                {member?.photoUrl ? (
-                                  <img src={member.photoUrl} className="w-full h-full object-cover" alt="" />
-                                ) : (
-                                  <User className="w-4 h-4 text-zinc-600" />
-                                )}
+                                {member?.photoUrl ? <img src={member.photoUrl} className="w-full h-full object-cover" alt="" /> : <User className="w-4 h-4 text-zinc-600" />}
                               </div>
                               <div>
                                 <p className="text-white text-[10px] font-black uppercase">{member?.name || email}</p>
@@ -311,10 +270,7 @@ export default function ConfigurarFluxo() {
                                 </p>
                               </div>
                             </div>
-                            <button
-                              onClick={() => removeApprover(stage.id, email)}
-                              className="p-1.5 hover:bg-red-500/10 rounded-lg text-zinc-600 hover:text-red-400 transition-all"
-                            >
+                            <button onClick={() => removeApprover(stage.id, email)} className="p-1.5 hover:bg-red-500/10 rounded-lg text-zinc-600 hover:text-red-400 transition-all">
                               <X className="w-3.5 h-3.5" />
                             </button>
                           </div>
@@ -338,15 +294,9 @@ export default function ConfigurarFluxo() {
                               <>
                                 {availableForStage.filter(m => m.grupo === 'Master').length > 0 && (
                                   <>
-                                    <div className="px-3 py-2 text-[8px] font-black uppercase tracking-widest text-emerald-400 bg-zinc-950/50">
-                                      Master
-                                    </div>
+                                    <div className="px-3 py-2 text-[8px] font-black uppercase tracking-widest text-emerald-400 bg-zinc-950/50">Master</div>
                                     {availableForStage.filter(m => m.grupo === 'Master').map((member) => (
-                                      <button
-                                        key={member.id}
-                                        onClick={() => addApprover(stage.id, member.email)}
-                                        className="w-full p-3 flex items-center gap-3 hover:bg-zinc-800/50 transition-all text-left"
-                                      >
+                                      <button key={member.id} onClick={() => addApprover(stage.id, member.email)} className="w-full p-3 flex items-center gap-3 hover:bg-zinc-800/50 transition-all text-left">
                                         <div className="w-8 h-8 rounded-full bg-emerald-900/30 border border-emerald-500/20 flex items-center justify-center shrink-0">
                                           <User className="w-4 h-4 text-emerald-400" />
                                         </div>
@@ -360,21 +310,11 @@ export default function ConfigurarFluxo() {
                                 )}
                                 {availableForStage.filter(m => m.grupo === 'Equipe Boranov').length > 0 && (
                                   <>
-                                    <div className="px-3 py-2 text-[8px] font-black uppercase tracking-widest text-[#ff5351] bg-zinc-950/50">
-                                      Equipe Boranov
-                                    </div>
+                                    <div className="px-3 py-2 text-[8px] font-black uppercase tracking-widest text-[#ff5351] bg-zinc-950/50 border-t border-zinc-800">Equipe Boranov</div>
                                     {availableForStage.filter(m => m.grupo === 'Equipe Boranov').map((member) => (
-                                      <button
-                                        key={member.id}
-                                        onClick={() => addApprover(stage.id, member.email)}
-                                        className="w-full p-3 flex items-center gap-3 hover:bg-zinc-800/50 transition-all text-left"
-                                      >
+                                      <button key={member.id} onClick={() => addApprover(stage.id, member.email)} className="w-full p-3 flex items-center gap-3 hover:bg-zinc-800/50 transition-all text-left">
                                         <div className="w-8 h-8 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center overflow-hidden shrink-0">
-                                          {member.photoUrl ? (
-                                            <img src={member.photoUrl} className="w-full h-full object-cover" alt="" />
-                                          ) : (
-                                            <User className="w-4 h-4 text-zinc-600" />
-                                          )}
+                                          {member.photoUrl ? <img src={member.photoUrl} className="w-full h-full object-cover" alt="" /> : <User className="w-4 h-4 text-zinc-600" />}
                                         </div>
                                         <div>
                                           <p className="text-white text-[10px] font-black uppercase">{member.name}</p>
@@ -386,21 +326,11 @@ export default function ConfigurarFluxo() {
                                 )}
                                 {availableForStage.filter(m => m.grupo === 'Cliente Principal').length > 0 && (
                                   <>
-                                    <div className="px-3 py-2 text-[8px] font-black uppercase tracking-widest text-amber-500 bg-zinc-950/50 border-t border-zinc-800">
-                                      Cliente Principal
-                                    </div>
+                                    <div className="px-3 py-2 text-[8px] font-black uppercase tracking-widest text-amber-500 bg-zinc-950/50 border-t border-zinc-800">Cliente Principal</div>
                                     {availableForStage.filter(m => m.grupo === 'Cliente Principal').map((member) => (
-                                      <button
-                                        key={member.id}
-                                        onClick={() => addApprover(stage.id, member.email)}
-                                        className="w-full p-3 flex items-center gap-3 hover:bg-zinc-800/50 transition-all text-left"
-                                      >
+                                      <button key={member.id} onClick={() => addApprover(stage.id, member.email)} className="w-full p-3 flex items-center gap-3 hover:bg-zinc-800/50 transition-all text-left">
                                         <div className="w-8 h-8 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center overflow-hidden shrink-0">
-                                          {member.photoUrl ? (
-                                            <img src={member.photoUrl} className="w-full h-full object-cover" alt="" />
-                                          ) : (
-                                            <User className="w-4 h-4 text-zinc-600" />
-                                          )}
+                                          {member.photoUrl ? <img src={member.photoUrl} className="w-full h-full object-cover" alt="" /> : <User className="w-4 h-4 text-zinc-600" />}
                                         </div>
                                         <div>
                                           <p className="text-white text-[10px] font-black uppercase">{member.name}</p>
@@ -412,21 +342,11 @@ export default function ConfigurarFluxo() {
                                 )}
                                 {availableForStage.filter(m => m.grupo === 'Equipe Cliente').length > 0 && (
                                   <>
-                                    <div className="px-3 py-2 text-[8px] font-black uppercase tracking-widest text-zinc-500 bg-zinc-950/50 border-t border-zinc-800">
-                                      Equipe Cliente
-                                    </div>
+                                    <div className="px-3 py-2 text-[8px] font-black uppercase tracking-widest text-zinc-500 bg-zinc-950/50 border-t border-zinc-800">Equipe Cliente</div>
                                     {availableForStage.filter(m => m.grupo === 'Equipe Cliente').map((member) => (
-                                      <button
-                                        key={member.id}
-                                        onClick={() => addApprover(stage.id, member.email)}
-                                        className="w-full p-3 flex items-center gap-3 hover:bg-zinc-800/50 transition-all text-left"
-                                      >
+                                      <button key={member.id} onClick={() => addApprover(stage.id, member.email)} className="w-full p-3 flex items-center gap-3 hover:bg-zinc-800/50 transition-all text-left">
                                         <div className="w-8 h-8 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center overflow-hidden shrink-0">
-                                          {member.photoUrl ? (
-                                            <img src={member.photoUrl} className="w-full h-full object-cover" alt="" />
-                                          ) : (
-                                            <User className="w-4 h-4 text-zinc-600" />
-                                          )}
+                                          {member.photoUrl ? <img src={member.photoUrl} className="w-full h-full object-cover" alt="" /> : <User className="w-4 h-4 text-zinc-600" />}
                                         </div>
                                         <div>
                                           <p className="text-white text-[10px] font-black uppercase">{member.name}</p>
@@ -441,10 +361,7 @@ export default function ConfigurarFluxo() {
                           </div>
                         </div>
                       ) : (
-                        <button
-                          onClick={() => setShowAddDropdown(stage.id)}
-                          className="flex items-center gap-2 px-4 py-2 bg-zinc-900 border border-zinc-800 rounded-xl text-[10px] font-black uppercase tracking-widest text-zinc-500 hover:text-white hover:border-[#ff5351] transition-all"
-                        >
+                        <button onClick={() => setShowAddDropdown(stage.id)} className="flex items-center gap-2 px-4 py-2 bg-zinc-900 border border-zinc-800 rounded-xl text-[10px] font-black uppercase tracking-widest text-zinc-500 hover:text-white hover:border-[#ff5351] transition-all">
                           <Plus className="w-3.5 h-3.5" /> Adicionar
                         </button>
                       )}
@@ -458,11 +375,7 @@ export default function ConfigurarFluxo() {
       )}
 
       <footer className="flex justify-end pt-4">
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="h-14 px-10 bg-[#ff5351] text-white rounded-2xl font-black uppercase tracking-widest text-xs hover:brightness-110 transition-all flex items-center gap-3 shadow-xl shadow-[#ff5351]/20 disabled:opacity-50"
-        >
+        <button onClick={handleSave} disabled={saving} className="h-14 px-10 bg-[#ff5351] text-white rounded-2xl font-black uppercase tracking-widest text-xs hover:brightness-110 transition-all flex items-center gap-3 shadow-xl shadow-[#ff5351]/20 disabled:opacity-50">
           {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
           Salvar Configuração
         </button>
