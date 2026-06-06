@@ -82,10 +82,22 @@ export default function Register() {
       const cleanEmail = email.toLowerCase().trim();
       await createUserWithEmailAndPassword(auth, cleanEmail, password);
       
+      // Atualiza status em 'clientes'
       try {
         await clientService.updateClientStatusByEmail(cleanEmail, 'confirmed');
       } catch (statusErr) {
         console.warn('Post-registration status update failed (non-blocking):', statusErr);
+      }
+
+      // Atualiza status em 'boraselect'
+      try {
+        const qBora = query(collection(db, 'boraselect'), where('email', '==', cleanEmail));
+        const snapBora = await getDocs(qBora);
+        const { updateDoc } = await import('firebase/firestore');
+        const updates = snapBora.docs.map(d => updateDoc(d.ref, { status: 'confirmed' }));
+        await Promise.all(updates);
+      } catch (statusErr) {
+        console.warn('Post-registration boraselect update failed:', statusErr);
       }
       
       toast.success('Conta criada com sucesso!');
