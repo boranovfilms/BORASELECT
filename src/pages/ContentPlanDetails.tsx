@@ -82,12 +82,12 @@ export default function ContentPlanDetails() {
   const loadUserRole = async () => {
     if (!currentEmail) return;
     try {
-      if (currentEmail === 'admin@boraselect.com.br' || currentEmail === 'boranovfilms@gmail.com') {
+      if (currentEmail === 'admin@boraselect.com.br') {
         setUserRole('master');
         setRoleLoaded(true);
         return;
       }
-      const q = query(collection(db, 'clientes'), where('email', '==', currentEmail));
+      const q = query(collection(db, 'clients'), where('email', '==', currentEmail));
       const snap = await getDocs(q);
       if (!snap.empty) {
         const role = snap.docs[0].data().role || 'cliente';
@@ -112,7 +112,7 @@ export default function ContentPlanDetails() {
       }
       setPlan(planData);
       
-      const clientSnap = await getDoc(doc(db, 'clientes', planData.clientId));
+      const clientSnap = await getDoc(doc(db, 'clients', planData.clientId));
       if (clientSnap.exists()) {
         setClientEmail(clientSnap.data().email?.toLowerCase() || '');
       }
@@ -140,7 +140,7 @@ export default function ContentPlanDetails() {
     try {
       const currentUserEmail = auth.currentUser?.email?.toLowerCase();
       const teamQuery = query(
-        collection(db, 'clientes'),
+        collection(db, 'clients'),
         where('clienteId', '==', plan.clientId),
         where('role', '==', 'equipe')
       );
@@ -150,7 +150,7 @@ export default function ContentPlanDetails() {
       const notifPromises = members
         .filter(m => m.email?.toLowerCase() !== currentUserEmail)
         .map(member => 
-          addDoc(collection(db, 'tarefas'), {
+          addDoc(collection(db, 'tasks'), {
             nome: `VALIDAR PLANEJAMENTO: ${plan.name}`,
             prioridade: 'alta',
             status: 'pendente',
@@ -177,7 +177,7 @@ export default function ContentPlanDetails() {
   const notifyRedator = async () => {
     if (!plan || !planId) return;
     try {
-      await addDoc(collection(db, 'tarefas'), {
+      await addDoc(collection(db, 'tasks'), {
         nome: `PLANEJAMENTO VALIDADO PELA EQUIPE: ${plan.name}`,
         prioridade: 'alta',
         status: 'pendente',
@@ -383,7 +383,7 @@ export default function ContentPlanDetails() {
     if (!planId || !selectedPostId) return;
     setSaving(true);
     try {
-      const planRef = doc(db, 'demandas', planId);
+      const planRef = doc(db, 'content_plans', planId);
       const planSnap = await getDoc(planRef);
       if (!planSnap.exists()) throw new Error('Planejamento não encontrado');
 
@@ -452,14 +452,14 @@ export default function ContentPlanDetails() {
     if (!plan || !planId) return;
     setSaving(true);
     try {
-      const clientSnap = await getDoc(doc(db, 'clientes', plan.clientId));
+      const clientSnap = await getDoc(doc(db, 'clients', plan.clientId));
       const clientData = clientSnap.exists() ? clientSnap.data() : null;
       const targetEmail = clientData?.email?.toLowerCase() || clientEmail;
       const targetName = clientData?.name || targetEmail;
 
       if (!targetEmail) throw new Error('Email do cliente não encontrado');
 
-      const planRef = doc(db, 'demandas', planId);
+      const planRef = doc(db, 'content_plans', planId);
       const planSnap = await getDoc(planRef);
       const planData = planSnap.data();
       const updatedPosts = (planData?.posts || []).map((p: any) => 
@@ -472,7 +472,7 @@ export default function ContentPlanDetails() {
         updatedAt: serverTimestamp()
       });
 
-      await addDoc(collection(db, 'tarefas'), {
+      await addDoc(collection(db, 'tasks'), {
         nome: `PLANEJAMENTO REVISADO: ${plan.name}`,
         prioridade: 'alta',
         status: 'pendente',
@@ -679,6 +679,11 @@ export default function ContentPlanDetails() {
             {isInternal && plan.status === 'devolvido' && todosEditados && (
               <button onClick={handleReenviarParaCliente} disabled={saving} className="h-10 px-6 bg-emerald-500 text-white rounded-xl font-black uppercase tracking-widest text-[10px] hover:brightness-110 transition-all disabled:opacity-50 flex items-center gap-2">
                 <Send className="w-4 h-4" /> Reenviar para Cliente
+              </button>
+            )}
+            {isInternal && (plan.status === 'aprovado_equipe' || plan.status === 'aprovado') && (
+              <button onClick={() => navigate(`/planejamento/${planId}/tarefas`)} className="h-10 px-6 bg-[#ff5351] text-white rounded-xl font-black uppercase tracking-widest text-[10px] hover:brightness-110 transition-all flex items-center gap-2">
+                <Zap className="w-4 h-4" /> Delegar Tarefas
               </button>
             )}
           </div>
