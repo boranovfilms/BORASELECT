@@ -87,7 +87,16 @@ export default function ContentPlanDetails() {
         setRoleLoaded(true);
         return;
       }
-      const q = query(collection(db, 'clients'), where('email', '==', currentEmail));
+      // ✅ Busca em boraselect primeiro
+      const qBora = query(collection(db, 'boraselect'), where('email', '==', currentEmail));
+      const snapBora = await getDocs(qBora);
+      if (!snapBora.empty) {
+        setUserRole(snapBora.docs[0].data().role || 'redator');
+        setRoleLoaded(true);
+        return;
+      }
+      // ✅ Depois em clientes
+      const q = query(collection(db, 'clientes'), where('email', '==', currentEmail));
       const snap = await getDocs(q);
       if (!snap.empty) {
         const role = snap.docs[0].data().role || 'cliente';
@@ -112,7 +121,7 @@ export default function ContentPlanDetails() {
       }
       setPlan(planData);
       
-      const clientSnap = await getDoc(doc(db, 'clients', planData.clientId));
+      const clientSnap = await getDoc(doc(db, 'clientes', planData.clientId));
       if (clientSnap.exists()) {
         setClientEmail(clientSnap.data().email?.toLowerCase() || '');
       }
@@ -140,9 +149,9 @@ export default function ContentPlanDetails() {
     try {
       const currentUserEmail = auth.currentUser?.email?.toLowerCase();
       const teamQuery = query(
-        collection(db, 'clients'),
-        where('clienteId', '==', plan.clientId),
-        where('role', '==', 'equipe')
+        collection(db, 'clientes'),
+        where('type', '==', 'membro'),
+        where('companyId', '==', plan.clientId)
       );
       const teamSnap = await getDocs(teamQuery);
       const members = teamSnap.docs.map(d => ({ id: d.id, ...d.data() as any }));
@@ -150,7 +159,7 @@ export default function ContentPlanDetails() {
       const notifPromises = members
         .filter(m => m.email?.toLowerCase() !== currentUserEmail)
         .map(member => 
-          addDoc(collection(db, 'tasks'), {
+          addDoc(collection(db, 'tarefas'), {
             nome: `VALIDAR PLANEJAMENTO: ${plan.name}`,
             prioridade: 'alta',
             status: 'pendente',
@@ -177,7 +186,7 @@ export default function ContentPlanDetails() {
   const notifyRedator = async () => {
     if (!plan || !planId) return;
     try {
-      await addDoc(collection(db, 'tasks'), {
+      await addDoc(collection(db, 'tarefas'), {
         nome: `PLANEJAMENTO VALIDADO PELA EQUIPE: ${plan.name}`,
         prioridade: 'alta',
         status: 'pendente',
@@ -383,7 +392,7 @@ export default function ContentPlanDetails() {
     if (!planId || !selectedPostId) return;
     setSaving(true);
     try {
-      const planRef = doc(db, 'content_plans', planId);
+      const planRef = doc(db, 'demandas', planId);
       const planSnap = await getDoc(planRef);
       if (!planSnap.exists()) throw new Error('Planejamento não encontrado');
 
@@ -452,14 +461,14 @@ export default function ContentPlanDetails() {
     if (!plan || !planId) return;
     setSaving(true);
     try {
-      const clientSnap = await getDoc(doc(db, 'clients', plan.clientId));
+      const clientSnap = await getDoc(doc(db, 'clientes', plan.clientId));
       const clientData = clientSnap.exists() ? clientSnap.data() : null;
       const targetEmail = clientData?.email?.toLowerCase() || clientEmail;
       const targetName = clientData?.name || targetEmail;
 
       if (!targetEmail) throw new Error('Email do cliente não encontrado');
 
-      const planRef = doc(db, 'content_plans', planId);
+      const planRef = doc(db, 'demandas', planId);
       const planSnap = await getDoc(planRef);
       const planData = planSnap.data();
       const updatedPosts = (planData?.posts || []).map((p: any) => 
@@ -472,7 +481,7 @@ export default function ContentPlanDetails() {
         updatedAt: serverTimestamp()
       });
 
-      await addDoc(collection(db, 'tasks'), {
+      await addDoc(collection(db, 'tarefas'), {
         nome: `PLANEJAMENTO REVISADO: ${plan.name}`,
         prioridade: 'alta',
         status: 'pendente',
