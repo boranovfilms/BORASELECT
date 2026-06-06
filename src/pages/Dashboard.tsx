@@ -14,10 +14,22 @@ export default function Dashboard() {
   const navigate = useNavigate();
   
   // Métricas Admin
-  const [adminMetrics, setAdminMetrics] = useState({\n    activeClients: 0,\n    pendingClients: 0,\n    activeProjects: 0,\n    completedProjects: 0,\n    pendingTasks: 0,\n    awaitingApproval: 0,\n    totalCredits: 0\n  });
+  const [adminMetrics, setAdminMetrics] = useState({
+    activeClients: 0,
+    pendingClients: 0,
+    activeProjects: 0,
+    completedProjects: 0,
+    pendingTasks: 0,
+    awaitingApproval: 0,
+    totalCredits: 0
+  });
 
   // Métricas Cliente
-  const [clientMetrics, setClientMetrics] = useState({\n    myProjects: 0,\n    completed: 0,\n    myTasks: 0\n  });
+  const [clientMetrics, setClientMetrics] = useState({
+    myProjects: 0,
+    completed: 0,
+    myTasks: 0
+  });
 
   const [todayTasks, setTodayTasks] = useState<any[]>([]);
 
@@ -128,7 +140,8 @@ export default function Dashboard() {
           <h1 className="text-5xl font-black text-white uppercase italic tracking-tighter">Dashboard</h1>
         </header>
 
-        {adminMetrics.awaitingApproval > 0 && (\n          <div className="bg-[#ff5351]/10 border border-[#ff5351]/20 rounded-3xl p-6 flex items-center justify-between animate-pulse">
+        {adminMetrics.awaitingApproval > 0 && (
+          <div className="bg-[#ff5351]/10 border border-[#ff5351]/20 rounded-3xl p-6 flex items-center justify-between animate-pulse">
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 rounded-2xl bg-[#ff5351] flex items-center justify-center shadow-lg shadow-[#ff5351]/20">
                 <Bell className="w-6 h-6 text-white" />
@@ -217,7 +230,9 @@ function StatCard({ label, value, icon: Icon, color }: any) {
     orange: 'bg-orange-400/10 text-orange-400 border-orange-400/10',
     rose: 'bg-rose-400/10 text-rose-400 border-rose-400/10',
     cyan: 'bg-cyan-400/10 text-cyan-400 border-cyan-400/10'
-  };\n\n  return (
+  };
+
+  return (
     <div className="bg-[#1a1a1a] border border-zinc-800 rounded-[32px] p-6 shadow-xl group hover:border-[#ff5351]/30 transition-all">
       <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform", colors[color])}>
         <Icon className="w-5 h-5" />
@@ -232,7 +247,9 @@ function TodayTasks({ tasks, isAdmin, navigate }: any) {
   const getPriorityBadge = (p: string) => {
     const colors: any = { alta: 'bg-red-500/10 text-red-400 border-red-500/20', media: 'bg-amber-500/10 text-amber-400 border-amber-500/20', baixa: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' };
     return <span className={cn("px-2 py-0.5 border rounded text-[8px] font-black uppercase tracking-widest", colors[p])}>{p}</span>;
-  };\n\n  return (
+  };
+
+  return (
     <section className="bg-[#1a1a1a] border border-zinc-800 rounded-[32px] overflow-hidden shadow-xl">
       <div className="p-8 border-b border-zinc-800 flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -254,7 +271,8 @@ function TodayTasks({ tasks, isAdmin, navigate }: any) {
               key={task.id} 
               onClick={() => navigate('/tarefas')}
               className="flex items-center justify-between p-4 bg-zinc-900/50 border border-zinc-800 rounded-2xl hover:border-[#ff5351]/30 transition-all group cursor-pointer"
-            >\n              <div className="flex items-center gap-4">
+            >
+              <div className="flex items-center gap-4">
                 <div className="w-1.5 h-1.5 rounded-full bg-[#ff5351] shadow-[0_0_8px_#ff5351]" />
                 <div>
                   <p className="text-white text-sm font-bold uppercase group-hover:text-[#ff5351] transition-colors">{task.nome}</p>
@@ -268,4 +286,6 @@ function TodayTasks({ tasks, isAdmin, navigate }: any) {
           ))
         )}
       </div>
-    </section>\n  );\n}
+    </section>
+  );
+}
