@@ -128,6 +128,15 @@ export const clientService = {
     }
   },
 
+  // Busca todos os documentos da coleção clientes (empresas + membros)
+  searchAll: async (): Promise<Client[]> => {
+    const snapshot = await getDocs(collection(db, 'clientes'));
+    return snapshot.docs.map(docSnap => ({
+      ...docSnap.data(),
+      id: docSnap.id
+    })) as Client[];
+  },
+
   // Busca membros da equipe de uma empresa
   getClientTeamMembers: async (companyId: string): Promise<Client[]> => {
     const q = query(
