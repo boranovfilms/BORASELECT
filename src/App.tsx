@@ -49,22 +49,32 @@ export default function App() {
         try {
           const cleanEmail = currentUser.email?.toLowerCase().trim();
           
-          // REGRA DE SUPER USUÁRIO (MASTER)
+          // Master fixo
           if (cleanEmail === 'admin@boraselect.com.br') {
             setUserRole('master');
-            setUserName('Boranov');
+            setUserName('Admin');
           } else {
-            // Busca outros usuários (Equipe e Clientes) no banco
-            const q = query(collection(db, 'clientes'), where('email', '==', cleanEmail));
-            const snapshot = await getDocs(q);
+            // ✅ Busca primeiro em 'boraselect' (equipe Boranov)
+            const qBora = query(collection(db, 'boraselect'), where('email', '==', cleanEmail));
+            const snapBora = await getDocs(qBora);
             
-            if (!snapshot.empty) {
-              const data = snapshot.docs[0].data();
-              setUserRole(data.role || 'cliente');
+            if (!snapBora.empty) {
+              const data = snapBora.docs[0].data();
+              setUserRole(data.role || 'redator');
               setUserName(data.name || '');
             } else {
-              setUserRole('cliente');
-              setUserName(currentUser.displayName || '');
+              // ✅ Depois busca em 'clientes' (empresas e membros)
+              const qClientes = query(collection(db, 'clientes'), where('email', '==', cleanEmail));
+              const snapClientes = await getDocs(qClientes);
+              
+              if (!snapClientes.empty) {
+                const data = snapClientes.docs[0].data();
+                setUserRole(data.role || 'cliente');
+                setUserName(data.name || '');
+              } else {
+                setUserRole('cliente');
+                setUserName(currentUser.displayName || '');
+              }
             }
           }
           
@@ -96,7 +106,6 @@ export default function App() {
     </AppLayout>
   );
 
-  // Define se o usuário tem poderes administrativos (Equipe Interna ou Master)
   const internalRoles = ['master', 'admin', 'editor', 'designer', 'redator', 'midia_social'];
   const isAdmin = internalRoles.includes(userRole);
 
@@ -112,7 +121,6 @@ export default function App() {
         <Route path="/review/:id" element={user ? wrapLayout(<ProjectReview />) : <Navigate to="/login" />} />
         <Route path="/download/:id" element={user ? wrapLayout(<ProjectDownload />) : <Navigate to="/login" />} />
         
-        {/* Rotas de Gestão (Protegidas por isAdmin) */}
         <Route path="/projects/:id/config" element={user && isAdmin ? wrapLayout(<ProjectConfig />) : <Navigate to="/" />} />
         <Route path="/clients" element={user && isAdmin ? wrapLayout(<ClientAccess />) : <Navigate to="/" />} />
         <Route path="/clients/:id" element={user && isAdmin ? wrapLayout(<ClientDetails />) : <Navigate to="/" />} />
