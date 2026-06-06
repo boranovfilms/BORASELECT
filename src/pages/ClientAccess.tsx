@@ -54,16 +54,17 @@ export default function ClientAccess() {
   const loadAllData = async () => {
     try {
       setLoading(true);
-      const allData = await clientService.searchClients('');
-      const loadedClients = allData.filter(c => c.type === 'empresa' || c.role === 'cliente' || !c.role).map(c => ({
+      // ✅ Busca TODOS os documentos (empresas + membros)
+      const allData = await (clientService as any).searchAll();
+      
+      const loadedClients = allData.filter((c: any) => c.type === 'empresa' || c.role === 'cliente').map((c: any) => ({
         ...c,
         id: c.id || (c as any).uid || (c as any).docId
       }));
       setClients(loadedClients);
 
-      // ✅ CORRIGIDO: buscar membros com type === 'membro'
-      const q = await clientService.searchClients('');
-      const team = q.filter(m => (m as any).type === 'membro') as any;
+      // ✅ Membros com type === 'membro'
+      const team = allData.filter((m: any) => m.type === 'membro');
       setAllTeamMembers(team);
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
