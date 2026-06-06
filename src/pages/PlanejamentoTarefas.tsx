@@ -198,12 +198,21 @@ export default function PlanejamentoTarefas() {
 
   const postsOrdenados = useMemo(() => {
     if (!plan?.posts) return [];
-    return [...plan.posts].sort((a, b) => {
-      const [d1, m1, y1] = a.publishDate.split('/').map(Number);
-      const [d2, m2, y2] = b.publishDate.split('/').map(Number);
-      return new Date(y1, m1 - 1, d1).getTime() - new Date(y2, m2 - 1, d2).getTime();
-    });
-  }, [plan]);
+    return [...plan.posts]
+      .sort((a, b) => {
+        const [d1, m1, y1] = a.publishDate.split('/').map(Number);
+        const [d2, m2, y2] = b.publishDate.split('/').map(Number);
+        return new Date(y1, m1 - 1, d1).getTime() - new Date(y2, m2 - 1, d2).getTime();
+      })
+      .filter(post => {
+        // ✅ Para o redator: mostra apenas posts ainda não delegados
+        if (isInternal) {
+          const tasks = (post as any).tasks || [];
+          return tasks.length === 0;
+        }
+        return true;
+      });
+  }, [plan, isInternal]);
 
   const totalPosts = postsOrdenados.length;
   const concluidos = postsOrdenados.filter(isPostConcluido).length;
@@ -304,6 +313,18 @@ export default function PlanejamentoTarefas() {
         <p className="text-[10px] font-black uppercase tracking-widest text-[#ff5351] mb-1">PLANEJAMENTO · {clientName}</p>
         <h1 className="text-3xl font-black text-white uppercase italic tracking-tighter">{plan.name}</h1>
         <p className="text-zinc-500 text-sm mt-1">{plan.monthReference}</p>
+        {isInternal && (
+          <div className="flex items-center gap-3 mt-3">
+            <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">
+              {postsOrdenados.length} post{postsOrdenados.length !== 1 ? 's' : ''} aguardando delegação
+            </span>
+            {postsOrdenados.length === 0 && (
+              <span className="px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-full text-emerald-400 text-[9px] font-black uppercase tracking-widest">
+                ✓ Todos delegados!
+              </span>
+            )}
+          </div>
+        )}
       </header>
 
       <div className="bg-[#1f1f1f] border border-zinc-800 rounded-3xl p-6 mb-8">
