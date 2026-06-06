@@ -128,12 +128,20 @@ export default function PlanejamentoTarefas() {
     const currentEmail = auth.currentUser?.email?.toLowerCase();
     if (!currentEmail) { setRoleLoaded(true); return; }
     try {
-      // ✅ Admin detectado diretamente
-      if (currentEmail === 'admin@boraselect.com.br' || currentEmail === 'boranovfilms@gmail.com') {
+      if (currentEmail === 'admin@boraselect.com.br') {
         setUserRole('master');
         setRoleLoaded(true);
         return;
       }
+      // ✅ Busca em boraselect primeiro
+      const qBora = query(collection(db, 'boraselect'), where('email', '==', currentEmail));
+      const snapBora = await getDocs(qBora);
+      if (!snapBora.empty) {
+        setUserRole(snapBora.docs[0].data().role || 'redator');
+        setRoleLoaded(true);
+        return;
+      }
+      // ✅ Depois em clientes
       const q = query(collection(db, 'clientes'), where('email', '==', currentEmail));
       const snap = await getDocs(q);
       if (!snap.empty) {
@@ -142,7 +150,7 @@ export default function PlanejamentoTarefas() {
     } catch (e) {
       console.warn('Erro ao carregar role:', e);
     } finally {
-      setRoleLoaded(true); // ✅ Sempre marca como carregado
+      setRoleLoaded(true);
     }
   };
 
@@ -158,33 +166,26 @@ export default function PlanejamentoTarefas() {
       }
       setPlan(planData);
 
+      // ✅ Busca nome do cliente em 'clientes'
       const clientSnap = await getDoc(doc(db, 'clientes', planData.clientId));
       if (clientSnap.exists()) {
         setClientName(clientSnap.data().name || '');
       }
 
-      // Membros da equipe do cliente
+      // ✅ Membros da equipe do cliente — companyId em vez de clienteId
       const q = query(
         collection(db, 'clientes'),
-        where('clienteId', '==', planData.clientId),
-        where('role', '==', 'equipe')
+        where('type', '==', 'membro'),
+        where('companyId', '==', planData.clientId)
       );
       const snap = await getDocs(q);
       const clientTeam = snap.docs.map(d => ({ id: d.id, ...d.data(), grupo: 'Equipe Cliente' }));
 
-      // Membros internos Boranov
-      const boranovRoles = ['master', 'admin', 'redator', 'editor', 'designer', 'midia_social', 'fotografo', 'produtor'];
-      const boranovMembers: any[] = [];
-      for (const role of boranovRoles) {
-        try {
-          const bq = query(collection(db, 'clientes'), where('role', '==', role));
-          const bsnap = await getDocs(bq);
-          bsnap.docs.forEach(d => {
-            const data = d.data();
-            if (data.email) boranovMembers.push({ id: d.id, ...data, grupo: 'Equipe Boranov' });
-          });
-        } catch (e) {}
-      }
+      // ✅ Membros internos Boranov — busca em 'boraselect'
+      const boranovSnap = await getDocs(collection(db, 'boraselect'));
+      const boranovMembers = boranovSnap.docs.map(d => ({
+        id: d.id, ...d.data(), grupo: 'Equipe Boranov'
+      }));
 
       setTeamMembers([...clientTeam, ...boranovMembers]);
     } catch (error) {
