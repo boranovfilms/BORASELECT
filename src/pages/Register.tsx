@@ -1,4 +1,3 @@
-export const dynamic = 'force-dynamic';
 import React, { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { createUserWithEmailAndPassword, auth, db } from '../lib/firebase';
@@ -34,7 +33,7 @@ export default function Register() {
     try {
       const cleanEmail = emailToValidate.toLowerCase().trim();
       console.log('Validating invite for:', cleanEmail);
-      const q = query(collection(db, 'clients'), where('email', '==', cleanEmail));
+      const q = query(collection(db, 'clientes'), where('email', '==', cleanEmail));
       const snapshot = await getDocs(q);
       
       if (!snapshot.empty) {
