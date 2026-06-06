@@ -64,7 +64,7 @@ export default function ClientDetails() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const clientRef = doc(db, 'clients', clientId!);
+      const clientRef = doc(db, 'clientes', clientId!);
       const [clientSnap, plansData, modelsData] = await Promise.all([
         getDoc(clientRef),
         contentPlanService.getPlansByClient(clientId!),
@@ -78,7 +78,7 @@ export default function ClientDetails() {
         const wfModels = cData.workflowModels || {};
         setWorkflowModels(wfModels);
 
-        const q = query(collection(db, 'clients'), where('clienteId', '==', clientId), where('role', '==', 'equipe'));
+        const q = query(collection(db, 'clientes'), where('clienteId', '==', clientId), where('role', '==', 'equipe'));
         const teamSnap = await getDocs(q);
         setTeamMembers(teamSnap.docs.map(d => ({ id: d.id, ...d.data() })));
       } else {
@@ -102,7 +102,7 @@ export default function ClientDetails() {
       const updatedModels = { ...workflowModels, [demandType]: modelId || null };
       setWorkflowModels(updatedModels);
       
-      const clientRef = doc(db, 'clients', clientId);
+      const clientRef = doc(db, 'clientes', clientId);
       await updateDoc(clientRef, {
         workflowModels: updatedModels,
         updatedAt: new Date().toISOString()
@@ -117,7 +117,7 @@ export default function ClientDetails() {
   const handleSaveWorkflowModels = async () => {
     if (!clientId) return;
     try {
-      const clientRef = doc(db, 'clients', clientId);
+      const clientRef = doc(db, 'clientes', clientId);
       await updateDoc(clientRef, {
         workflowModels: workflowModels,
         updatedAt: new Date().toISOString()
@@ -142,7 +142,7 @@ export default function ClientDetails() {
     if (!clientId) return;
     setSavingApprovers(true);
     try {
-      const clientRef = doc(db, 'clients', clientId);
+      const clientRef = doc(db, 'clientes', clientId);
       await updateDoc(clientRef, {
         workflowApprovers,
         updatedAt: new Date().toISOString()
