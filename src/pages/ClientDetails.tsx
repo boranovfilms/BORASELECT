@@ -35,13 +35,10 @@ export default function ClientDetails() {
   const [newPlan, setNewPlan] = useState({ name: '', month: '', text: '' });
   const [saving, setSaving] = useState(false);
 
-  // Estados para Fluxos por Tipo de Demanda
   const [workflowModels, setWorkflowModels] = useState<Record<string, string | null>>({});
   const [teamMembers, setTeamMembers] = useState<any[]>([]);
   const [workflowApprovers, setWorkflowApprovers] = useState<Record<string, string[]>>({});
   const [savingApprovers, setSavingApprovers] = useState(false);
-
-  // ✅ HOOKS MOVIDOS PARA ANTES DOS RETURNS CONDICIONAIS
   const [linkedModel, setLinkedModel] = useState<WorkflowModel | null>(null);
 
   useEffect(() => {
@@ -78,7 +75,12 @@ export default function ClientDetails() {
         const wfModels = cData.workflowModels || {};
         setWorkflowModels(wfModels);
 
-        const q = query(collection(db, 'clientes'), where('clienteId', '==', clientId), where('role', '==', 'equipe'));
+        // ✅ CORRIGIDO: usar companyId em vez de clienteId
+        const q = query(
+          collection(db, 'clientes'),
+          where('type', '==', 'membro'),
+          where('companyId', '==', clientId)
+        );
         const teamSnap = await getDocs(q);
         setTeamMembers(teamSnap.docs.map(d => ({ id: d.id, ...d.data() })));
       } else {
@@ -197,6 +199,7 @@ export default function ClientDetails() {
       aguardando_cliente: { label: 'Aguardando Cliente', class: 'bg-amber-500/10 text-amber-400 border-amber-500/20' },
       aguardando_validacao_equipe: { label: 'Validação Equipe', class: 'bg-blue-500/10 text-blue-400 border-blue-500/20' },
       aprovado: { label: 'Aprovado', class: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' },
+      aprovado_equipe: { label: 'Aprovado Equipe', class: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' },
       devolvido: { label: 'Devolvido', class: 'bg-red-500/10 text-red-400 border-red-500/20' },
       em_producao: { label: 'Em Produção', class: 'bg-purple-500/10 text-purple-400 border-purple-500/20' },
     };
@@ -204,13 +207,12 @@ export default function ClientDetails() {
     return <span className={cn("px-3 py-1 rounded-full border text-[9px] font-black uppercase tracking-widest", config.class)}>{config.label}</span>;
   };
 
-  // ✅ RETURNS CONDICIONAIS AGORA VÊM DEPOIS DE TODOS OS HOOKS
   if (loading) return <div className="min-h-[60vh] flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-[#ff5351]" /></div>;
   if (!client) return <div className="p-8 text-center text-white"><p className="mb-4">Cliente não encontrado.</p><button onClick={() => navigate('/clients')} className="text-[#ff5351] font-bold underline">Voltar para a lista</button></div>;
 
   const approvalStages = linkedModel?.stages?.filter(s => s.requiresApproval) || [];
   const awaitingAction = plans.filter(p => p.status === 'aguardando_cliente' || p.status === 'devolvido').length;
-  const approvedCount = plans.filter(p => p.status === 'aprovado').length;
+  const approvedCount = plans.filter(p => p.status === 'aprovado' || p.status === 'aprovado_equipe').length;
 
   return (
     <div className="space-y-10 pb-20 text-left">
@@ -264,6 +266,29 @@ export default function ClientDetails() {
           <p className="text-4xl font-black text-white italic">{approvedCount}</p>
         </div>
       </div>
+
+      {/* EQUIPE DO CLIENTE */}
+      {teamMembers.length > 0 && (
+        <section className="space-y-4">
+          <div className="flex items-center gap-3">
+            <h2 className="text-sm font-black uppercase tracking-[0.3em] text-zinc-600 shrink-0">Equipe do Cliente</h2>
+            <div className="h-px flex-1 bg-zinc-800/50" />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {teamMembers.map(member => (
+              <div key={member.id} className="bg-[#1f1f1f] border border-zinc-800 rounded-2xl p-4 flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center shrink-0">
+                  <User className="w-5 h-5 text-zinc-600" />
+                </div>
+                <div>
+                  <p className="text-white font-black uppercase text-xs">{member.name}</p>
+                  <p className="text-zinc-500 text-[10px]">{member.email}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section className="space-y-4">
         <div className="flex items-center gap-3">
@@ -354,3 +379,4 @@ export default function ClientDetails() {
     </div>
   );
 }
+
