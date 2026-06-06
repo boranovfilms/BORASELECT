@@ -27,7 +27,15 @@ export default function Tarefas() {
 
   const audioContext = useRef<AudioContext | null>(null);
 
-  const [newTask, setNewTask] = useState<Partial<Task>>({\n    nome: '',\n    prioridade: 'media',\n    dataLimite: '',\n    tipoAcesso: 'particular',\n    descricao: '',\n    equipeSelecionada: 'Todos',\n    delegadoPara: ''\n  });
+  const [newTask, setNewTask] = useState<Partial<Task>>({
+    nome: '',
+    prioridade: 'media',
+    dataLimite: '',
+    tipoAcesso: 'particular',
+    descricao: '',
+    equipeSelecionada: 'Todos',
+    delegadoPara: ''
+  });
 
   const playNotificationSound = () => {
     try {
@@ -90,7 +98,9 @@ export default function Tarefas() {
         return true; 
       });
 
-      const newDelegatedTasks = filtered.filter(t => \n        t.delegadoPara?.toLowerCase().trim() === userEmail && !t.vistoPeloDelegado && t.status === 'pendente'\n      );
+      const newDelegatedTasks = filtered.filter(t => 
+        t.delegadoPara?.toLowerCase().trim() === userEmail && !t.vistoPeloDelegado && t.status === 'pendente'
+      );
 
       if (newDelegatedTasks.length > 0) {
         const sessionKey = `notified_tasks_${userEmail}`;
@@ -140,7 +150,13 @@ export default function Tarefas() {
       const delegadoObj = allUsers.find(u => u.email === newTask.delegadoPara);
       const visibilidadeAutomatica = newTask.delegadoPara ? 'compartilhada' : 'particular';
       
-      const taskData = { \n        ...newTask, \n        nome: newTask.nome?.toUpperCase(), \n        responsavelTarefa: responsavel, \n        delegadoNome: delegadoObj?.name || '',\n        tipoAcesso: visibilidadeAutomatica\n      };
+      const taskData = { 
+        ...newTask, 
+        nome: newTask.nome?.toUpperCase(), 
+        responsavelTarefa: responsavel, 
+        delegadoNome: delegadoObj?.name || '',
+        tipoAcesso: visibilidadeAutomatica
+      };
 
       if (editingTaskId) {
         await taskService.updateTask(editingTaskId, taskData, newComment);
@@ -163,7 +179,14 @@ export default function Tarefas() {
       }
     }
 
-    setNewTask({ \n      nome: task.nome, \n      prioridade: task.prioridade, \n      dataLimite: task.dataLimite || '', \n      tipoAcesso: task.tipoAcesso, \n      equipeSelecionada: task.equipeSelecionada || 'Todos', \n      delegadoPara: task.delegadoPara || '' \n    });
+    setNewTask({ 
+      nome: task.nome, 
+      prioridade: task.prioridade, 
+      dataLimite: task.dataLimite || '', 
+      tipoAcesso: task.tipoAcesso, 
+      equipeSelecionada: task.equipeSelecionada || 'Todos', 
+      delegadoPara: task.delegadoPara || '' 
+    });
     setEditingTaskId(task.id!);
     setNewComment('');
     setIsAdding(true);
@@ -214,7 +237,17 @@ export default function Tarefas() {
 
   return (
     <div className="animate-in fade-in duration-700 pb-20">
-      <style>{`\n        input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.5) sepia(1) saturate(5) hue-rotate(320deg); cursor: pointer; }\n        input[type="date"] { color-scheme: dark; }\n        @keyframes pulse-badge {\n          0%, 100% { opacity: 1; transform: scale(1); }\n          50% { opacity: 0.7; transform: scale(1.05); }\n        }\n        .animate-pulse-badge {\n          animation: pulse-badge 1.5s infinite ease-in-out;\n        }\n      `}</style>
+      <style>{`
+        input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.5) sepia(1) saturate(5) hue-rotate(320deg); cursor: pointer; }
+        input[type="date"] { color-scheme: dark; }
+        @keyframes pulse-badge {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.7; transform: scale(1.05); }
+        }
+        .animate-pulse-badge {
+          animation: pulse-badge 1.5s infinite ease-in-out;
+        }
+      `}</style>
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8">
         <div>
           <h1 className="text-4xl font-black tracking-tight text-white uppercase italic flex items-center gap-3"><CheckSquare className="w-8 h-8 text-[#ff5351]" /> Tarefas</h1>
@@ -248,12 +281,77 @@ export default function Tarefas() {
                 <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar\">
                   {[...currentEditingTask.historico].reverse().map((item, idx) => (
                     <div key={idx} className="bg-zinc-900/50 border border-zinc-800/50 rounded-2xl p-4\"><div className=\"flex items-center justify-between mb-2\"><span className=\"text-[10px] font-black text-[#ff5351] uppercase tracking-widest\">{item.autor || 'Usuário Desconhecido'}</span><span className=\"text-[9px] font-mono text-zinc-600 uppercase font-black\">{formatFullDate(item.date)}</span></div><p className=\"text-zinc-300 text-sm leading-relaxed uppercase\">{item.texto}</p></div>
-                  ))}\n                </div>
+                  ))}
+                </div>
               </div>
             )}
             <div className="flex justify-end pt-8 border-t border-zinc-800 mt-8\"><button type="submit" disabled={saving} className="h-14 px-10 bg-white text-black rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-[#ff5351] hover:text-white transition-all flex items-center gap-3 shadow-2xl\">{saving ? <Loader2 className="w-4 h-4 animate-spin\" /> : <Save className="w-4 h-4\" />}{editingTaskId ? 'Salvar Planejamento' : 'Salvar Planejamento'}</button></div>
           </div>
         </form>
       )}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 border-b border-zinc-800 mb-6 pb-4\">\n        <div className="flex gap-6\">{['pendentes', 'executadas'].map((tab) => (<button key={tab} onClick={() => { setActiveTab(tab as any); setSelectedTasks(new Set()); }} className={cn(\"text-[10px] uppercase font-black tracking-widest pb-2 border-b-2 transition-all\", activeTab === tab ? 'text-white border-[#ff5351]' : 'text-zinc-500 border-transparent')}>{tab}</button>))}</div>\n        {activeTab === 'pendentes' && selectedTasks.size > 0 && (<button onClick={handleCompleteSelectedTasks} disabled={saving} className=\"px-6 py-2.5 bg-emerald-500 text-white rounded-xl font-black uppercase tracking-widest text-[10px] hover:bg-emerald-600 transition-all flex items-center gap-2 shadow-lg shadow-emerald-500/20 animate-in zoom-in-95\">{saving ? <Loader2 className="w-4 h-4 animate-spin\" /> : <Check className=\"w-4 h-4\" />} Finalizar Selecionadas ({selectedTasks.size})</button>)}\n      </div>
-      <DataTable \n        data={tasks.filter(t => (activeTab === 'pendentes' && t.status === 'pendente') || (activeTab === 'executadas' && t.status === 'executada'))}\n        loading={loading}\n        onRowClick={(task) => handleTaskClick(task)}\n        columns={[\n          ...(activeTab === 'pendentes' ? [{ \n            header: '', \n            accessor: (task: Task) => (\n              <div className=\"flex justify-center\" onClick={(e) => e.stopPropagation()}>\n                <button \n                  onClick={() => toggleTaskSelection(task.id!)} \n                  className={cn(\n                    \"w-5 h-5 rounded border-2 transition-all flex items-center justify-center shrink-0\", \n                    selectedTasks.has(task.id!) ? \"bg-[#ff5351] border-[#ff5351]\" : \"border-zinc-700 bg-zinc-900 hover:border-zinc-500\"\n                  )}\n                >\n                  {selectedTasks.has(task.id!) && <Check className=\"w-3 h-3 text-white\" strokeWidth={4} />}\n                </button>\n              </div>\n            ),\n            className: 'w-10' \n          }] : []),\n          { \n            header: 'Atividade', \n            accessor: (task) => {\n              const isNew = !task.vistoPeloDelegado && task.delegadoPara?.toLowerCase().trim() === auth.currentUser?.email?.toLowerCase().trim();\n              return (\n                <div className=\"py-1 px-3 -ml-6 transition-all\">\n                  <div className=\"flex items-center gap-2 mb-0.5\">\n                    {isNew && <span className=\"px-1.5 py-0.5 bg-[#ff5351] text-white text-[7px] font-black rounded animate-pulse-badge shrink-0\">NOVA</span>}\n                    <div className=\"font-bold text-sm text-white uppercase group-hover:text-[#ff5351] transition-colors truncate\">{task.nome}</div>\n                  </div>\n                  <div className=\"flex items-center gap-2 text-[10px] text-zinc-500 font-bold uppercase tracking-widest\">\n                    <MessageSquare className=\"w-3 h-3\" />\n                    {task.historico?.length || 0} registros no histórico\n                  </div>\n                </div>\n              );\n            }\n          },\n          { header: 'Prioridade', accessor: (task) => getPriorityBadge(task.prioridade), align: 'center' },\n          { \n            header: 'Acesso', \n            accessor: (task) => (\n              <span className=\"text-[10px] font-black uppercase text-zinc-500 tracking-widest flex items-center gap-1.5\">\n                <Shield className=\"w-3 h-3\" />\n                {task.delegadoPara ? 'COMPARTILHADA' : 'PARTICULAR'}\n              </span>\n            ) \n          },\n          { header: 'Responsável', accessor: (task) => <span className=\"text-zinc-300 text-xs font-bold uppercase\">{task.responsavelTarefa}</span> }\n        ]}\n        actions={(task) => (\n          <div className=\"flex items-center gap-2\">\n            <button onClick={(e) => { e.stopPropagation(); handleEditTask(task); }} className=\"p-2 bg-zinc-800 border border-zinc-700 hover:bg-zinc-700 rounded-xl text-zinc-400 hover:text-white transition-all\"><Edit className=\"w-4 h-4\" /></button>\n            <button onClick={async (e) => { e.stopPropagation(); if (window.confirm('Excluir esta tarefa permanentemente?')) { await taskService.deleteTask(task.id!); } }} className=\"p-2 bg-zinc-800/50 hover:bg-red-500/10 rounded-xl text-zinc-600 hover:text-red-500 transition-all\"><Trash2 className=\"w-4 h-4\" /></button>\n          </div>\n        )}\n      />\n    </div>\n  );\n}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 border-b border-zinc-800 mb-6 pb-4\">
+        <div className="flex gap-6\">{['pendentes', 'executadas'].map((tab) => (<button key={tab} onClick={() => { setActiveTab(tab as any); setSelectedTasks(new Set()); }} className={cn(\"text-[10px] uppercase font-black tracking-widest pb-2 border-b-2 transition-all\", activeTab === tab ? 'text-white border-[#ff5351]' : 'text-zinc-500 border-transparent')}>{tab}</button>))}</div>
+        {activeTab === 'pendentes' && selectedTasks.size > 0 && (<button onClick={handleCompleteSelectedTasks} disabled={saving} className=\"px-6 py-2.5 bg-emerald-500 text-white rounded-xl font-black uppercase tracking-widest text-[10px] hover:bg-emerald-600 transition-all flex items-center gap-2 shadow-lg shadow-emerald-500/20 animate-in zoom-in-95\">{saving ? <Loader2 className="w-4 h-4 animate-spin\" /> : <Check className=\"w-4 h-4\" />} Finalizar Selecionadas ({selectedTasks.size})</button>)}
+      </div>
+      <DataTable 
+        data={tasks.filter(t => (activeTab === 'pendentes' && t.status === 'pendente') || (activeTab === 'executadas' && t.status === 'executada'))}
+        loading={loading}
+        onRowClick={(task) => handleTaskClick(task)}
+        columns={[
+          ...(activeTab === 'pendentes' ? [{ 
+            header: '', 
+            accessor: (task: Task) => (
+              <div className=\"flex justify-center\" onClick={(e) => e.stopPropagation()}>
+                <button 
+                  onClick={() => toggleTaskSelection(task.id!)} 
+                  className={cn(
+                    \"w-5 h-5 rounded border-2 transition-all flex items-center justify-center shrink-0\", 
+                    selectedTasks.has(task.id!) ? \"bg-[#ff5351] border-[#ff5351]\" : \"border-zinc-700 bg-zinc-900 hover:border-zinc-500\"
+                  )}
+                >
+                  {selectedTasks.has(task.id!) && <Check className=\"w-3 h-3 text-white\" strokeWidth={4} />}
+                </button>
+              </div>
+            ),
+            className: 'w-10' 
+          }] : []),
+          { 
+            header: 'Atividade', 
+            accessor: (task) => {
+              const isNew = !task.vistoPeloDelegado && task.delegadoPara?.toLowerCase().trim() === auth.currentUser?.email?.toLowerCase().trim();
+              return (
+                <div className=\"py-1 px-3 -ml-6 transition-all\">
+                  <div className=\"flex items-center gap-2 mb-0.5\">
+                    {isNew && <span className=\"px-1.5 py-0.5 bg-[#ff5351] text-white text-[7px] font-black rounded animate-pulse-badge shrink-0\">NOVA</span>}
+                    <div className=\"font-bold text-sm text-white uppercase group-hover:text-[#ff5351] transition-colors truncate\">{task.nome}</div>
+                  </div>
+                  <div className=\"flex items-center gap-2 text-[10px] text-zinc-500 font-bold uppercase tracking-widest\">
+                    <MessageSquare className=\"w-3 h-3\" />
+                    {task.historico?.length || 0} registros no histórico
+                  </div>
+                </div>
+              );
+            }
+          },
+          { header: 'Prioridade', accessor: (task) => getPriorityBadge(task.prioridade), align: 'center' },
+          { 
+            header: 'Acesso', 
+            accessor: (task) => (
+              <span className=\"text-[10px] font-black uppercase text-zinc-500 tracking-widest flex items-center gap-1.5\">
+                <Shield className=\"w-3 h-3\" />
+                {task.delegadoPara ? 'COMPARTILHADA' : 'PARTICULAR'}
+              </span>
+            ) 
+          },
+          { header: 'Responsável', accessor: (task) => <span className=\"text-zinc-300 text-xs font-bold uppercase\">{task.responsavelTarefa}</span> }
+        ]}
+        actions={(task) => (
+          <div className=\"flex items-center gap-2\">
+            <button onClick={(e) => { e.stopPropagation(); handleEditTask(task); }} className=\"p-2 bg-zinc-800 border border-zinc-700 hover:bg-zinc-700 rounded-xl text-zinc-400 hover:text-white transition-all\"><Edit className=\"w-4 h-4\" /></button>
+            <button onClick={async (e) => { e.stopPropagation(); if (window.confirm('Excluir esta tarefa permanentemente?')) { await taskService.deleteTask(task.id!); } }} className=\"p-2 bg-zinc-800/50 hover:bg-red-500/10 rounded-xl text-zinc-600 hover:text-red-500 transition-all\"><Trash2 className=\"w-4 h-4\" /></button>
+          </div>
+        )}
+      />
+    </div>
+  );
+}
