@@ -55,7 +55,7 @@ export default function App() {
             setUserName('Boranov');
           } else {
             // Busca outros usuários (Equipe e Clientes) no banco
-            const q = query(collection(db, 'clients'), where('email', '==', cleanEmail));
+            const q = query(collection(db, 'clientes'), where('email', '==', cleanEmail));
             const snapshot = await getDocs(q);
             
             if (!snapshot.empty) {
