@@ -10,7 +10,6 @@ import { auth, db } from '../lib/firebase';
 import { contentPlanService, ContentPlan, ContentPost } from '../services/contentPlanService';
 import { teamService, TeamMember } from '../services/teamService';
 import { cn } from '../lib/utils';
-import { notificacaoService } from '../services/notificacaoService';
 
 export default function ContentPlanDetails() {
   const { id: planId } = useParams<{ id: string }>();
@@ -160,12 +159,21 @@ export default function ContentPlanDetails() {
       const notifPromises = members
         .filter(m => m.email?.toLowerCase() !== currentUserEmail)
         .map(member => 
-          notificacaoService.criar({
-            para: member.email?.toLowerCase(),
-            tipo: 'planejamento',
-            titulo: `VALIDAR PLANEJAMENTO: ${plan.name}`,
+          addDoc(collection(db, 'tarefas'), {
+            nome: `VALIDAR PLANEJAMENTO: ${plan.name}`,
+            prioridade: 'alta',
+            status: 'pendente',
+            dataCriacao: serverTimestamp(),
+            responsavelCriacao: auth.currentUser?.displayName || 'Cliente',
+            responsavelCriacaoEmail: currentUserEmail || '',
+            responsavelTarefa: member.name || member.email,
+            tipoAcesso: 'particular',
+            delegadoPara: member.email?.toLowerCase(),
+            delegadoNome: member.name || member.email,
+            vistoPeloDelegado: false,
             descricao: `O planejamento "${plan.name}" foi aprovado e aguarda sua validação.`,
-            planId: plan.id
+            planId: plan.id,
+            tipo: 'validacao_planejamento'
           })
         );
       
@@ -178,12 +186,21 @@ export default function ContentPlanDetails() {
   const notifyRedator = async () => {
     if (!plan || !planId) return;
     try {
-      await notificacaoService.criar({
-        para: 'boranovfilms@gmail.com',
-        tipo: 'planejamento',
-        titulo: `PLANEJAMENTO VALIDADO: ${plan.name}`,
+      await addDoc(collection(db, 'tarefas'), {
+        nome: `PLANEJAMENTO VALIDADO PELA EQUIPE: ${plan.name}`,
+        prioridade: 'alta',
+        status: 'pendente',
+        dataCriacao: serverTimestamp(),
+        responsavelCriacao: auth.currentUser?.displayName || 'Equipe',
+        responsavelCriacaoEmail: auth.currentUser?.email || '',
+        responsavelTarefa: 'Boranov',
+        tipoAcesso: 'particular',
+        delegadoPara: 'boranovfilms@gmail.com',
+        delegadoNome: 'Boranov',
+        vistoPeloDelegado: false,
         descricao: `O planejamento "${plan.name}" foi validado pela equipe e está pronto para delegação.`,
-        planId: planId
+        planId: planId,
+        tipo: 'planejamento_validado_equipe'
       });
     } catch (e) {
       console.warn('Erro ao notificar redator:', e);
@@ -464,12 +481,21 @@ export default function ContentPlanDetails() {
         updatedAt: serverTimestamp()
       });
 
-      await notificacaoService.criar({
-        para: targetEmail,
-        tipo: 'planejamento',
-        titulo: `PLANEJAMENTO REVISADO: ${plan.name}`,
+      await addDoc(collection(db, 'tarefas'), {
+        nome: `PLANEJAMENTO REVISADO: ${plan.name}`,
+        prioridade: 'alta',
+        status: 'pendente',
+        dataCriacao: serverTimestamp(),
+        responsavelCriacao: auth.currentUser?.displayName || 'Redator',
+        responsavelCriacaoEmail: auth.currentUser?.email || '',
+        responsavelTarefa: targetName,
+        tipoAcesso: 'particular',
+        delegadoPara: targetEmail,
+        delegadoNome: targetName,
+        vistoPeloDelegado: false,
         descricao: `O planejamento "${plan.name}" foi revisado pelo redator e está pronto para sua avaliação.`,
-        planId: planId
+        planId: planId,
+        tipo: 'planejamento_revisado'
       });
 
       await loadData();
@@ -662,6 +688,11 @@ export default function ContentPlanDetails() {
             {isInternal && plan.status === 'devolvido' && todosEditados && (
               <button onClick={handleReenviarParaCliente} disabled={saving} className="h-10 px-6 bg-emerald-500 text-white rounded-xl font-black uppercase tracking-widest text-[10px] hover:brightness-110 transition-all disabled:opacity-50 flex items-center gap-2">
                 <Send className="w-4 h-4" /> Reenviar para Cliente
+              </button>
+            )}
+            {isInternal && (plan.status === 'aprovado_equipe' || plan.status === 'aprovado') && (
+              <button onClick={() => navigate(`/planejamento/${planId}/tarefas`)} className="h-10 px-6 bg-[#ff5351] text-white rounded-xl font-black uppercase tracking-widest text-[10px] hover:brightness-110 transition-all flex items-center gap-2">
+                <Zap className="w-4 h-4" /> Delegar Tarefas
               </button>
             )}
           </div>
@@ -1113,7 +1144,7 @@ export default function ContentPlanDetails() {
               <button onClick={() => { setShowReprovalModal(false); setReprovalType(null); setReprovalComment(''); }} className="flex-1 h-11 bg-zinc-900 border border-zinc-800 text-zinc-500 font-black uppercase tracking-widest text-[9px] rounded-xl hover:text-white transition-all">
                 Cancelar
               </button>
-              <button onClick={handleConfirmReproval()} disabled={!reprovalType} className="flex-1 h-11 bg-[#ff5351] text-white font-black uppercase tracking-widest text-[9px] rounded-xl hover:brightness-110 transition-all disabled:opacity-30">
+              <button onClick={() => handleConfirmReproval()} disabled={!reprovalType} className="flex-1 h-11 bg-[#ff5351] text-white font-black uppercase tracking-widest text-[9px] rounded-xl hover:brightness-110 transition-all disabled:opacity-30">
                 Confirmar
               </button>
             </div>
