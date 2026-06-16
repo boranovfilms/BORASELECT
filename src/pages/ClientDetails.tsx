@@ -193,6 +193,46 @@ export default function ClientDetails() {
     }
   };
 
+  const calcularProgresoPlano = (plan: ContentPlan): number => {
+    if (!linkedModel || !linkedModel.stages || linkedModel.stages.length === 0) {
+      return 0;
+    }
+
+    let etapasCumpridas = 0;
+    const totalEtapas = linkedModel.stages.length;
+
+    // Etapa 1: REDAÇÃO — plano existe (sempre cumprida)
+    if (plan.id) {
+      etapasCumpridas = 1;
+    }
+
+    // Etapa 2: APROVAÇÃO BORANOV — plano saiu de rascunho
+    if (plan.status && plan.status !== 'rascunho') {
+      etapasCumpridas = Math.max(etapasCumpridas, 2);
+    }
+
+    // Etapa 3: APROVAÇÃO CLIENTE — plano tem status aprovado/aprovado_equipe
+    if (plan.status === 'aprovado' || plan.status === 'aprovado_equipe' || plan.status === 'aguardando_validacao_equipe') {
+      etapasCumpridas = Math.max(etapasCumpridas, 3);
+    }
+
+    // Etapa 4: VALIDAÇÃO EQUIPE — plano tem status aprovado_equipe
+    if (plan.status === 'aprovado_equipe') {
+      etapasCumpridas = Math.max(etapasCumpridas, 4);
+    }
+
+    // Etapa 5: PRODUÇÃO — se temos posts com tasks
+    if (plan.posts && plan.posts.length > 0) {
+      const postsComTasks = plan.posts.filter(p => (p as any).tasks && (p as any).tasks.length > 0).length;
+      if (postsComTasks > 0) {
+        etapasCumpridas = Math.max(etapasCumpridas, 5);
+      }
+    }
+
+    const percent = totalEtapas > 0 ? Math.round((etapasCumpridas / totalEtapas) * 100) : 0;
+    return percent;
+  };
+
   const getStatusBadge = (status: string) => {
     const configs: any = {
       rascunho: { label: 'Rascunho', class: 'bg-zinc-800 text-zinc-400 border-zinc-700' },
@@ -316,6 +356,21 @@ export default function ClientDetails() {
               align: 'center'
             },
             { header: 'Status', accessor: (plan) => getStatusBadge(plan.status), align: 'center' },
+            {
+              header: 'Progresso',
+              accessor: (plan) => {
+                const percent = calcularProgresoPlano(plan);
+                return (
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 h-1.5 bg-zinc-800 rounded-full overflow-hidden min-w-[60px]">
+                      <div className="h-full bg-[#ff5351] rounded-full transition-all" style={{ width: `${percent}%` }} />
+                    </div>
+                    <span className="text-[10px] font-black text-[#ff5351] whitespace-nowrap">{percent}%</span>
+                  </div>
+                );
+              },
+              align: 'center'
+            },
             { 
               header: 'Última Atualização', 
               accessor: (plan) => {
@@ -379,4 +434,3 @@ export default function ClientDetails() {
     </div>
   );
 }
-
