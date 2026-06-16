@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { 
-  Users, UserPlus, Library, CheckSquare, ArrowRight, Loader2, Shield, Clock, CheckCircle2, Wallet, Bell, Building
+  Users, UserPlus, Library, CheckSquare, ArrowRight, Loader2, Shield, Clock, CheckCircle2, Wallet, Bell, Building, Zap
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { auth, db } from '../lib/firebase';
@@ -11,6 +11,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [userRole, setUserRole] = useState<string>('cliente');
   const [userData, setUserData] = useState<any>(null);
+  const [userEmail, setUserEmail] = useState('');
   const navigate = useNavigate();
   
   // Métricas Admin
@@ -31,7 +32,15 @@ export default function Dashboard() {
     myTasks: 0
   });
 
+  // Demandas Pendentes (para editor/designer)
+  const [demandMetrics, setDemandMetrics] = useState({
+    pending: 0,
+    inProgress: 0,
+    completed: 0
+  });
+
   const [todayTasks, setTodayTasks] = useState<any[]>([]);
+  const [pendingDemands, setPendingDemands] = useState<any[]>([]);
 
   useEffect(() => {
     loadUserAndInit();
@@ -41,9 +50,11 @@ export default function Dashboard() {
     const user = auth.currentUser;
     if (!user) return;
 
+    const cleanEmail = user.email?.toLowerCase().trim() || '';
+    setUserEmail(cleanEmail);
+
     try {
       let role = 'cliente';
-      const cleanEmail = user.email?.toLowerCase().trim();
 
       if (cleanEmail === 'admin@boraselect.com.br') {
         role = 'master';
@@ -57,7 +68,7 @@ export default function Dashboard() {
         }
       }
       setUserRole(role);
-      initListeners(role, cleanEmail || '');
+      initListeners(role, cleanEmail);
     } catch (error) {
       console.error(error);
     } finally {
@@ -67,6 +78,7 @@ export default function Dashboard() {
 
   const initListeners = (role: string, email: string) => {
     const isAdmin = ['master', 'admin', 'editor'].includes(role);
+    const isEditor = ['editor', 'designer', 'redator'].includes(role);
     const today = new Date().toISOString().split('T')[0];
 
     if (isAdmin) {
@@ -104,6 +116,24 @@ export default function Dashboard() {
         setAdminMetrics(prev => ({ ...prev, totalCredits: total }));
       });
 
+    } else if (isEditor) {
+      // Carrega demandas delegadas para editor/designer
+      loadPendingDemands(email);
+      
+      onSnapshot(query(collection(db, 'projects'), where('clientEmail', '==', email)), (snap) => {
+        const docs = snap.docs.map(d => d.data());
+        setClientMetrics(prev => ({
+          ...prev,
+          myProjects: docs.filter(d => d.status !== 'concluido').length,
+          completed: docs.filter(d => d.status === 'concluido').length
+        }));
+      });
+
+      onSnapshot(query(collection(db, 'tarefas'), where('delegadoPara', '==', email)), (snap) => {
+        const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        setClientMetrics(prev => ({ ...prev, myTasks: docs.filter(d => d.status === 'pendente').length }));
+        setTodayTasks(docs.filter(d => d.dataLimite === today && d.status === 'pendente'));
+      });
     } else {
       onSnapshot(query(collection(db, 'projects'), where('clientEmail', '==', email)), (snap) => {
         const docs = snap.docs.map(d => d.data());
@@ -122,6 +152,77 @@ export default function Dashboard() {
     }
   };
 
+  const loadPendingDemands = async (email: string) => {
+    try {
+      const demandasSnap = await getDocs(collection(db, 'demandas'));
+      const demands: any[] = [];
+
+      for (const demandaDoc of demandasSnap.docs) {
+        const demanda = demandaDoc.data();
+        const posts = demanda.posts || [];
+        
+        // Procura posts com tasks delegadas para este usuário
+        for (const post of posts) {
+          const tasks = post.tasks || [];
+          const userTasks = tasks.filter((t: any) => t.responsibleEmail?.toLowerCase() === email.toLowerCase());
+          
+          if (userTasks.length > 0) {
+            // Busca info do cliente
+            const clientSnap = await getDocs(query(collection(db, 'clientes'), where('id', '==', demanda.clientId)));
+            const clientData = clientSnap.docs[0]?.data();
+            
+            demands.push({
+              id: demandaDoc.id,
+              demandaName: demanda.name,
+              demandaMes: demanda.monthReference,
+              clientName: clientData?.name || 'Cliente',
+              clientId: demanda.clientId,
+              postNumber: post.number,
+              postHeadline: post.headline,
+              postType: post.type,
+              publishDate: post.publishDate,
+              tasks: userTasks,
+              taskTypes: userTasks.map(t => t.dept).join(', '),
+              taskLabels: userTasks.map(t => {
+                const icons: any = {
+                  'video': '🎬',
+                  'design': '🎨',
+                  'redacao': '✍️',
+                  'midia_social': '📱'
+                };
+                return `${icons[t.dept] || '•'} ${t.deptLabel}`;
+              }).join(' + '),
+              isUrgent: isUrgentDate(post.publishDate),
+              status: post.status
+            });
+          }
+        }
+      }
+
+      setPendingDemands(demands);
+      setDemandMetrics({
+        pending: demands.filter(d => d.tasks.some((t: any) => t.status === 'pendente')).length,
+        inProgress: demands.filter(d => d.tasks.some((t: any) => t.status === 'em_andamento')).length,
+        completed: demands.filter(d => d.tasks.every((t: any) => t.status === 'concluido')).length
+      });
+    } catch (error) {
+      console.warn('Erro ao carregar demandas:', error);
+    }
+  };
+
+  const isUrgentDate = (dateStr: string): boolean => {
+    try {
+      const [dia, mes, ano] = dateStr.split('/').map(Number);
+      const date = new Date(ano, mes - 1, dia);
+      const hoje = new Date();
+      const diffMs = date.getTime() - hoje.getTime();
+      const diffDias = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+      return diffDias <= 2 && diffDias >= 0;
+    } catch {
+      return false;
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
@@ -131,8 +232,9 @@ export default function Dashboard() {
   }
 
   const isAdminView = ['master', 'admin', 'editor'].includes(userRole);
+  const isEditorView = ['editor', 'designer', 'redator'].includes(userRole) && userRole !== 'master' && userRole !== 'admin';
 
-  if (isAdminView) {
+  if (isAdminView && userRole !== 'editor' && userRole !== 'designer' && userRole !== 'redator') {
     return (
       <div className="space-y-8 pb-20 animate-in fade-in duration-700">
         <header>
@@ -173,6 +275,49 @@ export default function Dashboard() {
     );
   }
 
+  // View do Editor/Designer
+  if (isEditorView) {
+    return (
+      <div className="space-y-8 pb-20 animate-in fade-in duration-700">
+        <header>
+          <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#ff5351] mb-2">Seu Painel</p>
+          <h1 className="text-5xl font-black text-white uppercase italic tracking-tighter">Demandas</h1>
+        </header>
+
+        {demandMetrics.pending > 0 && (
+          <div className="bg-[#ff5351]/10 border border-[#ff5351]/20 rounded-3xl p-6 flex items-center justify-between animate-pulse">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-[#ff5351] flex items-center justify-center shadow-lg shadow-[#ff5351]/20">
+                <Zap className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <h3 className="text-white font-bold uppercase italic">Demandas Pendentes</h3>
+                <p className="text-zinc-500 text-xs font-medium">Você tem tarefas aguardando aceitar e executar.</p>
+              </div>
+            </div>
+            <div className="px-4 py-2 bg-[#ff5351] text-white text-xs font-black rounded-xl">{demandMetrics.pending} PENDENTES</div>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <StatCard label="Demandas Pendentes" value={demandMetrics.pending} icon={Zap} color="orange" />
+          <StatCard label="Em Andamento" value={demandMetrics.inProgress} icon={Clock} color="blue" />
+          <StatCard label="Concluídas" value={demandMetrics.completed} icon={CheckCircle2} color="emerald" />
+        </div>
+
+        <PendingDemandsSection demands={pendingDemands} navigate={navigate} />
+
+        <TodayTasks tasks={todayTasks} isAdmin={false} navigate={navigate} />
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <button onClick={() => navigate('/projetos')} className="h-14 bg-white text-black rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-[#ff5351] hover:text-white transition-all shadow-xl flex items-center justify-center gap-3">Acessar Demandas <ArrowRight className="w-4 h-4" /></button>
+          <button onClick={() => navigate('/tarefas')} className="h-14 bg-zinc-900 border border-zinc-800 text-white rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-zinc-800 transition-all flex items-center justify-center gap-3">Tarefas Diárias</button>
+        </div>
+      </div>
+    );
+  }
+
+  // View do Cliente padrão
   return (
     <div className="space-y-8 pb-20 animate-in fade-in duration-700">
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-6">
@@ -243,6 +388,59 @@ function StatCard({ label, value, icon: Icon, color }: any) {
   );
 }
 
+function PendingDemandsSection({ demands, navigate }: any) {
+  if (demands.length === 0) {
+    return null;
+  }
+
+  return (
+    <section className="bg-[#1a1a1a] border border-zinc-800 rounded-[32px] overflow-hidden shadow-xl">
+      <div className="p-8 border-b border-zinc-800 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-[#ff5351]/10 rounded-lg"><Zap className="w-4 h-4 text-[#ff5351]" /></div>
+          <div>
+            <h2 className="text-xl font-black text-white uppercase tracking-tight italic">Demandas Pendentes</h2>
+            <p className="text-zinc-500 text-[10px] font-bold uppercase tracking-widest">Tarefas delegadas para você</p>
+          </div>
+        </div>
+        <button onClick={() => navigate('/projetos')} className="px-4 py-2 border border-zinc-700 hover:border-[#ff5351] rounded-xl text-[10px] font-black uppercase tracking-widest text-zinc-400 hover:text-white transition-all flex items-center gap-2">Ver Todas <ArrowRight className="w-3 h-3" /></button>
+      </div>
+
+      <div className="p-4 space-y-2">
+        {demands.slice(0, 5).map((demand: any) => (
+          <div 
+            key={`${demand.id}-${demand.postNumber}`}
+            onClick={() => navigate(`/planejamento/${demand.id}`)}
+            className="flex items-center justify-between p-4 bg-zinc-900/50 border border-zinc-800 rounded-2xl hover:border-[#ff5351]/30 transition-all group cursor-pointer"
+          >
+            <div className="flex items-center gap-4 flex-1">
+              <div className={cn("w-1.5 h-1.5 rounded-full shadow-[0_0_8px]", demand.isUrgent ? 'bg-red-500 shadow-red-500' : 'bg-[#ff5351] shadow-[#ff5351]')} />
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-1">
+                  <p className="text-white text-sm font-bold uppercase group-hover:text-[#ff5351] transition-colors">{demand.clientName}</p>
+                  <span className="text-[8px] text-zinc-600">•</span>
+                  <p className="text-[9px] text-zinc-500 font-black uppercase">{demand.demandaName}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[9px] font-black text-zinc-600">Post #{String(demand.postNumber).padStart(2, '0')}</span>
+                  <span className="text-[8px] text-zinc-700">•</span>
+                  <span className="text-[8px] text-zinc-600">{demand.taskLabels}</span>
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 ml-4">
+              <div className="text-right">
+                <p className="text-[9px] font-black text-zinc-500">{demand.publishDate}</p>
+                {demand.isUrgent && <p className="text-[7px] font-black text-red-500 uppercase mt-0.5">URGENTE</p>}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function TodayTasks({ tasks, isAdmin, navigate }: any) {
   const getPriorityBadge = (p: string) => {
     const colors: any = { alta: 'bg-red-500/10 text-red-400 border-red-500/20', media: 'bg-amber-500/10 text-amber-400 border-amber-500/20', baixa: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' };
@@ -255,7 +453,7 @@ function TodayTasks({ tasks, isAdmin, navigate }: any) {
         <div className="flex items-center gap-3">
           <div className="p-2 bg-[#ff5351]/10 rounded-lg"><Clock className="w-4 h-4 text-[#ff5351]" /></div>
           <div>
-            <h2 className="text-xl font-black text-white uppercase tracking-tight italic">Tarefas do Dia</h2>
+            <h2 className="text-xl font-black text-white uppercase tracking-tight italic">Tarefas Diárias</h2>
             <p className="text-zinc-500 text-[10px] font-bold uppercase tracking-widest">Atividades com prazo para hoje</p>
           </div>
         </div>
