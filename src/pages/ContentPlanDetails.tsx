@@ -9,6 +9,7 @@ import { doc, getDoc, collection, query, where, getDocs, addDoc, serverTimestamp
 import { auth, db } from '../lib/firebase';
 import { contentPlanService, ContentPlan, ContentPost } from '../services/contentPlanService';
 import { teamService, TeamMember } from '../services/teamService';
+import { notificacaoService } from '../services/notificacaoService';
 import { cn } from '../lib/utils';
 
 export default function ContentPlanDetails() {
@@ -55,7 +56,6 @@ export default function ContentPlanDetails() {
     loadUserRole();
   }, [planId]);
 
-  // ✅ CORRIGIDO: seleção do post inicial roda APÓS plan E userRole estarem prontos
   useEffect(() => {
     if (!plan || selectedPostId || !roleLoaded) return;
     
@@ -87,7 +87,6 @@ export default function ContentPlanDetails() {
         setRoleLoaded(true);
         return;
       }
-      // ✅ Busca em boraselect primeiro
       const qBora = query(collection(db, 'boraselect'), where('email', '==', currentEmail));
       const snapBora = await getDocs(qBora);
       if (!snapBora.empty) {
@@ -95,7 +94,6 @@ export default function ContentPlanDetails() {
         setRoleLoaded(true);
         return;
       }
-      // ✅ Depois em clientes
       const q = query(collection(db, 'clientes'), where('email', '==', currentEmail));
       const snap = await getDocs(q);
       if (!snap.empty) {
@@ -147,7 +145,6 @@ export default function ContentPlanDetails() {
   const notifyTeam = async () => {
     if (!plan) return;
     try {
-      const currentUserEmail = auth.currentUser?.email?.toLowerCase();
       const teamQuery = query(
         collection(db, 'clientes'),
         where('type', '==', 'membro'),
@@ -156,28 +153,17 @@ export default function ContentPlanDetails() {
       const teamSnap = await getDocs(teamQuery);
       const members = teamSnap.docs.map(d => ({ id: d.id, ...d.data() as any }));
       
-      const notifPromises = members
-        .filter(m => m.email?.toLowerCase() !== currentUserEmail)
-        .map(member => 
-          addDoc(collection(db, 'tarefas'), {
-            nome: `VALIDAR PLANEJAMENTO: ${plan.name}`,
-            prioridade: 'alta',
-            status: 'pendente',
-            dataCriacao: serverTimestamp(),
-            responsavelCriacao: auth.currentUser?.displayName || 'Cliente',
-            responsavelCriacaoEmail: currentUserEmail || '',
-            responsavelTarefa: member.name || member.email,
-            tipoAcesso: 'particular',
-            delegadoPara: member.email?.toLowerCase(),
-            delegadoNome: member.name || member.email,
-            vistoPeloDelegado: false,
-            descricao: `O planejamento "${plan.name}" foi aprovado e aguarda sua validação.`,
-            planId: plan.id,
-            tipo: 'validacao_planejamento'
-          })
-        );
-      
-      await Promise.all(notifPromises);
+      for (const member of members) {
+        await notificacaoService.criar({
+          para: member.email?.toLowerCase(),
+          tipo: 'planejamento_aprovado_cliente',
+          titulo: 'Planejamento Aprovado pelo Cliente',
+          descricao: `Planejamento "${plan.name}" foi aprovado e aguarda sua validação`,
+          planId: planId,
+          visto: false,
+          criadoEm: new Date().toISOString()
+        });
+      }
     } catch (e) {
       console.warn('Erro ao notificar equipe:', e);
     }
@@ -186,21 +172,14 @@ export default function ContentPlanDetails() {
   const notifyRedator = async () => {
     if (!plan || !planId) return;
     try {
-      await addDoc(collection(db, 'tarefas'), {
-        nome: `PLANEJAMENTO VALIDADO PELA EQUIPE: ${plan.name}`,
-        prioridade: 'alta',
-        status: 'pendente',
-        dataCriacao: serverTimestamp(),
-        responsavelCriacao: auth.currentUser?.displayName || 'Equipe',
-        responsavelCriacaoEmail: auth.currentUser?.email || '',
-        responsavelTarefa: 'Boranov',
-        tipoAcesso: 'particular',
-        delegadoPara: 'boranovfilms@gmail.com',
-        delegadoNome: 'Boranov',
-        vistoPeloDelegado: false,
-        descricao: `O planejamento "${plan.name}" foi validado pela equipe e está pronto para delegação.`,
+      await notificacaoService.criar({
+        para: 'boranovfilms@gmail.com',
+        tipo: 'planejamento_validado_equipe',
+        titulo: 'Planejamento Validado pela Equipe',
+        descricao: `Planejamento "${plan.name}" foi validado pela equipe e está pronto para delegação`,
         planId: planId,
-        tipo: 'planejamento_validado_equipe'
+        visto: false,
+        criadoEm: new Date().toISOString()
       });
     } catch (e) {
       console.warn('Erro ao notificar redator:', e);
@@ -314,7 +293,6 @@ export default function ContentPlanDetails() {
     }
   };
 
-  // ✅ CORRIGIDO: verifica se ainda há posts 'aprovado' (não validados ainda)
   const handleValidatePost = async () => {
     if (!planId || !selectedPostId) return;
     setSaving(true);
@@ -326,7 +304,6 @@ export default function ContentPlanDetails() {
       if (updatedPlan) {
         setPlan(updatedPlan);
         
-        // ✅ CORRETO: verifica se ainda há posts com status 'aprovado'
         const postsAindaAprovados = updatedPlan.posts.filter(p => p.status === 'aprovado');
         const algumValidado = updatedPlan.posts.some(p => p.status === 'validado_equipe');
         const todosValidados = postsAindaAprovados.length === 0 && algumValidado;
@@ -351,7 +328,6 @@ export default function ContentPlanDetails() {
     }
   };
 
-  // ✅ CORRIGIDO: mesma lógica corrigida
   const handleEditByEquipe = async () => {
     if (!planId || !selectedPostId || !editingCaption) return;
     setSaving(true);
@@ -481,21 +457,14 @@ export default function ContentPlanDetails() {
         updatedAt: serverTimestamp()
       });
 
-      await addDoc(collection(db, 'tarefas'), {
-        nome: `PLANEJAMENTO REVISADO: ${plan.name}`,
-        prioridade: 'alta',
-        status: 'pendente',
-        dataCriacao: serverTimestamp(),
-        responsavelCriacao: auth.currentUser?.displayName || 'Redator',
-        responsavelCriacaoEmail: auth.currentUser?.email || '',
-        responsavelTarefa: targetName,
-        tipoAcesso: 'particular',
-        delegadoPara: targetEmail,
-        delegadoNome: targetName,
-        vistoPeloDelegado: false,
-        descricao: `O planejamento "${plan.name}" foi revisado pelo redator e está pronto para sua avaliação.`,
+      await notificacaoService.criar({
+        para: targetEmail,
+        tipo: 'planejamento_revisado',
+        titulo: 'Planejamento Revisado',
+        descricao: `Planejamento "${plan.name}" foi revisado pelo redator e está pronto para sua avaliação`,
         planId: planId,
-        tipo: 'planejamento_revisado'
+        visto: false,
+        criadoEm: new Date().toISOString()
       });
 
       await loadData();
