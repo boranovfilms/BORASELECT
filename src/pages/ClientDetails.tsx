@@ -194,12 +194,9 @@ export default function ClientDetails() {
   };
 
   const calcularProgresoPlano = (plan: ContentPlan): number => {
-    if (!linkedModel || !linkedModel.stages || linkedModel.stages.length === 0) {
-      return 0;
-    }
-
     let etapasCumpridas = 0;
-    const totalEtapas = linkedModel.stages.length;
+    // Usa linkedModel se disponível, senão usa 12 como padrão
+    const totalEtapas = linkedModel?.stages?.length || 12;
 
     // Etapa 1: REDAÇÃO — plano existe (sempre cumprida)
     if (plan.id) {
