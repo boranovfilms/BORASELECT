@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { 
-  Users, UserPlus, Library, CheckSquare, ArrowRight, Loader2, Shield, Clock, CheckCircle2, Wallet, Bell, Building, Zap
+  Users, UserPlus, Library, CheckSquare, ArrowRight, Loader2, Shield, Clock, CheckCircle2, Wallet, Bell
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { auth, db } from '../lib/firebase';
@@ -11,10 +11,8 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [userRole, setUserRole] = useState<string>('cliente');
   const [userData, setUserData] = useState<any>(null);
-  const [userEmail, setUserEmail] = useState('');
   const navigate = useNavigate();
   
-  // Métricas Admin
   const [adminMetrics, setAdminMetrics] = useState({
     activeClients: 0,
     pendingClients: 0,
@@ -25,22 +23,13 @@ export default function Dashboard() {
     totalCredits: 0
   });
 
-  // Métricas Cliente
   const [clientMetrics, setClientMetrics] = useState({
     myProjects: 0,
     completed: 0,
     myTasks: 0
   });
 
-  // Demandas Pendentes (para editor/designer)
-  const [demandMetrics, setDemandMetrics] = useState({
-    pending: 0,
-    inProgress: 0,
-    completed: 0
-  });
-
   const [todayTasks, setTodayTasks] = useState<any[]>([]);
-  const [pendingDemands, setPendingDemands] = useState<any[]>([]);
 
   useEffect(() => {
     loadUserAndInit();
@@ -51,7 +40,6 @@ export default function Dashboard() {
     if (!user) return;
 
     const cleanEmail = user.email?.toLowerCase().trim() || '';
-    setUserEmail(cleanEmail);
 
     try {
       let role = 'cliente';
@@ -117,11 +105,6 @@ export default function Dashboard() {
       });
 
     } else if (isEditor) {
-      // TODO: Ativar loadPendingDemands depois de resolver permissões
-      // loadPendingDemands(email);
-      setPendingDemands([]);
-      setDemandMetrics({ pending: 0, inProgress: 0, completed: 0 });
-      
       onSnapshot(query(collection(db, 'projects'), where('clientEmail', '==', email)), (snap) => {
         const docs = snap.docs.map(d => d.data());
         setClientMetrics(prev => ({
@@ -162,10 +145,11 @@ export default function Dashboard() {
     );
   }
 
-  const isAdminView = ['master', 'admin'].includes(userRole);
-  const isEditorView = ['editor', 'designer', 'redator'].includes(userRole) && userRole !== 'master' && userRole !== 'admin';
+  const isAdmin = ['master', 'admin'].includes(userRole);
+  const isEditor = ['editor', 'designer', 'redator'].includes(userRole);
 
-  if (isAdminView) {
+  // Admin View
+  if (isAdmin) {
     return (
       <div className="space-y-8 pb-20 animate-in fade-in duration-700">
         <header>
@@ -181,7 +165,7 @@ export default function Dashboard() {
               </div>
               <div>
                 <h3 className="text-white font-bold uppercase italic">Atenção Master</h3>
-                <p className="text-zinc-500 text-xs font-medium">Existem tarefas aguardando aprovação do cliente.</p>
+                <p className="text-zinc-500 text-xs font-medium">Existem tarefas aguardando aprovação.</p>
               </div>
             </div>
             <div className="px-4 py-2 bg-[#ff5351] text-white text-xs font-black rounded-xl">{adminMetrics.awaitingApproval} PENDENTES</div>
@@ -206,71 +190,37 @@ export default function Dashboard() {
     );
   }
 
-  // View do Editor/Designer
-  if (isEditorView) {
+  // Editor/Designer View
+  if (isEditor) {
     return (
       <div className="space-y-8 pb-20 animate-in fade-in duration-700">
         <header>
           <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#ff5351] mb-2">Seu Painel</p>
-          <h1 className="text-5xl font-black text-white uppercase italic tracking-tighter">Demandas</h1>
+          <h1 className="text-5xl font-black text-white uppercase italic tracking-tighter">Olá, Editor</h1>
         </header>
 
-        {demandMetrics.pending > 0 && (
-          <div className="bg-[#ff5351]/10 border border-[#ff5351]/20 rounded-3xl p-6 flex items-center justify-between animate-pulse">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-[#ff5351] flex items-center justify-center shadow-lg shadow-[#ff5351]/20">
-                <Zap className="w-6 h-6 text-white" />
-              </div>
-              <div>
-                <h3 className="text-white font-bold uppercase italic">Demandas Pendentes</h3>
-                <p className="text-zinc-500 text-xs font-medium">Você tem tarefas aguardando aceitar e executar.</p>
-              </div>
-            </div>
-            <div className="px-4 py-2 bg-[#ff5351] text-white text-xs font-black rounded-xl">{demandMetrics.pending} PENDENTES</div>
-          </div>
-        )}
-
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <StatCard label="Demandas Pendentes" value={demandMetrics.pending} icon={Zap} color="orange" />
-          <StatCard label="Em Andamento" value={demandMetrics.inProgress} icon={Clock} color="blue" />
-          <StatCard label="Concluídas" value={demandMetrics.completed} icon={CheckCircle2} color="emerald" />
+          <StatCard label="Meus Projetos" value={clientMetrics.myProjects} icon={Library} color="blue" />
+          <StatCard label="Concluídos" value={clientMetrics.completed} icon={CheckCircle2} color="emerald" />
+          <StatCard label="Minhas Tarefas" value={clientMetrics.myTasks} icon={CheckSquare} color="orange" />
         </div>
-
-        <PendingDemandsSection demands={pendingDemands} navigate={navigate} />
 
         <TodayTasks tasks={todayTasks} isAdmin={false} navigate={navigate} />
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <button onClick={() => navigate('/projetos')} className="h-14 bg-white text-black rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-[#ff5351] hover:text-white transition-all shadow-xl flex items-center justify-center gap-3">Acessar Demandas <ArrowRight className="w-4 h-4" /></button>
+          <button onClick={() => navigate('/projetos')} className="h-14 bg-white text-black rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-[#ff5351] hover:text-white transition-all shadow-xl flex items-center justify-center gap-3">Acessar Meus Projetos <ArrowRight className="w-4 h-4" /></button>
           <button onClick={() => navigate('/tarefas')} className="h-14 bg-zinc-900 border border-zinc-800 text-white rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-zinc-800 transition-all flex items-center justify-center gap-3">Tarefas Diárias</button>
         </div>
       </div>
     );
   }
 
-  // View do Cliente padrão
+  // Cliente View (padrão)
   return (
     <div className="space-y-8 pb-20 animate-in fade-in duration-700">
-      <header className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div className="flex items-center gap-6">
-          <div className="w-20 h-20 rounded-[28px] bg-zinc-900 border border-zinc-800 p-2 flex items-center justify-center overflow-hidden shadow-2xl">
-            {userData?.logoUrl ? <img src={userData.logoUrl} className="w-full h-full object-contain" /> : <Building className="w-8 h-8 text-zinc-700" />}
-          </div>
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#ff5351] mb-1">Cockpit Boranov</p>
-            <h1 className="text-4xl font-black text-white uppercase italic tracking-tighter">{userData?.name || 'Cliente'}</h1>
-            <div className="flex items-center gap-2 mt-2">
-              <div className="px-2 py-0.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 text-[8px] font-black rounded-md uppercase">Conta Ativa</div>
-            </div>
-          </div>
-        </div>
-        <div className="bg-[#1a1a1a] border border-zinc-800 rounded-2xl px-6 py-4">
-           <p className="text-zinc-500 text-[10px] font-bold uppercase tracking-widest mb-1 text-center md:text-left">Seu Saldo</p>
-           <div className="flex items-center gap-3">
-              <Wallet className="w-5 h-5 text-[#ff5351]" />
-              <span className="text-2xl font-black text-white italic">{userData?.creditsTotal || 0} CRÉDITOS</span>
-           </div>
-        </div>
+      <header>
+        <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#ff5351] mb-2">Cockpit Boranov</p>
+        <h1 className="text-4xl font-black text-white uppercase italic tracking-tighter">{userData?.name || 'Cliente'}</h1>
       </header>
 
       <div className="bg-[linear-gradient(135deg,rgba(255,83,81,0.1),transparent)] border border-[#ff5351]/20 rounded-[40px] p-10 shadow-2xl relative overflow-hidden">
@@ -283,7 +233,7 @@ export default function Dashboard() {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <StatCard label="Meus Projetos" value={clientMetrics.myProjects} icon={Library} color="blue" />
-        <StatCard label="Projetos Concluídos" value={clientMetrics.completed} icon={CheckCircle2} color="indigo" />
+        <StatCard label="Concluídos" value={clientMetrics.completed} icon={CheckCircle2} color="indigo" />
         <StatCard label="Minhas Tarefas" value={clientMetrics.myTasks} icon={CheckSquare} color="orange" />
       </div>
 
@@ -291,7 +241,7 @@ export default function Dashboard() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <button onClick={() => navigate('/projetos')} className="h-14 bg-white text-black rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-[#ff5351] hover:text-white transition-all shadow-xl flex items-center justify-center gap-3">Acessar Meus Projetos <ArrowRight className="w-4 h-4" /></button>
-        <button onClick={() => navigate('/tarefas')} className="h-14 bg-zinc-900 border border-zinc-800 text-white rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-zinc-800 transition-all flex items-center justify-center gap-3">Ver Todas as Tarefas</button>
+        <button onClick={() => navigate('/tarefas')} className="h-14 bg-zinc-900 border border-zinc-800 text-white rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-zinc-800 transition-all flex items-center justify-center gap-3">Ver Tarefas</button>
       </div>
     </div>
   );
@@ -319,62 +269,13 @@ function StatCard({ label, value, icon: Icon, color }: any) {
   );
 }
 
-function PendingDemandsSection({ demands, navigate }: any) {
-  if (demands.length === 0) {
-    return null;
-  }
-
-  return (
-    <section className="bg-[#1a1a1a] border border-zinc-800 rounded-[32px] overflow-hidden shadow-xl">
-      <div className="p-8 border-b border-zinc-800 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-[#ff5351]/10 rounded-lg"><Zap className="w-4 h-4 text-[#ff5351]" /></div>
-          <div>
-            <h2 className="text-xl font-black text-white uppercase tracking-tight italic">Demandas Pendentes</h2>
-            <p className="text-zinc-500 text-[10px] font-bold uppercase tracking-widest">Tarefas delegadas para você</p>
-          </div>
-        </div>
-        <button onClick={() => navigate('/projetos')} className="px-4 py-2 border border-zinc-700 hover:border-[#ff5351] rounded-xl text-[10px] font-black uppercase tracking-widest text-zinc-400 hover:text-white transition-all flex items-center gap-2">Ver Todas <ArrowRight className="w-3 h-3" /></button>
-      </div>
-
-      <div className="p-4 space-y-2">
-        {demands.slice(0, 5).map((demand: any) => (
-          <div 
-            key={`${demand.id}-${demand.postNumber}`}
-            onClick={() => navigate(`/planejamento/${demand.id}`)}
-            className="flex items-center justify-between p-4 bg-zinc-900/50 border border-zinc-800 rounded-2xl hover:border-[#ff5351]/30 transition-all group cursor-pointer"
-          >
-            <div className="flex items-center gap-4 flex-1">
-              <div className={cn("w-1.5 h-1.5 rounded-full shadow-[0_0_8px]", demand.isUrgent ? 'bg-red-500 shadow-red-500' : 'bg-[#ff5351] shadow-[#ff5351]')} />
-              <div className="flex-1">
-                <div className="flex items-center gap-2 mb-1">
-                  <p className="text-white text-sm font-bold uppercase group-hover:text-[#ff5351] transition-colors">{demand.clientName}</p>
-                  <span className="text-[8px] text-zinc-600">•</span>
-                  <p className="text-[9px] text-zinc-500 font-black uppercase">{demand.demandaName}</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-[9px] font-black text-zinc-600">Post #{String(demand.postNumber).padStart(2, '0')}</span>
-                  <span className="text-[8px] text-zinc-700">•</span>
-                  <span className="text-[8px] text-zinc-600">{demand.taskLabels}</span>
-                </div>
-              </div>
-            </div>
-            <div className="flex items-center gap-3 ml-4">
-              <div className="text-right">
-                <p className="text-[9px] font-black text-zinc-500">{demand.publishDate}</p>
-                {demand.isUrgent && <p className="text-[7px] font-black text-red-500 uppercase mt-0.5">URGENTE</p>}
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
-
 function TodayTasks({ tasks, isAdmin, navigate }: any) {
   const getPriorityBadge = (p: string) => {
-    const colors: any = { alta: 'bg-red-500/10 text-red-400 border-red-500/20', media: 'bg-amber-500/10 text-amber-400 border-amber-500/20', baixa: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' };
+    const colors: any = { 
+      alta: 'bg-red-500/10 text-red-400 border-red-500/20', 
+      media: 'bg-amber-500/10 text-amber-400 border-amber-500/20', 
+      baixa: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' 
+    };
     return <span className={cn("px-2 py-0.5 border rounded text-[8px] font-black uppercase tracking-widest", colors[p])}>{p}</span>;
   };
 
@@ -405,7 +306,7 @@ function TodayTasks({ tasks, isAdmin, navigate }: any) {
                 <div className="w-1.5 h-1.5 rounded-full bg-[#ff5351] shadow-[0_0_8px_#ff5351]" />
                 <div>
                   <p className="text-white text-sm font-bold uppercase group-hover:text-[#ff5351] transition-colors">{task.nome}</p>
-                  <p className="text-zinc-500 text-[9px] font-black uppercase tracking-widest">{isAdmin ? task.responsavelTarefa : 'Equipe Boranov'}</p>
+                  <p className="text-zinc-500 text-[9px] font-black uppercase tracking-widest">{isAdmin ? task.responsavelTarefa : 'Equipe'}</p>
                 </div>
               </div>
               <div className="flex items-center gap-4">
