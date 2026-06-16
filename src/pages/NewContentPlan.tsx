@@ -7,6 +7,7 @@ import { toast } from 'react-hot-toast';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { contentPlanService, parsePostsFromText, ContentPost } from '../services/contentPlanService';
+import { notificacaoService } from '../services/notificacaoService';
 import { cn } from '../lib/utils';
 
 type Step = 'form' | 'review';
@@ -94,7 +95,7 @@ export default function NewContentPlan() {
     if (!clientId) return;
     setSaving(true);
     try {
-      await contentPlanService.createPlan({
+      const planId = await contentPlanService.createPlan({
         clientId,
         name: form.name,
         monthReference: form.monthReference,
@@ -102,7 +103,21 @@ export default function NewContentPlan() {
         posts: posts,
         status: status
       });
-      toast.success('Planejamento criado!');
+      
+      // ✅ ENVIAR NOTIFICAÇÃO PRO MASTER
+      if (status === 'rascunho') {
+        await notificacaoService.criar({
+          para: 'admin@boraselect.com.br',
+          tipo: 'planejamento_criado',
+          titulo: 'Novo Planejamento Criado',
+          descricao: `Novo planejamento criado: ${form.name} + ${clientName}`,
+          planId: planId,
+          visto: false,
+          criadoEm: new Date().toISOString()
+        });
+      }
+      
+      toast.success('Planejamento salvo!');
       navigate(`/clients/${clientId}`);
     } catch (error: any) {
       console.error('ERRO AO SALVAR:', error);
