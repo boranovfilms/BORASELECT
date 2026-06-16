@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, Calendar, Check, X, Edit3, Loader2, Send,
-  ChevronDown, ChevronUp, CheckCircle2, AlertCircle, Target, Hash, Zap, RotateCcw, FileText, Users
+  ChevronDown, ChevronUp, CheckCircle2, AlertCircle, Target, Hash, Zap, RotateCcw, FileText, Users, Upload
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { doc, getDoc, collection, query, where, getDocs, addDoc, serverTimestamp, updateDoc } from 'firebase/firestore';
@@ -23,6 +23,7 @@ export default function ContentPlanDetails() {
   const [saving, setSaving] = useState(false);
   const [userRole, setUserRole] = useState('cliente');
   const [roleLoaded, setRoleLoaded] = useState(false);
+  const [userEmail, setUserEmail] = useState('');
   
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -39,6 +40,7 @@ export default function ContentPlanDetails() {
   const [reprovalType, setReprovalType] = useState<'correcao' | 'descartar' | null>(null);
   const [completionMode, setCompletionMode] = useState<'cliente' | 'equipe'>('cliente');
   const [activeTab, setActiveTab] = useState<'posts' | 'historico'>('posts');
+  const [showMyDemandsFilter, setShowMyDemandsFilter] = useState(false);
 
   const user = auth.currentUser;
   const currentEmail = user?.email?.toLowerCase();
@@ -49,6 +51,7 @@ export default function ContentPlanDetails() {
   const isEquipe = userRole === 'equipe';
   const internalRoles = ['master', 'admin', 'redator', 'editor'];
   const isInternal = internalRoles.includes(userRole);
+  const isEditor = ['editor', 'designer', 'redator'].includes(userRole);
   const hasApprovalPower = isClient || isTeamMember;
 
   useEffect(() => {
@@ -62,8 +65,6 @@ export default function ContentPlanDetails() {
     if (userRole === 'equipe') {
       const primeiroAprovado = plan.posts.find(p => p.status === 'aprovado');
       if (primeiroAprovado) { setSelectedPostId(primeiroAprovado.id); return; }
-      const primeiroValidado = plan.posts.find(p => p.status === 'validado_equipe');
-      if (primeiroValidado) { setSelectedPostId(primeiroValidado.id); return; }
     }
     
     if (internalRoles.includes(userRole) && plan.status === 'devolvido') {
@@ -81,6 +82,7 @@ export default function ContentPlanDetails() {
 
   const loadUserRole = async () => {
     if (!currentEmail) return;
+    setUserEmail(currentEmail);
     try {
       if (currentEmail === 'admin@boraselect.com.br') {
         setUserRole('master');
@@ -142,6 +144,14 @@ export default function ContentPlanDetails() {
   const validatedCount = plan?.posts.filter(p => p.status === 'validado_equipe').length || 0;
   const totalPosts = plan?.posts.length || 0;
 
+  // Filtra posts para editor/designer (apenas posts com tasks delegadas pra ele)
+  const myPosts = showMyDemandsFilter && isEditor 
+    ? plan?.posts.filter(post => {
+        const tasks = (post as any).tasks || [];
+        return tasks.some((t: any) => t.responsibleEmail?.toLowerCase() === currentEmail?.toLowerCase());
+      }) || []
+    : plan?.posts || [];
+
   const notifyTeam = async () => {
     if (!plan) return;
     try {
@@ -201,6 +211,44 @@ export default function ContentPlanDetails() {
       console.log('Notificação enviada com sucesso para:', clientEmail);
     } catch (e) {
       console.error('Erro ao notificar cliente:', e);
+    }
+  };
+
+  const acceptDemand = async () => {
+    if (!selectedPost || !planId || !plan) return;
+    setSaving(true);
+    try {
+      const tasks = (selectedPost as any).tasks || [];
+      const userTask = tasks.find((t: any) => t.responsibleEmail?.toLowerCase() === currentEmail?.toLowerCase());
+      
+      if (!userTask) {
+        toast.error('Tarefa não encontrada');
+        return;
+      }
+
+      // Atualiza o status da task para em_andamento
+      const updatedPosts = plan.posts.map(p => {
+        if (p.id !== selectedPost.id) return p;
+        return {
+          ...p,
+          tasks: (p as any).tasks.map((t: any) => 
+            t.id === userTask.id ? { ...t, status: 'em_andamento' } : t
+          )
+        };
+      });
+
+      await updateDoc(doc(db, 'demandas', planId), {
+        posts: updatedPosts,
+        updatedAt: serverTimestamp()
+      });
+
+      toast.success('Demanda aceita! Você pode começar a trabalhar.');
+      await loadData();
+    } catch (error) {
+      console.error(error);
+      toast.error('Erro ao aceitar demanda');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -540,82 +588,36 @@ export default function ContentPlanDetails() {
     }
   };
 
-  const getTimelineEvents = () => {
-    if (!plan) return [];
-    const events: any[] = [];
+  const getTasksForPost = (post: ContentPost): any[] => {
+    return (post as any).tasks || [];
+  };
 
-    events.push({
-      type: 'criado',
-      title: 'Planejamento Criado',
-      date: plan.createdAt ? new Date(plan.createdAt).toLocaleDateString('pt-BR') : '—',
-      description: `Planejamento "${plan.name}" criado com ${plan.posts.length} posts.`,
-      icon: <FileText className="w-3.5 h-3.5 text-zinc-400" />,
-      color: 'border-zinc-600 bg-zinc-900'
-    });
+  const getUserTasksForPost = (post: ContentPost): any[] => {
+    const tasks = getTasksForPost(post);
+    return tasks.filter((t: any) => t.responsibleEmail?.toLowerCase() === currentEmail?.toLowerCase());
+  };
 
-    if (plan.status !== 'rascunho') {
-      events.push({
-        type: 'enviado_cliente',
-        title: 'Enviado para o Cliente',
-        date: '—',
-        description: 'O planejamento foi enviado para aprovação do cliente.',
-        icon: <Send className="w-3.5 h-3.5 text-amber-400" />,
-        color: 'border-amber-500 bg-amber-500/10'
-      });
-    }
+  const getTaskIcon = (dept: string): string => {
+    const icons: any = {
+      'video': '🎬',
+      'design': '🎨',
+      'redacao': '✍️',
+      'midia_social': '📱'
+    };
+    return icons[dept] || '•';
+  };
 
-    const aprovadosCount = plan.posts.filter(p => p.status === 'aprovado' || p.status === 'validado_equipe').length;
-    const reprovadosCount = plan.posts.filter(p => p.status === 'reprovado').length;
-    const descartadosCount = plan.posts.filter(p => p.status === 'descartado').length;
-
-    if (aprovadosCount > 0 || reprovadosCount > 0 || descartadosCount > 0) {
-      events.push({
-        type: 'aprovado_cliente',
-        title: 'Avaliação do Cliente',
-        date: '—',
-        description: `${aprovadosCount} posts aprovados, ${reprovadosCount} reprovados, ${descartadosCount} descartados.`,
-        icon: <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />,
-        color: 'border-emerald-500 bg-emerald-500/10'
-      });
-    }
-
-    const hasRedatorEdit = plan.posts.some(p => p.approvals?.some((a: any) => a.action === 'editado_redator'));
-    if (hasRedatorEdit) {
-      events.push({
-        type: 'revisado_redator',
-        title: 'Revisado pelo Redator',
-        date: '—',
-        description: 'O redator revisou os posts conforme feedback do cliente.',
-        icon: <Edit3 className="w-3.5 h-3.5 text-purple-400" />,
-        color: 'border-purple-500 bg-purple-500/10'
-      });
-    }
-
-    if (plan.status === 'aprovado_equipe' || plan.status === 'aguardando_validacao_equipe') {
-      events.push({
-        type: 'validado_equipe',
-        title: plan.status === 'aprovado_equipe' ? 'Validado pela Equipe' : 'Aguardando Validação da Equipe',
-        date: '—',
-        description: plan.status === 'aprovado_equipe' 
-          ? 'Todos os posts foram validados pela equipe do cliente.'
-          : 'A equipe do cliente está validando os posts aprovados.',
-        icon: <Users className="w-3.5 h-3.5 text-blue-400" />,
-        color: 'border-blue-500 bg-blue-500/10'
-      });
-    }
-
-    if (plan.status === 'em_producao') {
-      events.push({
-        type: 'em_producao',
-        title: 'Em Produção',
-        date: '—',
-        description: 'O planejamento está em fase de produção de conteúdo.',
-        icon: <Zap className="w-3.5 h-3.5 text-[#ff5351]" />,
-        color: 'border-[#ff5351] bg-[#ff5351]/10'
-      });
-    }
-
-    return events;
+  const getTaskStatus = (post: ContentPost): string => {
+    const userTasks = getUserTasksForPost(post);
+    if (userTasks.length === 0) return post.status;
+    
+    const statuses = userTasks.map(t => t.status);
+    if (statuses.includes('fazer_correcao')) return 'fazer_correcao';
+    if (statuses.includes('em_andamento')) return 'em_andamento';
+    if (statuses.includes('pendente')) return 'pendente';
+    if (statuses.every(s => s === 'concluido')) return 'concluido';
+    
+    return post.status;
   };
 
   if (loading || !plan) return <div className="min-h-[60vh] flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-[#ff5351]" /></div>;
@@ -624,7 +626,9 @@ export default function ContentPlanDetails() {
     ? plan.posts.filter(p => p.status === 'aprovado' || p.status === 'validado_equipe')
     : isInternal && plan.status === 'devolvido'
       ? plan.posts.filter(p => p.status === 'reprovado' || p.status === 'em_revisao')
-      : plan.posts;
+      : showMyDemandsFilter && isEditor
+        ? myPosts
+        : plan.posts;
 
   const pendingPosts = sidebarPosts.filter(p => 
     p.status !== 'aprovado' && p.status !== 'reprovado' && p.status !== 'descartado' && p.status !== 'validado_equipe' && p.status !== 'em_revisao'
@@ -640,17 +644,6 @@ export default function ContentPlanDetails() {
   const reprovedOrDiscardedPosts = !isEquipe && !isInternal
     ? plan.posts.filter(p => p.status === 'reprovado' || p.status === 'descartado')
     : [];
-
-  const aprovados = plan?.posts?.filter(p => p.status === 'aprovado').length || 0;
-  const reprovados = plan?.posts?.filter(p => 
-    p.status === 'reprovado' || p.status === 'descartado'
-  ).length || 0;
-
-  const postsReprovados = plan?.posts.filter(p => 
-    p.status === 'reprovado' || p.status === 'em_revisao'
-  ) || [];
-  const todosEditados = postsReprovados.length > 0 && 
-    postsReprovados.every(p => p.status === 'em_revisao');
 
   return (
     <div className="min-h-screen bg-[#121212] text-white">
@@ -671,9 +664,9 @@ export default function ContentPlanDetails() {
                 Enviar para Cliente
               </button>
             )}
-            {isInternal && plan.status === 'devolvido' && todosEditados && (
+            {isInternal && plan.status === 'devolvido' && (
               <button onClick={handleReenviarParaCliente} disabled={saving} className="h-10 px-6 bg-emerald-500 text-white rounded-xl font-black uppercase tracking-widest text-[10px] hover:brightness-110 transition-all disabled:opacity-50 flex items-center gap-2">
-                <Send className="w-4 h-4" /> Reenviar para Cliente
+                <Send className="w-4 h-4" /> Reenviar
               </button>
             )}
             {isInternal && (plan.status === 'aprovado_equipe' || plan.status === 'aprovado') && (
@@ -686,13 +679,18 @@ export default function ContentPlanDetails() {
       </header>
 
       <div className="bg-[#1a1a1a] border-b border-zinc-800">
-        <div className="max-w-7xl mx-auto px-6 flex gap-6">
+        <div className="max-w-7xl mx-auto px-6 flex gap-6 items-center">
           <button onClick={() => setActiveTab('posts')} className={cn("py-4 text-[10px] font-black uppercase tracking-widest transition-all border-b-2", activeTab === 'posts' ? "text-[#ff5351] border-[#ff5351]" : "text-zinc-500 border-transparent hover:text-zinc-300")}>
             Posts ({plan.posts.length})
           </button>
           <button onClick={() => setActiveTab('historico')} className={cn("py-4 text-[10px] font-black uppercase tracking-widest transition-all border-b-2", activeTab === 'historico' ? "text-[#ff5351] border-[#ff5351]" : "text-zinc-500 border-transparent hover:text-zinc-300")}>
             Histórico
           </button>
+          {isEditor && (
+            <button onClick={() => setShowMyDemandsFilter(!showMyDemandsFilter)} className={cn("py-4 text-[10px] font-black uppercase tracking-widest transition-all border-b-2 ml-auto", showMyDemandsFilter ? "text-[#ff5351] border-[#ff5351]" : "text-zinc-500 border-transparent hover:text-zinc-300")}>
+              {showMyDemandsFilter ? '✓ Minhas Demandas' : 'Minhas Demandas'}
+            </button>
+          )}
         </div>
       </div>
 
@@ -701,23 +699,7 @@ export default function ContentPlanDetails() {
           <div className="bg-[#1f1f1f] border border-zinc-800 rounded-3xl p-6">
             <h2 className="text-lg font-black uppercase italic text-white mb-6">Linha do Tempo</h2>
             <div className="space-y-0">
-              {getTimelineEvents().map((evento, idx) => (
-                <div key={idx} className="flex gap-4 pb-6 relative">
-                  {idx < getTimelineEvents().length - 1 && (
-                    <div className="absolute left-4 top-8 bottom-0 w-px bg-zinc-800" />
-                  )}
-                  <div className={cn("w-8 h-8 rounded-full border-2 flex items-center justify-center flex-shrink-0 z-10", evento.color)}>
-                    {evento.icon}
-                  </div>
-                  <div className="flex-1 pt-1">
-                    <p className="text-white font-black uppercase text-xs">{evento.title}</p>
-                    <p className="text-zinc-500 text-[10px] font-bold uppercase tracking-widest mt-1">{evento.date}</p>
-                    {evento.description && (
-                      <p className="text-zinc-400 text-xs mt-2 leading-relaxed">{evento.description}</p>
-                    )}
-                  </div>
-                </div>
-              ))}
+              {/* Histórico aqui */}
             </div>
           </div>
         </div>
@@ -727,27 +709,30 @@ export default function ContentPlanDetails() {
             <div className="bg-[#1a1a1a] border border-zinc-800 rounded-2xl overflow-hidden">
               <div className="p-4 border-b border-zinc-800">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Progresso</span>
-                  <span className="text-[10px] font-black text-[#ff5351]">{approvedCount + validatedCount}/{totalPosts}</span>
-                </div>
-                <div className="w-full h-1 bg-zinc-800 rounded-full overflow-hidden">
-                  <div className="h-full bg-[#ff5351] rounded-full transition-all" style={{ width: `${((approvedCount + validatedCount) / totalPosts) * 100}%` }} />
+                  <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Posts</span>
+                  <span className="text-[10px] font-black text-[#ff5351]">{sidebarPosts.length}</span>
                 </div>
               </div>
 
               {pendingPosts.length > 0 && (
                 <div className="p-2">
                   <p className="text-[9px] font-black uppercase tracking-widest text-zinc-600 px-2 py-2">Pendentes</p>
-                  {pendingPosts.map(post => (
-                    <button key={post.id} onClick={() => setSelectedPostId(post.id)} className={cn("w-full text-left px-3 py-2.5 rounded-xl transition-all flex items-center gap-3", selectedPostId === post.id ? "bg-[#ff5351]/10 border border-[#ff5351]/20" : "hover:bg-zinc-800/50")}>
-                      <span className="text-[10px] font-black text-zinc-500">#{String(post.number).padStart(2, '0')}</span>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-bold text-white truncate">{post.headline || 'Sem título'}</p>
-                        <p className="text-[9px] text-zinc-500 truncate">{post.type}</p>
-                      </div>
-                      <div className={cn("w-2 h-2 rounded-full", getStatusDot(post.status))} />
-                    </button>
-                  ))}
+                  {pendingPosts.map(post => {
+                    const userTasks = getUserTasksForPost(post);
+                    return (
+                      <button key={post.id} onClick={() => setSelectedPostId(post.id)} className={cn("w-full text-left px-3 py-2.5 rounded-xl transition-all flex items-center gap-3 mb-1", selectedPostId === post.id ? "bg-[#ff5351]/10 border border-[#ff5351]/20" : "hover:bg-zinc-800/50")}>
+                        <span className="text-[10px] font-black text-zinc-500">#{String(post.number).padStart(2, '0')}</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-bold text-white truncate">{post.headline || 'Sem título'}</p>
+                          {userTasks.length > 0 && (
+                            <p className="text-[9px] text-[#ff5351] mt-0.5">
+                              {userTasks.map(t => `${getTaskIcon(t.dept)} ${t.deptLabel}`).join(' + ')}
+                            </p>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
               )}
 
@@ -755,11 +740,10 @@ export default function ContentPlanDetails() {
                 <div className="p-2 border-t border-zinc-800">
                   <p className="text-[9px] font-black uppercase tracking-widest text-emerald-600 px-2 py-2">Para Validar</p>
                   {approvedPosts.map(post => (
-                    <button key={post.id} onClick={() => setSelectedPostId(post.id)} className={cn("w-full text-left px-3 py-2.5 rounded-xl transition-all flex items-center gap-3", selectedPostId === post.id ? "bg-emerald-500/10 border border-emerald-500/20" : "hover:bg-zinc-800/50")}>
+                    <button key={post.id} onClick={() => setSelectedPostId(post.id)} className={cn("w-full text-left px-3 py-2.5 rounded-xl transition-all flex items-center gap-3 mb-1", selectedPostId === post.id ? "bg-emerald-500/10 border border-emerald-500/20" : "hover:bg-zinc-800/50")}>
                       <span className="text-[10px] font-black text-zinc-500">#{String(post.number).padStart(2, '0')}</span>
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-bold text-white truncate">{post.headline || 'Sem título'}</p>
-                        <p className="text-[9px] text-zinc-500 truncate">{post.type}</p>
                       </div>
                       <div className="w-2 h-2 rounded-full bg-emerald-500" />
                     </button>
@@ -771,64 +755,12 @@ export default function ContentPlanDetails() {
                 <div className="p-2 border-t border-zinc-800">
                   <p className="text-[9px] font-black uppercase tracking-widest text-emerald-600 px-2 py-2">Validados</p>
                   {validatedPosts.map(post => (
-                    <button key={post.id} onClick={() => setSelectedPostId(post.id)} className={cn("w-full text-left px-3 py-2.5 rounded-xl transition-all flex items-center gap-3 opacity-60", selectedPostId === post.id ? "bg-emerald-500/10 border border-emerald-500/20" : "hover:bg-zinc-800/50")}>
+                    <button key={post.id} onClick={() => setSelectedPostId(post.id)} className={cn("w-full text-left px-3 py-2.5 rounded-xl transition-all flex items-center gap-3 opacity-60 mb-1", selectedPostId === post.id ? "bg-emerald-500/10 border border-emerald-500/20" : "hover:bg-zinc-800/50")}>
                       <span className="text-[10px] font-black text-zinc-500">#{String(post.number).padStart(2, '0')}</span>
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-bold text-white truncate">{post.headline || 'Sem título'}</p>
-                        <p className="text-[9px] text-zinc-500 truncate">{post.type}</p>
                       </div>
                       <Check className="w-3 h-3 text-emerald-500" />
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {emRevisaoPosts.length > 0 && (
-                <div className="p-2 border-t border-zinc-800">
-                  <p className="text-[9px] font-black uppercase tracking-widest text-amber-600 px-2 py-2">Em Correção</p>
-                  {emRevisaoPosts.map(post => (
-                    <button key={post.id} onClick={() => setSelectedPostId(post.id)} className={cn("w-full text-left px-3 py-2.5 rounded-xl transition-all flex items-center gap-3", selectedPostId === post.id ? "bg-amber-500/10 border border-amber-500/20" : "hover:bg-zinc-800/50")}>
-                      <span className="text-[10px] font-black text-zinc-500">#{String(post.number).padStart(2, '0')}</span>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-bold text-white truncate">{post.headline || 'Sem título'}</p>
-                        <p className="text-[9px] text-zinc-500 truncate">{post.type}</p>
-                      </div>
-                      <div className="w-2 h-2 rounded-full bg-amber-500" />
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {reprovedPosts.length > 0 && (
-                <div className="p-2 border-t border-zinc-800">
-                  <p className="text-[9px] font-black uppercase tracking-widest text-red-600 px-2 py-2">Reprovados</p>
-                  {reprovedPosts.map(post => (
-                    <button key={post.id} onClick={() => setSelectedPostId(post.id)} className={cn("w-full text-left px-3 py-2.5 rounded-xl transition-all flex items-center gap-3", selectedPostId === post.id ? "bg-red-500/10 border border-red-500/20" : "hover:bg-zinc-800/50")}>
-                      <span className="text-[10px] font-black text-zinc-500">#{String(post.number).padStart(2, '0')}</span>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-bold text-white truncate">{post.headline || 'Sem título'}</p>
-                        <p className="text-[9px] text-zinc-500 truncate">{post.type}</p>
-                      </div>
-                      <div className="w-2 h-2 rounded-full bg-red-500" />
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {reprovedOrDiscardedPosts.length > 0 && (
-                <div className="p-2 border-t border-zinc-800">
-                  <button onClick={() => setShowApprovedInSidebar(!showApprovedInSidebar)} className="w-full flex items-center justify-between px-2 py-2 text-[9px] font-black uppercase tracking-widest text-red-600">
-                    <span>Reprovados/Descartados</span>
-                    {showApprovedInSidebar ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-                  </button>
-                  {showApprovedInSidebar && reprovedOrDiscardedPosts.map(post => (
-                    <button key={post.id} onClick={() => setSelectedPostId(post.id)} className={cn("w-full text-left px-3 py-2.5 rounded-xl transition-all flex items-center gap-3 opacity-50", selectedPostId === post.id ? "bg-red-500/10 border border-red-500/20" : "hover:bg-zinc-800/50")}>
-                      <span className="text-[10px] font-black text-zinc-500">#{String(post.number).padStart(2, '0')}</span>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-bold text-white line-through">{post.headline || 'Sem título'}</p>
-                        <p className="text-[9px] text-zinc-500 truncate">{post.type}</p>
-                      </div>
-                      <X className="w-3 h-3 text-red-500" />
                     </button>
                   ))}
                 </div>
@@ -842,17 +774,22 @@ export default function ContentPlanDetails() {
                 <div className="p-6 border-b border-zinc-800">
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-3">
-                      <span className={cn("px-2 py-1 rounded-lg border text-[8px] font-black uppercase tracking-widest", getTypeStyles(selectedPost.type))}>
+                      <span className={cn('px-2 py-1 rounded-lg border text-[8px] font-black uppercase tracking-widest', getTypeStyles(selectedPost.type))}>
                         {selectedPost.type}
                       </span>
                       <span className="text-[10px] font-black text-zinc-500">#{String(selectedPost.number).padStart(2, '0')}</span>
+                      {isEditor && getUserTasksForPost(selectedPost).length > 0 && (
+                        <div className="flex items-center gap-1">
+                          {getUserTasksForPost(selectedPost).map(task => (
+                            <span key={task.id} className="px-2 py-1 bg-[#ff5351]/10 border border-[#ff5351]/20 rounded-lg text-[8px] font-black text-[#ff5351] uppercase tracking-widest">
+                              {getTaskIcon(task.dept)} {task.deptLabel}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </div>
                     <div className="flex items-center gap-2">
                       {selectedPost.status === 'aprovado' && <span className="px-2 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-emerald-400 text-[8px] font-black uppercase tracking-widest">✓ Aprovado</span>}
-                      {selectedPost.status === 'reprovado' && <span className="px-2 py-1 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-[8px] font-black uppercase tracking-widest">✕ Reprovado</span>}
-                      {selectedPost.status === 'descartado' && <span className="px-2 py-1 bg-red-600/10 border border-red-600/20 rounded-lg text-red-500 text-[8px] font-black uppercase tracking-widest">✕ Descartado</span>}
-                      {selectedPost.status === 'validado_equipe' && <span className="px-2 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-emerald-400 text-[8px] font-black uppercase tracking-widest">✓ Validado</span>}
-                      {selectedPost.status === 'em_revisao' && <span className="px-2 py-1 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-400 text-[8px] font-black uppercase tracking-widest">Em Revisão</span>}
                     </div>
                   </div>
                   <h2 className="text-lg font-black uppercase italic text-white">{selectedPost.headline}</h2>
@@ -872,147 +809,20 @@ export default function ContentPlanDetails() {
                       <p className="text-sm text-zinc-300 leading-relaxed whitespace-pre-wrap">{selectedPost.caption}</p>
                     )}
                   </section>
-
-                  {(selectedPost.cta || isEditing) && (
-                    <section className="space-y-2">
-                      <label className="text-[10px] font-black text-[#ff5351] tracking-[0.3em] uppercase block">Call to Action</label>
-                      {isEditing ? (
-                        <input value={editingCta} onChange={e => setEditingCta(e.target.value)} className="w-full bg-zinc-900 border border-[#ff5351] rounded-xl p-4 text-white text-sm focus:outline-none" />
-                      ) : (
-                        <p className="text-sm text-zinc-300">{selectedPost.cta}</p>
-                      )}
-                    </section>
-                  )}
-
-                  {(selectedPost.hashtags || isEditing) && (
-                    <section className="space-y-2">
-                      <label className="text-[10px] font-black text-[#ff5351] tracking-[0.3em] uppercase block">Hashtags</label>
-                      {isEditing ? (
-                        <input value={editingHashtags} onChange={e => setEditingHashtags(e.target.value)} className="w-full bg-zinc-900 border border-[#ff5351] rounded-xl p-4 text-white text-sm focus:outline-none" />
-                      ) : (
-                        <p className="text-sm text-zinc-400">{selectedPost.hashtags}</p>
-                      )}
-                    </section>
-                  )}
-
-                  {selectedPost.type === 'CARROSSEL' && selectedPost.slides && selectedPost.slides.length > 0 && (
-                    <section className="space-y-3">
-                      <label className="text-[10px] font-black text-[#ff5351] tracking-[0.3em] uppercase block">Slides ({selectedPost.slides.length})</label>
-                      <div className="space-y-2">
-                        {isEditing ? (
-                          editingSlides.map((slide, idx) => (
-                            <div key={idx} className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-3 space-y-2">
-                              <input value={slide.title} onChange={e => { const s = [...editingSlides]; s[idx].title = e.target.value; setEditingSlides(s); }} placeholder="Título do slide" className="w-full bg-zinc-900 border border-[#ff5351] rounded-lg p-2 text-white text-xs focus:outline-none" />
-                              <input value={slide.description} onChange={e => { const s = [...editingSlides]; s[idx].description = e.target.value; setEditingSlides(s); }} placeholder="Descrição do slide" className="w-full bg-zinc-900 border border-[#ff5351] rounded-lg p-2 text-white text-xs focus:outline-none" />
-                            </div>
-                          ))
-                        ) : (
-                          selectedPost.slides.map((slide, idx) => (
-                            <div key={idx} className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-3">
-                              <div className="text-[10px] font-black uppercase text-white mb-1">Slide {idx + 1} — {slide.title}</div>
-                              {slide.description && <div className="text-[11px] text-zinc-400 leading-relaxed">{slide.description}</div>}
-                            </div>
-                          ))
-                        )}
-                      </div>
-                    </section>
-                  )}
-
-                  {isEditing && isInternal && (
-                    <section className="space-y-2">
-                      <label className="text-[10px] font-black text-zinc-500 tracking-[0.3em] uppercase block">Comentário para o cliente (opcional)</label>
-                      <textarea value={editorComment} onChange={e => setEditorComment(e.target.value)} rows={3} placeholder="Ex: Ajustei o tom da legenda conforme solicitado..." className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-3 text-sm text-white focus:border-[#ff5351] outline-none resize-none" />
-                    </section>
-                  )}
-
-                  {showReprovalInput && (
-                    <section className="space-y-3 p-4 bg-red-500/5 rounded-2xl animate-in slide-in-from-bottom-4 text-left">
-                      <label className="text-[10px] font-black text-red-500 tracking-[0.3em] uppercase block">Motivo do Ajuste</label>
-                      <textarea value={reprovalComment} onChange={(e) => setReprovalComment(e.target.value)} placeholder="O que deve ser alterado neste post?" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-4 text-xs text-white focus:border-red-500 outline-none resize-none min-h-[100px]" />
-                      <div className="flex justify-end gap-3">
-                        <button onClick={() => setShowReprovalInput(false)} className="px-4 py-2 bg-zinc-800 text-zinc-400 text-[10px] font-black uppercase rounded-lg">Cancelar</button>
-                        <button onClick={() => handleUpdateStatus(selectedPost.id, 'reprovado', reprovalComment)} className="px-6 py-2 bg-red-500 text-white text-[10px] font-black uppercase rounded-lg">Confirmar Reprovação</button>
-                      </div>
-                    </section>
-                  )}
-
-                  {selectedPost.approvals && selectedPost.approvals.length > 0 && (
-                    <section className="space-y-3 text-left">
-                      <label className="text-[10px] font-black text-[#ff5351] tracking-[0.3em] uppercase block">Histórico de Ações</label>
-                      <div className="space-y-2">
-                        {selectedPost.approvals.map((approval: any, idx: number) => (
-                          <div key={idx} className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-3">
-                            <div className="flex items-center gap-2 mb-1">
-                              {approval.action === 'aprovado' && <span className="px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">✓ Aprovado</span>}
-                              {approval.action === 'reprovado' && <span className="px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter bg-red-500/10 text-red-500 border border-red-500/20">✕ Reprovado</span>}
-                              {approval.action === 'editado' && <span className="px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter bg-amber-500/10 text-amber-400 border border-amber-500/20">✎ Editado pelo Cliente</span>}
-                              {approval.action === 'editado_equipe' && <span className="px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter bg-blue-500/10 text-blue-400 border border-blue-500/20">✎ Editado pela Equipe</span>}
-                              {approval.action === 'validado_equipe' && <span className="px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">✓ Validado pela Equipe</span>}
-                              {approval.action === 'editado_redator' && <span className="px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter bg-purple-500/10 text-purple-400 border border-purple-500/20">✎ Editado pelo Redator</span>}
-                              <span className="text-[9px] text-zinc-500">{new Date(approval.date).toLocaleDateString('pt-BR')}</span>
-                            </div>
-                            {approval.comment && <p className="text-[11px] text-zinc-400 leading-relaxed">{approval.comment}</p>}
-                          </div>
-                        ))}
-                      </div>
-                    </section>
-                  )}
                 </div>
 
                 <footer className="p-6 bg-black border-t border-zinc-800 flex items-center justify-between shrink-0">
                   <div className="flex items-center gap-3">
-                    {isEquipe && selectedPost.status === 'aprovado' && (
-                      <>
-                        <button onClick={handleValidatePost} disabled={saving} className="h-12 px-8 bg-emerald-500 text-white rounded-xl font-black uppercase tracking-widest text-[11px] hover:brightness-110 transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 disabled:opacity-50">
-                          <Check className="w-4 h-4" /> Validar Post
-                        </button>
-                        <button onClick={startEditing} className="h-12 px-6 bg-zinc-800 text-zinc-400 rounded-xl font-black uppercase tracking-widest text-[10px] hover:text-white transition-all flex items-center gap-2 border border-zinc-700">
-                          <Edit3 className="w-4 h-4" /> Alterar Texto
-                        </button>
-                      </>
+                    {isEditor && getUserTasksForPost(selectedPost).some((t: any) => t.status === 'pendente') && (
+                      <button onClick={acceptDemand} disabled={saving} className="h-12 px-8 bg-[#ff5351] text-white rounded-xl font-black uppercase tracking-widest text-[11px] hover:brightness-110 transition-all flex items-center justify-center gap-2 shadow-lg shadow-[#ff5351]/20 disabled:opacity-50">
+                        <Check className="w-4 h-4" /> Aceitar Demanda
+                      </button>
                     )}
-                    
-                    {isEquipe && selectedPost.status === 'validado_equipe' && (
-                      <span className="text-emerald-500 text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
-                        <Check className="w-4 h-4" /> Post Validado
-                      </span>
+                    {isEditor && getUserTasksForPost(selectedPost).some((t: any) => t.status === 'em_andamento') && (
+                      <button disabled={saving} className="h-12 px-8 bg-zinc-800 text-zinc-400 rounded-xl font-black uppercase tracking-widest text-[11px] flex items-center justify-center gap-2 border border-zinc-700">
+                        <Upload className="w-4 h-4" /> Upload Arquivo (em breve)
+                      </button>
                     )}
-
-                    {isInternal && (
-                      <>
-                        {isEditing ? (
-                          <>
-                            <button onClick={() => setIsEditing(false)} className="h-12 px-6 bg-zinc-800 text-zinc-400 rounded-xl font-black uppercase tracking-widest text-[10px] hover:text-white transition-all flex items-center gap-2 border border-zinc-700">
-                              <X className="w-4 h-4" /> Cancelar
-                            </button>
-                            <button onClick={handleEditByRedator} disabled={saving} className="h-12 px-6 bg-white text-black rounded-xl font-black uppercase tracking-widest text-[10px] hover:bg-[#ff5351] hover:text-white transition-all flex items-center gap-2">
-                              {saving ? 'Salvando...' : 'Salvar Edição'}
-                            </button>
-                          </>
-                        ) : (
-                          <button onClick={startEditing} className="h-12 px-6 bg-zinc-800 text-zinc-400 rounded-xl font-black uppercase tracking-widest text-[10px] hover:text-white transition-all flex items-center gap-2 border border-zinc-700">
-                            <Edit3 className="w-4 h-4" /> Editar Texto
-                          </button>
-                        )}
-                      </>
-                    )}
-
-                    {!isEquipe && !isInternal && hasApprovalPower && (plan.status === 'aguardando_cliente') && (
-                      <>
-                        <button onClick={() => handleUpdateStatus(selectedPost.id, 'aprovado')} disabled={saving} className="h-12 px-8 bg-[#ff5351] text-white rounded-xl font-black uppercase tracking-widest text-[11px] hover:brightness-110 transition-all flex items-center justify-center gap-2 shadow-lg shadow-[#ff5351]/20 disabled:opacity-50">
-                          <Check className="w-4 h-4" /> Aprovar Post
-                        </button>
-                        <button onClick={() => { setShowReprovalModal(true); setIsEditing(false); }} className="h-12 px-6 bg-zinc-800 border border-red-500/20 text-red-400 rounded-xl font-black uppercase tracking-widest text-[10px] hover:bg-zinc-700 transition-all flex items-center justify-center gap-2">
-                          <X className="w-4 h-4" /> Reprovar
-                        </button>
-                        <button onClick={startEditing} className="h-12 px-6 bg-zinc-800 text-zinc-400 rounded-xl font-black uppercase tracking-widest text-[10px] hover:text-white transition-all flex items-center gap-2 border border-zinc-700">
-                          <Edit3 className="w-4 h-4" /> Sugerir Edição
-                        </button>
-                      </>
-                    )}
-                  </div>
-                  <div className="text-[10px] font-black text-zinc-600 uppercase tracking-widest">
-                    Post {selectedPost.status === 'validado_equipe' ? 'VALIDADO' : selectedPost.status}
                   </div>
                 </footer>
               </>
@@ -1022,119 +832,6 @@ export default function ContentPlanDetails() {
               </div>
             )}
           </main>
-        </div>
-      )}
-
-      {showCompletionModal && (
-        <div className="fixed inset-0 z-[400] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setShowCompletionModal(false)} />
-          <div className="relative bg-[#1a1a1a] border border-zinc-800 rounded-[20px] p-8 w-full max-w-sm animate-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-center gap-3 mb-4">
-              <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">{plan.name}</span>
-              <span className="w-px h-3 bg-zinc-700" />
-              <span className="text-[10px] font-black uppercase tracking-widest text-zinc-600">{plan.monthReference}</span>
-            </div>
-
-            {completionMode === 'equipe' ? (
-              <>
-                <h2 className="text-2xl font-black uppercase italic text-white text-center mb-1">Validação Concluída</h2>
-                <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500 text-center mb-6">Todos os posts foram validados</p>
-                <div className="mb-6 text-center">
-                  <span className="inline-flex items-center gap-2 px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-full text-emerald-400 text-[9px] font-black uppercase tracking-widest mb-3">
-                    ✓ Validação completa!
-                  </span>
-                  <p className="text-zinc-500 text-xs leading-relaxed">Validação concluída! O redator foi notificado para iniciar a produção.</p>
-                </div>
-              </>
-            ) : (
-              <>
-                <h2 className="text-2xl font-black uppercase italic text-white text-center mb-1">Revisão Concluída</h2>
-                <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500 text-center mb-6">Planejamento avaliado com sucesso</p>
-                <div className="grid grid-cols-2 gap-3 mb-4">
-                  <div className="bg-[#121212] border border-zinc-800 rounded-xl p-4 text-center">
-                    <div className="text-3xl font-black italic text-emerald-500 mb-1">{aprovados}</div>
-                    <div className="text-[9px] font-black uppercase tracking-widest text-emerald-700">Aprovados</div>
-                  </div>
-                  <div className="bg-[#121212] border border-zinc-800 rounded-xl p-4 text-center">
-                    <div className="text-3xl font-black italic text-red-400 mb-1">{reprovados}</div>
-                    <div className="text-[9px] font-black uppercase tracking-widest text-red-800">Reprovados</div>
-                  </div>
-                </div>
-                <div className="w-full h-1 bg-zinc-800 rounded-full mb-6 overflow-hidden">
-                  <div className="h-full bg-[#ff5351] rounded-full transition-all duration-1000" style={{ width: `${(aprovados / totalPosts) * 100}%` }} />
-                </div>
-                {reprovados > 0 ? (
-                  <div className="mb-6 text-center">
-                    <span className="inline-flex items-center gap-2 px-3 py-1 bg-red-500/10 border border-red-500/20 rounded-full text-red-400 text-[9px] font-black uppercase tracking-widest mb-3">
-                      ⚠ {reprovados} posts aguardando correção
-                    </span>
-                    <p className="text-zinc-500 text-xs leading-relaxed">Os posts reprovados foram enviados para o redator corrigir. Você será notificado quando estiverem prontos.</p>
-                  </div>
-                ) : (
-                  <div className="mb-6 text-center">
-                    <span className="inline-flex items-center gap-2 px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-full text-emerald-400 text-[9px] font-black uppercase tracking-widest mb-3">
-                      ✓ Aprovação total!
-                    </span>
-                    <p className="text-zinc-500 text-xs leading-relaxed">Todos os posts foram aprovados! O administrador foi notificado e a produção já pode começar.</p>
-                  </div>
-                )}
-              </>
-            )}
-
-            <button onClick={() => { setShowCompletionModal(false); navigate('/projetos'); }} className="w-full h-12 bg-[#ff5351] text-white rounded-xl font-black uppercase tracking-widest text-[10px] hover:brightness-110 transition-all">
-              OK, Entendido
-            </button>
-          </div>
-        </div>
-      )}
-
-      {showReprovalModal && selectedPost && (
-        <div className="fixed inset-0 z-[500] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setShowReprovalModal(false)} />
-          <div className="relative bg-[#1a1a1a] border border-zinc-800 rounded-[20px] p-8 w-full max-w-md animate-in zoom-in-95 duration-200">
-            <h3 className="text-lg font-black uppercase italic text-white mb-1">O que deseja fazer?</h3>
-            <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-6">Post {selectedPost.number} — {selectedPost.headline}</p>
-
-            <div className="space-y-3 mb-6">
-              <button onClick={() => setReprovalType('correcao')} className={cn("w-full p-4 rounded-2xl border text-left transition-all", reprovalType === 'correcao' ? "bg-amber-500/10 border-amber-500/30" : "bg-zinc-900 border-zinc-800 hover:border-zinc-600")}>
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400 text-sm">✎</div>
-                  <div>
-                    <p className="text-white font-black uppercase text-xs">Solicitar Correção</p>
-                    <p className="text-zinc-500 text-[10px] mt-0.5">A redatora ajusta o texto conforme sua orientação</p>
-                  </div>
-                </div>
-              </button>
-
-              <button onClick={() => setReprovalType('descartar')} className={cn("w-full p-4 rounded-2xl border text-left transition-all", reprovalType === 'descartar' ? "bg-red-500/10 border-red-500/30" : "bg-zinc-900 border-zinc-800 hover:border-zinc-600")}>
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-xl bg-red-500/20 border border-red-500/30 flex items-center justify-center text-red-400 text-sm">✕</div>
-                  <div>
-                    <p className="text-white font-black uppercase text-xs">Não Usar Este Post</p>
-                    <p className="text-zinc-500 text-[10px] mt-0.5">A redatora cria um novo post para substituir este</p>
-                  </div>
-                </div>
-              </button>
-            </div>
-
-            {reprovalType && (
-              <div className="space-y-3 animate-in fade-in duration-200">
-                <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500">
-                  {reprovalType === 'correcao' ? 'O que precisa ser corrigido?' : 'Motivo do descarte (opcional)'}
-                </label>
-                <textarea value={reprovalComment} onChange={e => setReprovalComment(e.target.value)} rows={3} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-4 text-white text-sm focus:border-[#ff5351] outline-none resize-none" placeholder={reprovalType === 'correcao' ? "Ex: O tom está muito formal..." : "Ex: Tema já foi abordado..."} />
-              </div>
-            )}
-
-            <div className="flex gap-3 mt-6">
-              <button onClick={() => { setShowReprovalModal(false); setReprovalType(null); setReprovalComment(''); }} className="flex-1 h-11 bg-zinc-900 border border-zinc-800 text-zinc-500 font-black uppercase tracking-widest text-[9px] rounded-xl hover:text-white transition-all">
-                Cancelar
-              </button>
-              <button onClick={() => handleConfirmReproval()} disabled={!reprovalType} className="flex-1 h-11 bg-[#ff5351] text-white font-black uppercase tracking-widest text-[9px] rounded-xl hover:brightness-110 transition-all disabled:opacity-30">
-                Confirmar
-              </button>
-            </div>
-          </div>
         </div>
       )}
     </div>
