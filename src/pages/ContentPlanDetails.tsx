@@ -159,9 +159,7 @@ export default function ContentPlanDetails() {
           tipo: 'planejamento_aprovado_cliente',
           titulo: 'Planejamento Aprovado pelo Cliente',
           descricao: `Planejamento "${plan.name}" foi aprovado e aguarda sua validação`,
-          planId: planId,
-          visto: false,
-          criadoEm: new Date().toISOString()
+          planId: planId
         });
       }
     } catch (e) {
@@ -177,9 +175,7 @@ export default function ContentPlanDetails() {
         tipo: 'planejamento_validado_equipe',
         titulo: 'Planejamento Validado pela Equipe',
         descricao: `Planejamento "${plan.name}" foi validado pela equipe e está pronto para delegação`,
-        planId: planId,
-        visto: false,
-        criadoEm: new Date().toISOString()
+        planId: planId
       });
     } catch (e) {
       console.warn('Erro ao notificar redator:', e);
@@ -187,19 +183,24 @@ export default function ContentPlanDetails() {
   };
 
   const notifyClient = async () => {
-    if (!plan || !clientEmail) return;
+    if (!plan || !clientEmail) {
+      console.warn('Erro: plan ou clientEmail não disponível', { plan: !!plan, clientEmail });
+      return;
+    }
     try {
+      console.log('Notificando cliente:', clientEmail);
+      
       await notificacaoService.criar({
-        para: clientEmail,
+        para: clientEmail.toLowerCase(),
         tipo: 'planejamento_enviado',
         titulo: 'Novo Planejamento Enviado',
         descricao: `Planejamento "${plan.name}" foi enviado para sua aprovação`,
-        planId: planId,
-        visto: false,
-        criadoEm: new Date().toISOString()
+        planId: planId
       });
+      
+      console.log('Notificação enviada com sucesso para:', clientEmail);
     } catch (e) {
-      console.warn('Erro ao notificar cliente:', e);
+      console.error('Erro ao notificar cliente:', e);
     }
   };
 
@@ -479,9 +480,7 @@ export default function ContentPlanDetails() {
         tipo: 'planejamento_revisado',
         titulo: 'Planejamento Revisado',
         descricao: `Planejamento "${plan.name}" foi revisado pelo redator e está pronto para sua avaliação`,
-        planId: planId,
-        visto: false,
-        criadoEm: new Date().toISOString()
+        planId: planId
       });
 
       await loadData();
