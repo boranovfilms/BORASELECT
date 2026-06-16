@@ -75,7 +75,6 @@ export default function ClientDetails() {
         const wfModels = cData.workflowModels || {};
         setWorkflowModels(wfModels);
 
-        // ✅ CORRIGIDO: usar companyId em vez de clienteId
         const q = query(
           collection(db, 'clientes'),
           where('type', '==', 'membro'),
@@ -195,8 +194,9 @@ export default function ClientDetails() {
 
   const calcularProgresoPlano = (plan: ContentPlan): number => {
     let etapasCumpridas = 0;
-    // Usa linkedModel se disponível, senão usa 12 como padrão
     const totalEtapas = linkedModel?.stages?.length || 12;
+
+    console.log('Calculando progresso para:', plan.name, 'Status:', plan.status, 'Total etapas:', totalEtapas);
 
     // Etapa 1: REDAÇÃO — plano existe (sempre cumprida)
     if (plan.id) {
@@ -227,6 +227,7 @@ export default function ClientDetails() {
     }
 
     const percent = totalEtapas > 0 ? Math.round((etapasCumpridas / totalEtapas) * 100) : 0;
+    console.log('Resultado:', etapasCumpridas, 'de', totalEtapas, '=', percent + '%');
     return percent;
   };
 
@@ -279,7 +280,6 @@ export default function ClientDetails() {
         </div>
       </header>
 
-      {/* CARDS DE RESUMO */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="bg-[#1f1f1f] border border-zinc-800 rounded-3xl p-6">
           <div className="flex items-center gap-3 mb-4">
@@ -304,7 +304,6 @@ export default function ClientDetails() {
         </div>
       </div>
 
-      {/* EQUIPE DO CLIENTE */}
       {teamMembers.length > 0 && (
         <section className="space-y-4">
           <div className="flex items-center gap-3">
@@ -359,8 +358,11 @@ export default function ClientDetails() {
                 const percent = calcularProgresoPlano(plan);
                 return (
                   <div className="flex items-center gap-2">
-                    <div className="flex-1 h-1.5 bg-zinc-800 rounded-full overflow-hidden min-w-[60px]">
-                      <div className="h-full bg-[#ff5351] rounded-full transition-all" style={{ width: `${percent}%` }} />
+                    <div className="flex-1 h-1.5 bg-zinc-800 rounded-full overflow-hidden min-w-[80px]">
+                      <div 
+                        className="h-full bg-[#ff5351] rounded-full transition-all duration-500" 
+                        style={{ width: `${percent}%` }} 
+                      />
                     </div>
                     <span className="text-[10px] font-black text-[#ff5351] whitespace-nowrap">{percent}%</span>
                   </div>
