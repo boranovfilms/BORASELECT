@@ -4,7 +4,7 @@ import { db } from '../lib/firebase';
 export interface Notificacao {
   id?: string;
   para: string;
-  tipo: 'planejamento' | 'producao' | 'aprovacao' | 'sistema';
+  tipo: 'planejamento' | 'producao' | 'aprovacao' | 'sistema' | 'planejamento_criado' | 'planejamento_enviado' | 'planejamento_aprovado_cliente' | 'planejamento_validado_equipe' | 'planejamento_revisado';
   titulo: string;
   descricao: string;
   planId?: string;
@@ -15,11 +15,25 @@ export interface Notificacao {
 
 export const notificacaoService = {
   async criar(data: Omit<Notificacao, 'id' | 'visto' | 'criadoEm'>) {
-    return await addDoc(collection(db, 'notificacoes'), {
-      ...data,
-      visto: false,
-      criadoEm: serverTimestamp()
-    });
+    try {
+      const notificacao = {
+        ...data,
+        para: data.para?.toLowerCase(),
+        visto: false,
+        criadoEm: serverTimestamp()
+      };
+      
+      console.log('Salvando notificação:', notificacao);
+      
+      const result = await addDoc(collection(db, 'notificacoes'), notificacao);
+      
+      console.log('Notificação salva com ID:', result.id);
+      
+      return result;
+    } catch (error) {
+      console.error('Erro ao criar notificação:', error);
+      throw error;
+    }
   },
 
   async marcarComoVisto(id: string) {
