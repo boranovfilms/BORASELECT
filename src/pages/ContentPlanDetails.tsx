@@ -186,6 +186,23 @@ export default function ContentPlanDetails() {
     }
   };
 
+  const notifyClient = async () => {
+    if (!plan || !clientEmail) return;
+    try {
+      await notificacaoService.criar({
+        para: clientEmail,
+        tipo: 'planejamento_enviado',
+        titulo: 'Novo Planejamento Enviado',
+        descricao: `Planejamento "${plan.name}" foi enviado para sua aprovação`,
+        planId: planId,
+        visto: false,
+        criadoEm: new Date().toISOString()
+      });
+    } catch (e) {
+      console.warn('Erro ao notificar cliente:', e);
+    }
+  };
+
   const handleUpdateStatus = async (postId: string, action: 'aprovado' | 'reprovado' | 'editado', comment?: string, newText?: string) => {
     if (!planId || !plan) return;
     setSaving(true);
@@ -479,10 +496,11 @@ export default function ContentPlanDetails() {
   };
 
   const handleSendToClient = async () => {
-    if (!planId) return;
+    if (!planId || !plan) return;
     setSaving(true);
     try {
       await contentPlanService.updateStatus(planId, 'aguardando_cliente');
+      await notifyClient();
       await loadData();
       toast.success("Enviado para o cliente!");
     } catch (error) {
