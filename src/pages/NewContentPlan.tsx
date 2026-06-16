@@ -102,7 +102,7 @@ export default function NewContentPlan() {
         posts: posts,
         status: status
       });
-      toast.success('Planejamento salvo!');
+      toast.success('Planejamento criado!');
       navigate(`/clients/${clientId}`);
     } catch (error: any) {
       console.error('ERRO AO SALVAR:', error);
@@ -289,16 +289,9 @@ export default function NewContentPlan() {
               <button 
                 disabled={saving}
                 onClick={() => handleSave('rascunho')}
-                className="h-14 px-8 bg-zinc-900 border border-zinc-700 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-zinc-800 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
-              >
-                <Save className="w-4 h-4" /> Salvar como Rascunho
-              </button>
-              <button 
-                disabled={saving}
-                onClick={() => handleSave('aguardando_cliente')}
                 className="h-14 px-10 bg-[#ff5351] text-white rounded-2xl font-black uppercase tracking-widest text-[10px] hover:brightness-110 transition-all flex items-center justify-center gap-2 shadow-xl disabled:opacity-50"
               >
-                <Send className="w-4 h-4" /> Salvar e Enviar para Cliente
+                <Save className="w-4 h-4" /> Criar Planejamento
               </button>
             </div>
           </footer>
