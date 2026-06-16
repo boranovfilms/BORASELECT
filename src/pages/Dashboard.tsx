@@ -4,7 +4,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { auth, db } from '../lib/firebase';
-import { collection, query, where, getDocs, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, getDocs, onSnapshot, doc, getDoc } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
 
 export default function Dashboard() {
@@ -154,6 +154,8 @@ export default function Dashboard() {
 
   const loadPendingDemands = async (email: string) => {
     try {
+      console.log('🔍 Carregando demandas para:', email);
+      
       const demandasSnap = await getDocs(collection(db, 'demandas'));
       const demands: any[] = [];
 
@@ -164,12 +166,29 @@ export default function Dashboard() {
         // Procura posts com tasks delegadas para este usuário
         for (const post of posts) {
           const tasks = post.tasks || [];
-          const userTasks = tasks.filter((t: any) => t.responsibleEmail?.toLowerCase() === email.toLowerCase());
+          const userTasks = tasks.filter((t: any) => {
+            const taskEmail = t.responsibleEmail?.toLowerCase() || '';
+            const match = taskEmail === email.toLowerCase();
+            console.log(`  Task: ${t.id} | responsibleEmail: "${taskEmail}" | userEmail: "${email.toLowerCase()}" | Match: ${match}`);
+            return match;
+          });
           
           if (userTasks.length > 0) {
-            // Busca info do cliente
-            const clientSnap = await getDocs(query(collection(db, 'clientes'), where('id', '==', demanda.clientId)));
-            const clientData = clientSnap.docs[0]?.data();
+            console.log(`✅ Encontrado post com ${userTasks.length} task(s) para ${email}`);
+            
+            // Busca info do cliente pelo docId (CORRIGIDO!)
+            let clientData = null;
+            try {
+              const clientSnap = await getDoc(doc(db, 'clientes', demanda.clientId));
+              if (clientSnap.exists()) {
+                clientData = clientSnap.data();
+                console.log(`  Cliente encontrado: ${clientData?.name}`);
+              } else {
+                console.warn(`  Cliente NÃO encontrado para ID: ${demanda.clientId}`);
+              }
+            } catch (err) {
+              console.warn(`  Erro ao buscar cliente ${demanda.clientId}:`, err);
+            }
             
             demands.push({
               id: demandaDoc.id,
@@ -199,6 +218,7 @@ export default function Dashboard() {
         }
       }
 
+      console.log(`📊 Total de demandas carregadas: ${demands.length}`);
       setPendingDemands(demands);
       setDemandMetrics({
         pending: demands.filter(d => d.tasks.some((t: any) => t.status === 'pendente')).length,
@@ -206,7 +226,7 @@ export default function Dashboard() {
         completed: demands.filter(d => d.tasks.every((t: any) => t.status === 'concluido')).length
       });
     } catch (error) {
-      console.warn('Erro ao carregar demandas:', error);
+      console.error('❌ Erro ao carregar demandas:', error);
     }
   };
 
