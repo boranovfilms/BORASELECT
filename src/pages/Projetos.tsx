@@ -8,15 +8,16 @@ import { toast } from 'react-hot-toast';
 import { projectService, Project } from '../services/projectService';
 import { clientService, Client } from '../services/clientService';
 import { auth, db } from '../lib/firebase';
-import { collection, query, where, getDocs, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, getDocs, onSnapshot, doc, getDoc } from 'firebase/firestore';
 import { cn } from '../lib/utils';
 import { format } from 'date-fns';
 import NewProjectModal from '../components/NewProjectModal';
 import { DataTable } from '../components/ui/DataTable';
+import { modelosService, WorkflowModel } from '../services/modelosService';
 
 export default function Projetos() {
   const [adminProjects, setAdminProjects] = useState<Project[]>([]);
-  const [unifiedItems, setUnifiedItems] = useState<any[]>([]); 
+  const [unifiedItems, setUnifiedItems] = useState<any[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -25,12 +26,37 @@ export default function Projetos() {
   const [searchTerm, setSearchTerm] = useState('');
   const [userRole, setUserRole] = useState<string>('cliente');
   const [userClientId, setUserClientId] = useState<string | null>(null);
+  const [linkedModels, setLinkedModels] = useState<Record<string, WorkflowModel | null>>({});
   
   const navigate = useNavigate();
 
   useEffect(() => {
     initializeUser();
   }, []);
+
+  useEffect(() => {
+    loadLinkedModels();
+  }, [unifiedItems]);
+
+  const loadLinkedModels = async () => {
+    if (userRole === 'cliente' && userClientId) {
+      try {
+        const clientRef = doc(db, 'clientes', userClientId);
+        const clientSnap = await getDoc(clientRef);
+        if (clientSnap.exists()) {
+          const workflowModels = clientSnap.data().workflowModels || {};
+          const planejamentoModelId = workflowModels['planejamento'];
+          
+          if (planejamentoModelId) {
+            const model = await modelosService.getModelo(planejamentoModelId);
+            setLinkedModels(prev => ({ ...prev, 'planejamento': model }));
+          }
+        }
+      } catch (error) {
+        console.warn('Erro ao carregar modelos:', error);
+      }
+    }
+  };
 
   const initializeUser = async () => {
     setLoading(true);
@@ -45,13 +71,11 @@ export default function Projetos() {
       if (cleanEmail === 'admin@boraselect.com.br') {
         role = 'master';
       } else {
-        // ✅ Busca em boraselect primeiro
         const qBora = query(collection(db, 'boraselect'), where('email', '==', cleanEmail));
         const snapBora = await getDocs(qBora);
         if (!snapBora.empty) {
           role = snapBora.docs[0].data().role || 'redator';
         } else {
-          // ✅ Depois em clientes
           const qClientes = query(collection(db, 'clientes'), where('email', '==', cleanEmail));
           const snapClientes = await getDocs(qClientes);
           if (!snapClientes.empty) {
@@ -70,7 +94,6 @@ export default function Projetos() {
       if (isInternal) {
         const allClients = await clientService.searchClients('').catch(() => []);
         setClients(allClients);
-        // Admin: escuta projetos em tempo real
         const unsubscribe = onSnapshot(collection(db, 'projects'), (snap) => {
           const projects = snap.docs.map(d => ({ id: d.id, ...d.data() })) as Project[];
           setAdminProjects(projects);
@@ -78,7 +101,6 @@ export default function Projetos() {
         });
         return () => unsubscribe();
       } else {
-        // Cliente/Equipe: escuta demandas em tempo real
         const companyId = clientId;
         if (!companyId) { setLoading(false); return; }
 
@@ -87,7 +109,6 @@ export default function Projetos() {
           async (snap) => {
             const plans = snap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
             
-            // Projetos do cliente (podcast/fotos)
             const clientProjects = await projectService.getProjectsForClient().catch(() => []);
 
             const unified = [
@@ -188,6 +209,81 @@ export default function Projetos() {
     return <span className={cn("px-2 py-0.5 rounded-md border text-[9px] font-black uppercase tracking-widest", configs[type])}>{type}</span>;
   };
 
+  const calcularProgresoPlano = (item: any): number => {
+    let etapasCumpridas = 0;
+    const linkedModel = linkedModels['planejamento'];
+    const totalEtapas = linkedModel?.stages?.length || 12;
+
+    if (item.id) {
+      etapasCumpridas = 1;
+    }
+
+    if (item.status && item.status !== 'rascunho') {
+      etapasCumpridas = Math.max(etapasCumpridas, 2);
+    }
+
+    if (item.status === 'aprovado' || item.status === 'aprovado_equipe' || item.status === 'aguardando_validacao_equipe') {
+      etapasCumpridas = Math.max(etapasCumpridas, 3);
+    }
+
+    if (item.status === 'aprovado_equipe') {
+      etapasCumpridas = Math.max(etapasCumpridas, 4);
+    }
+
+    if (item.raw?.posts && item.raw.posts.length > 0) {
+      const postsComTasks = item.raw.posts.filter((p: any) => p.tasks && p.tasks.length > 0).length;
+      if (postsComTasks > 0) {
+        etapasCumpridas = Math.max(etapasCumpridas, 5);
+      }
+    }
+
+    const percent = totalEtapas > 0 ? Math.round((etapasCumpridas / totalEtapas) * 100) : 0;
+    return percent;
+  };
+
+  const renderProgresso = (item: any) => {
+    const status = item.status;
+
+    if (item.type !== 'Planejamento') {
+      if (status === 'em_producao') {
+        return (
+          <div className="text-left min-w-[120px]">
+            <p className="text-[9px] font-black uppercase tracking-widest text-[#ff5351] mb-1">Em Produção</p>
+            <div className="w-full h-1 bg-zinc-800 rounded-full overflow-hidden">
+              <div className="h-full bg-[#ff5351] rounded-full transition-all duration-500" style={{ width: '50%' }} />
+            </div>
+            <p className="text-[9px] font-black text-zinc-500 mt-1">50%</p>
+          </div>
+        );
+      }
+      if (status === 'concluido') {
+        return (
+          <div className="text-left min-w-[120px]">
+            <div className="w-full h-1 bg-zinc-800 rounded-full overflow-hidden">
+              <div className="h-full bg-emerald-500 rounded-full" style={{ width: '100%' }} />
+            </div>
+            <p className="text-[9px] font-black text-emerald-500 mt-1 uppercase tracking-widest">CONCLUÍDO</p>
+          </div>
+        );
+      }
+      return <span className="text-zinc-600 text-sm">—</span>;
+    }
+
+    // Planejamentos: renderiza barra dinâmica
+    const percent = calcularProgresoPlano(item);
+    return (
+      <div className="flex items-center gap-2">
+        <div className="flex-1 h-1.5 bg-zinc-800 rounded-full overflow-hidden min-w-[80px]">
+          <div 
+            className="h-full bg-[#ff5351] rounded-full transition-all duration-500" 
+            style={{ width: `${percent}%` }} 
+          />
+        </div>
+        <span className="text-[10px] font-black text-[#ff5351] whitespace-nowrap">{percent}%</span>
+      </div>
+    );
+  };
+
   const isInternal = ['master', 'admin', 'editor', 'designer', 'redator', 'midia_social'].includes(userRole);
   const isEquipe = userRole === 'equipe';
   const isCliente = userRole === 'cliente';
@@ -207,32 +303,6 @@ export default function Projetos() {
       return matchType && matchSearch;
     });
   }, [unifiedItems, selectedType, searchTerm]);
-
-  const renderProgresso = (item: any) => {
-    const status = item.status;
-    if (status === 'em_producao') {
-      return (
-        <div className="text-left min-w-[120px]">
-          <p className="text-[9px] font-black uppercase tracking-widest text-[#ff5351] mb-1">Em Produção</p>
-          <div className="w-full h-1 bg-zinc-800 rounded-full overflow-hidden">
-            <div className="h-full bg-[#ff5351] rounded-full transition-all duration-500" style={{ width: '50%' }} />
-          </div>
-          <p className="text-[9px] font-black text-zinc-500 mt-1">50%</p>
-        </div>
-      );
-    }
-    if (status === 'concluido') {
-      return (
-        <div className="text-left min-w-[120px]">
-          <div className="w-full h-1 bg-zinc-800 rounded-full overflow-hidden">
-            <div className="h-full bg-emerald-500 rounded-full" style={{ width: '100%' }} />
-          </div>
-          <p className="text-[9px] font-black text-emerald-500 mt-1 uppercase tracking-widest">CONCLUÍDO</p>
-        </div>
-      );
-    }
-    return <span className="text-zinc-600 text-sm">—</span>;
-  };
 
   const renderClienteStatusBadge = (status: string) => {
     const isPulsing = status === 'aguardando_cliente';
