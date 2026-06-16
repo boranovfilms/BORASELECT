@@ -4,7 +4,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { auth, db } from '../lib/firebase';
-import { collection, query, where, getDocs, onSnapshot, doc, getDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, onSnapshot } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
 
 export default function Dashboard() {
@@ -77,7 +77,7 @@ export default function Dashboard() {
   };
 
   const initListeners = (role: string, email: string) => {
-    const isAdmin = ['master', 'admin', 'editor'].includes(role);
+    const isAdmin = ['master', 'admin'].includes(role);
     const isEditor = ['editor', 'designer', 'redator'].includes(role);
     const today = new Date().toISOString().split('T')[0];
 
@@ -117,8 +117,10 @@ export default function Dashboard() {
       });
 
     } else if (isEditor) {
-      // Carrega demandas delegadas para editor/designer
-      loadPendingDemands(email);
+      // TODO: Ativar loadPendingDemands depois de resolver permissões
+      // loadPendingDemands(email);
+      setPendingDemands([]);
+      setDemandMetrics({ pending: 0, inProgress: 0, completed: 0 });
       
       onSnapshot(query(collection(db, 'projects'), where('clientEmail', '==', email)), (snap) => {
         const docs = snap.docs.map(d => d.data());
@@ -152,97 +154,6 @@ export default function Dashboard() {
     }
   };
 
-  const loadPendingDemands = async (email: string) => {
-    try {
-      console.log('🔍 Carregando demandas para:', email);
-      
-      const demandasSnap = await getDocs(collection(db, 'demandas'));
-      const demands: any[] = [];
-
-      for (const demandaDoc of demandasSnap.docs) {
-        const demanda = demandaDoc.data();
-        const posts = demanda.posts || [];
-        
-        // Procura posts com tasks delegadas para este usuário
-        for (const post of posts) {
-          const tasks = post.tasks || [];
-          const userTasks = tasks.filter((t: any) => {
-            const taskEmail = t.responsibleEmail?.toLowerCase() || '';
-            const match = taskEmail === email.toLowerCase();
-            console.log(`  Task: ${t.id} | responsibleEmail: "${taskEmail}" | userEmail: "${email.toLowerCase()}" | Match: ${match}`);
-            return match;
-          });
-          
-          if (userTasks.length > 0) {
-            console.log(`✅ Encontrado post com ${userTasks.length} task(s) para ${email}`);
-            
-            // Busca info do cliente pelo docId (CORRIGIDO!)
-            let clientData = null;
-            try {
-              const clientSnap = await getDoc(doc(db, 'clientes', demanda.clientId));
-              if (clientSnap.exists()) {
-                clientData = clientSnap.data();
-                console.log(`  Cliente encontrado: ${clientData?.name}`);
-              } else {
-                console.warn(`  Cliente NÃO encontrado para ID: ${demanda.clientId}`);
-              }
-            } catch (err) {
-              console.warn(`  Erro ao buscar cliente ${demanda.clientId}:`, err);
-            }
-            
-            demands.push({
-              id: demandaDoc.id,
-              demandaName: demanda.name,
-              demandaMes: demanda.monthReference,
-              clientName: clientData?.name || 'Cliente',
-              clientId: demanda.clientId,
-              postNumber: post.number,
-              postHeadline: post.headline,
-              postType: post.type,
-              publishDate: post.publishDate,
-              tasks: userTasks,
-              taskTypes: userTasks.map(t => t.dept).join(', '),
-              taskLabels: userTasks.map(t => {
-                const icons: any = {
-                  'video': '🎬',
-                  'design': '🎨',
-                  'redacao': '✍️',
-                  'midia_social': '📱'
-                };
-                return `${icons[t.dept] || '•'} ${t.deptLabel}`;
-              }).join(' + '),
-              isUrgent: isUrgentDate(post.publishDate),
-              status: post.status
-            });
-          }
-        }
-      }
-
-      console.log(`📊 Total de demandas carregadas: ${demands.length}`);
-      setPendingDemands(demands);
-      setDemandMetrics({
-        pending: demands.filter(d => d.tasks.some((t: any) => t.status === 'pendente')).length,
-        inProgress: demands.filter(d => d.tasks.some((t: any) => t.status === 'em_andamento')).length,
-        completed: demands.filter(d => d.tasks.every((t: any) => t.status === 'concluido')).length
-      });
-    } catch (error) {
-      console.error('❌ Erro ao carregar demandas:', error);
-    }
-  };
-
-  const isUrgentDate = (dateStr: string): boolean => {
-    try {
-      const [dia, mes, ano] = dateStr.split('/').map(Number);
-      const date = new Date(ano, mes - 1, dia);
-      const hoje = new Date();
-      const diffMs = date.getTime() - hoje.getTime();
-      const diffDias = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
-      return diffDias <= 2 && diffDias >= 0;
-    } catch {
-      return false;
-    }
-  };
-
   if (loading) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
@@ -251,10 +162,10 @@ export default function Dashboard() {
     );
   }
 
-  const isAdminView = ['master', 'admin', 'editor'].includes(userRole);
+  const isAdminView = ['master', 'admin'].includes(userRole);
   const isEditorView = ['editor', 'designer', 'redator'].includes(userRole) && userRole !== 'master' && userRole !== 'admin';
 
-  if (isAdminView && userRole !== 'editor' && userRole !== 'designer' && userRole !== 'redator') {
+  if (isAdminView) {
     return (
       <div className="space-y-8 pb-20 animate-in fade-in duration-700">
         <header>
