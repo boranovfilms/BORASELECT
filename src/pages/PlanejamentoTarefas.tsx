@@ -7,6 +7,20 @@ import { auth, db } from '../lib/firebase';
 import { contentPlanService, ContentPlan, ContentPost, MicroTask, TaskDept } from '../services/contentPlanService';
 import { cn } from '../lib/utils';
 
+interface WorkflowStage {
+  id: string;
+  name: string;
+  order: number;
+  type: string;
+  requiresApproval: boolean;
+}
+
+interface WorkflowModel {
+  id: string;
+  name: string;
+  stages: WorkflowStage[];
+}
+
 const DEPTS = [
   { id: 'video' as TaskDept, icon: '🎬', name: 'Edição de Vídeo', sub: 'Gravação e edição',
     tags: ['Gravação', 'Edição', 'Color Grade', 'Motion', 'Corte', 'Vinheta'] },
@@ -18,25 +32,81 @@ const DEPTS = [
     tags: ['Programar Post', 'Programar Story', 'Programar Reel', 'Impulsionar'] },
 ];
 
-function calcularFasePost(post: ContentPost): { faseId: string; label: string; color: string; bg: string; border: string; barColor: string; percent: number } {
-  const tasks = (post as any).tasks || [];
-
-  if (!tasks || tasks.length === 0) {
+function calcularFasePost(
+  post: ContentPost,
+  plan: ContentPlan,
+  workflowModel: WorkflowModel | null
+): { faseId: string; label: string; color: string; bg: string; border: string; barColor: string; percent: number } {
+  // Se não temos modelo, usa fallback
+  if (!workflowModel || !workflowModel.stages || workflowModel.stages.length === 0) {
+    const tasks = (post as any).tasks || [];
+    if (tasks.length === 0) {
+      return {
+        faseId: 'aguardando',
+        label: 'Aguardando Delegação',
+        color: 'text-zinc-500',
+        bg: 'bg-zinc-800',
+        border: 'border-zinc-700',
+        barColor: 'bg-zinc-600',
+        percent: 0
+      };
+    }
+    const total = tasks.length;
+    const concluidas = tasks.filter((t: any) => t.status === 'concluido').length;
+    const percent = Math.round((concluidas / total) * 100);
     return {
-      faseId: 'aguardando',
-      label: 'Aguardando Delegação',
-      color: 'text-zinc-500',
-      bg: 'bg-zinc-800',
-      border: 'border-zinc-700',
-      barColor: 'bg-zinc-600',
-      percent: 0
+      faseId: 'producao',
+      label: 'Em Produção',
+      color: 'text-amber-400',
+      bg: 'bg-amber-500/10',
+      border: 'border-amber-500/20',
+      barColor: 'bg-amber-500',
+      percent
     };
   }
 
-  const total = tasks.length;
-  const concluidas = tasks.filter((t: any) => t.status === 'concluido').length;
-  const percent = Math.round((concluidas / total) * 100);
-  const emAndamento = tasks.find((t: any) => t.status === 'em_andamento');
+  // Calcula etapas cumpridas com base no fluxo
+  let etapasCumpridas = 0;
+  const totalEtapas = workflowModel.stages.length;
+
+  // Etapa 1: REDAÇÃO — post existe (sempre cumprida)
+  if (post.id) {
+    etapasCumpridas = 1;
+  }
+
+  // Etapa 2: APROVAÇÃO BORANOV (stage 1) — planejamento saiu de rascunho
+  if (plan.status && plan.status !== 'rascunho') {
+    etapasCumpridas = Math.max(etapasCumpridas, 2);
+  }
+
+  // Etapa 3: APROVAÇÃO CLIENTE (stage 2) — post tem aprovação do cliente
+  const hasClientApproval = (post as any).approvals?.some((a: any) => a.role === 'cliente' && a.status === 'aprovado');
+  if (hasClientApproval) {
+    etapasCumpridas = Math.max(etapasCumpridas, 3);
+  }
+
+  // Etapa 4: VALIDAÇÃO EQUIPE CLIENTE (stage 3) — post tem validação
+  const hasTeamValidation = (post as any).approvals?.some((a: any) => a.role === 'equipe' && a.status === 'validado_equipe');
+  if (hasTeamValidation) {
+    etapasCumpridas = Math.max(etapasCumpridas, 4);
+  }
+
+  // Etapa 5: PRODUÇÃO (stage 4) — post foi delegado (tem tarefas)
+  const tasks = (post as any).tasks || [];
+  if (tasks.length > 0) {
+    etapasCumpridas = Math.max(etapasCumpridas, 5);
+  }
+
+  // Etapas 6+: Preenchidas pela Fase 2 (produção real)
+  // Por enquanto, se todas as tasks estão concluídas, considera até concluído
+  if (tasks.length > 0) {
+    const concluidas = tasks.filter((t: any) => t.status === 'concluido').length;
+    if (concluidas === tasks.length && tasks.length > 0) {
+      etapasCumpridas = totalEtapas; // Concluído
+    }
+  }
+
+  const percent = totalEtapas > 0 ? Math.round((etapasCumpridas / totalEtapas) * 100) : 0;
 
   if (percent === 100) {
     return {
@@ -50,7 +120,9 @@ function calcularFasePost(post: ContentPost): { faseId: string; label: string; c
     };
   }
 
-  if (percent > 0 || emAndamento) {
+  if (tasks.length > 0) {
+    const concluidas = tasks.filter((t: any) => t.status === 'concluido').length;
+    const emAndamento = tasks.find((t: any) => t.status === 'em_andamento');
     return {
       faseId: 'producao',
       label: emAndamento?.deptLabel || 'Em Produção',
@@ -69,12 +141,8 @@ function calcularFasePost(post: ContentPost): { faseId: string; label: string; c
     bg: 'bg-zinc-800',
     border: 'border-zinc-700',
     barColor: 'bg-zinc-600',
-    percent: 0
+    percent
   };
-}
-
-function isPostConcluido(post: ContentPost): boolean {
-  return calcularFasePost(post).percent === 100;
 }
 
 function formatDate(dateStr: string): { data: string; diaSemana: string; isUrgente: boolean } {
@@ -100,10 +168,11 @@ export default function PlanejamentoTarefas() {
   const navigate = useNavigate();
 
   const [plan, setPlan] = useState<ContentPlan | null>(null);
+  const [workflowModel, setWorkflowModel] = useState<WorkflowModel | null>(null);
   const [clientName, setClientName] = useState('');
   const [loading, setLoading] = useState(true);
   const [userRole, setUserRole] = useState('cliente');
-  const [roleLoaded, setRoleLoaded] = useState(false); // ✅ NOVO
+  const [roleLoaded, setRoleLoaded] = useState(false);
 
   const [showDelegModal, setShowDelegModal] = useState(false);
   const [selectedPost, setSelectedPost] = useState<ContentPost | null>(null);
@@ -133,7 +202,7 @@ export default function PlanejamentoTarefas() {
         setRoleLoaded(true);
         return;
       }
-      // ✅ Busca em boraselect primeiro
+      // Busca em boraselect primeiro
       const qBora = query(collection(db, 'boraselect'), where('email', '==', currentEmail));
       const snapBora = await getDocs(qBora);
       if (!snapBora.empty) {
@@ -141,7 +210,7 @@ export default function PlanejamentoTarefas() {
         setRoleLoaded(true);
         return;
       }
-      // ✅ Depois em clientes
+      // Depois em clientes
       const q = query(collection(db, 'clientes'), where('email', '==', currentEmail));
       const snap = await getDocs(q);
       if (!snap.empty) {
@@ -166,13 +235,30 @@ export default function PlanejamentoTarefas() {
       }
       setPlan(planData);
 
-      // ✅ Busca nome do cliente em 'clientes'
+      // Carrega o modelo de fluxo vinculado ao cliente
+      if (planData.clientId) {
+        try {
+          const modelosSnap = await getDocs(collection(db, 'workflowModels'));
+          const modelos = modelosSnap.docs.map(d => ({ id: d.id, ...d.data() } as WorkflowModel));
+          
+          // Tenta buscar o modelo "PLANEJAMENTO" vinculado ao cliente
+          // Por enquanto, usa o primeiro modelo de tipo "PLANEJAMENTO" encontrado
+          const planningModel = modelos.find(m => m.name === 'PLANEJAMENTO');
+          if (planningModel) {
+            setWorkflowModel(planningModel);
+          }
+        } catch (error) {
+          console.warn('Erro ao carregar modelo de fluxo:', error);
+        }
+      }
+
+      // Busca nome do cliente em 'clientes'
       const clientSnap = await getDoc(doc(db, 'clientes', planData.clientId));
       if (clientSnap.exists()) {
         setClientName(clientSnap.data().name || '');
       }
 
-      // ✅ Membros da equipe do cliente — companyId em vez de clienteId
+      // Membros da equipe do cliente
       const q = query(
         collection(db, 'clientes'),
         where('type', '==', 'membro'),
@@ -181,7 +267,7 @@ export default function PlanejamentoTarefas() {
       const snap = await getDocs(q);
       const clientTeam = snap.docs.map(d => ({ id: d.id, ...d.data(), grupo: 'Equipe Cliente' }));
 
-      // ✅ Membros internos Boranov — busca em 'boraselect'
+      // Membros internos Boranov
       const boranovSnap = await getDocs(collection(db, 'boraselect'));
       const boranovMembers = boranovSnap.docs.map(d => ({
         id: d.id, ...d.data(), grupo: 'Equipe Boranov'
@@ -205,7 +291,7 @@ export default function PlanejamentoTarefas() {
         return new Date(y1, m1 - 1, d1).getTime() - new Date(y2, m2 - 1, d2).getTime();
       })
       .filter(post => {
-        // ✅ Para o redator: mostra apenas posts ainda não delegados
+        // Para o redator: mostra apenas posts ainda não delegados
         if (isInternal) {
           const tasks = (post as any).tasks || [];
           return tasks.length === 0;
@@ -214,9 +300,19 @@ export default function PlanejamentoTarefas() {
       });
   }, [plan, isInternal]);
 
-  const totalPosts = postsOrdenados.length;
-  const concluidos = postsOrdenados.filter(isPostConcluido).length;
-  const porcentagemGeral = totalPosts > 0 ? Math.round((concluidos / totalPosts) * 100) : 0;
+  // Barra geral usa TODOS os posts, não só os visíveis
+  const allPosts = useMemo(() => {
+    return plan?.posts || [];
+  }, [plan]);
+
+  const porcentagemGeral = useMemo(() => {
+    if (allPosts.length === 0) return 0;
+    const totalPercent = allPosts.reduce((sum, post) => {
+      const fase = calcularFasePost(post, plan!, workflowModel);
+      return sum + fase.percent;
+    }, 0);
+    return Math.round(totalPercent / allPosts.length);
+  }, [allPosts, plan, workflowModel]);
 
   const getTypeStyles = (type: string) => {
     const styles: Record<string, string> = {
@@ -336,11 +432,12 @@ export default function PlanejamentoTarefas() {
           <div className="h-full bg-[#ff5351] rounded-full transition-all duration-700" style={{ width: `${porcentagemGeral}%` }} />
         </div>
         <div className="flex flex-wrap gap-1">
-          {postsOrdenados.map((post, idx) => {
-            const concluido = isPostConcluido(post);
-            const emAndamento = !concluido && idx === concluidos;
+          {allPosts.map((post, idx) => {
+            const fase = calcularFasePost(post, plan, workflowModel);
+            const isConcluido = fase.percent === 100;
+            const isActive = idx < Math.ceil((porcentagemGeral / 100) * allPosts.length);
             return (
-              <div key={post.id} title={`Post ${post.number}`} className={cn('w-4 h-1.5 rounded-sm transition-all', concluido ? 'bg-[#ff5351]' : emAndamento ? 'bg-amber-500' : 'bg-zinc-800')} />
+              <div key={post.id} title={`Post ${post.number}: ${fase.percent}%`} className={cn('w-4 h-1.5 rounded-sm transition-all', isConcluido ? 'bg-[#ff5351]' : isActive ? 'bg-amber-500' : 'bg-zinc-800')} />
             );
           })}
         </div>
@@ -361,7 +458,7 @@ export default function PlanejamentoTarefas() {
             </thead>
             <tbody>
               {postsOrdenados.map((post) => {
-                const fase = calcularFasePost(post);
+                const fase = calcularFasePost(post, plan, workflowModel);
                 const dateInfo = formatDate(post.publishDate);
                 const hasTasks = (post as any).tasks && (post as any).tasks.length > 0;
 
@@ -416,7 +513,6 @@ export default function PlanejamentoTarefas() {
                     </td>
 
                     <td className="px-6 py-5 text-center">
-                      {/* ✅ Aguarda roleLoaded antes de renderizar botão */}
                       {!roleLoaded ? (
                         <Loader2 className="w-4 h-4 animate-spin text-zinc-600 mx-auto" />
                       ) : isInternal ? (
