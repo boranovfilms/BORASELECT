@@ -125,10 +125,8 @@ export default function AppLayout({ children, userRole = 'cliente', userName = '
 
   const ALL_MODULES = [
     { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard', path: '/' },
-    { id: 'projetos', icon: Library, label: 'Projetos de Seleção', path: '/projetos' },
+    { id: 'projetos', icon: Library, label: 'Projetos', path: '/projetos' },
     { id: 'planejamentos', icon: FileText, label: 'Planejamentos', path: '/meus-planejamentos' },
-    { id: 'minhas_demandas', icon: FileText, label: '📋 Minhas Demandas', path: '/minhas-demandas' },
-    { id: 'notificacoes', icon: Bell, label: '🔔 Notificações', path: '/notificacoes' },
     { id: 'clientes', icon: Users, label: 'Clientes', path: '/clients' },
     { id: 'equipe', icon: UsersRound, label: 'Equipe', path: '/equipe' },
     { id: 'pacotes', icon: Package, label: 'Serviços', path: '/packages' },
@@ -140,20 +138,12 @@ export default function AppLayout({ children, userRole = 'cliente', userName = '
     { id: 'diagnostico', icon: Database, label: 'Teste Tabela', path: '/diagnostico' }
   ];
 
-  const MENU_POR_ROLE: Record<string, string[]> = {
-    master: ['dashboard','projetos','clientes','equipe','pacotes','modelos','creditos','tarefas','teleprompter','painel_master','diagnostico'],
-    admin: ['dashboard','projetos','clientes','equipe','pacotes','modelos','creditos','tarefas','teleprompter','painel_master','diagnostico'],
-    redator: ['dashboard','minhas_demandas','tarefas','notificacoes'],
-    midia_social: ['dashboard','minhas_demandas','tarefas','notificacoes'],
-    editor: ['dashboard','minhas_demandas','tarefas','notificacoes'],
-    designer: ['dashboard','minhas_demandas','tarefas','notificacoes'],
-    cliente: ['dashboard','minhas_demandas','projetos','notificacoes'],
-    equipe: ['dashboard','minhas_demandas','projetos','notificacoes'],
-  };
-
   const navItems = ALL_MODULES.filter(mod => {
-    const allowed = MENU_POR_ROLE[userRole] ?? MENU_POR_ROLE['cliente'];
-    return allowed.includes(mod.id);
+    if (mod.id === 'planejamentos' && userRole === 'cliente') return false;
+    if (mod.id === 'painel_master' && userRole === 'master') return true;
+    if (mod.id === 'diagnostico' && userRole === 'master') return true;
+    if (mod.id === 'teleprompter' && userRole === 'master') return true;
+    return permissions[mod.id]?.[userRole] === true;
   });
 
   if (navItems.length === 0) {
