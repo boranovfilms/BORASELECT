@@ -140,12 +140,17 @@ export default function AppLayout({ children, userRole = 'cliente', userName = '
     { id: 'diagnostico', icon: Database, label: 'Teste Tabela', path: '/diagnostico' }
   ];
 
+  const MENU_POR_ROLE: Record<string, string[]> = {
+    master: ['dashboard','projetos','clientes','equipe','pacotes','modelos','creditos','tarefas','teleprompter','painel_master','diagnostico'],
+    redator: ['dashboard','minhas_demandas','tarefas','notificacoes'],
+    editor: ['dashboard','minhas_demandas','tarefas','notificacoes'],
+    cliente: ['dashboard','minhas_demandas','projetos','notificacoes'],
+    equipe: ['dashboard','minhas_demandas','projetos','notificacoes'],
+  };
+
   const navItems = ALL_MODULES.filter(mod => {
-    if (mod.id === 'planejamentos' && userRole === 'cliente') return false;
-    if (mod.id === 'painel_master' && userRole === 'master') return true;
-    if (mod.id === 'diagnostico' && userRole === 'master') return true;
-    if (mod.id === 'teleprompter' && userRole === 'master') return true;
-    return permissions[mod.id]?.[userRole] === true;
+    const allowed = MENU_POR_ROLE[userRole] ?? MENU_POR_ROLE['cliente'];
+    return allowed.includes(mod.id);
   });
 
   if (navItems.length === 0) {
@@ -153,35 +158,35 @@ export default function AppLayout({ children, userRole = 'cliente', userName = '
   }
 
   return (
-    <div className=\"min-h-screen bg=\"#131313\" text=\"#e2e2e2\" font-sans selection:bg=\"#ff5351\"/30 selection:text-white text-left\">
-      <header className=\"fixed top-0 left-0 right-0 h-16 bg-black/95 backdrop-blur-xl border-b border-zinc-800 z-[200] flex items-center justify-between px-6\">
-        <div className=\"flex items-center gap-12\">
-          <div className=\"flex items-center gap-2\">
-            <div className=\"w-2 h-2 rounded-full bg=\"#ff5351\" animate-pulse\" />
-            <span className=\"text-xl font-black tracking-tighter uppercase text-white\">{firstName}</span>
+    <div className="min-h-screen bg-[#131313] text-[#e2e2e2] font-sans selection:bg-[#ff5351]/30 selection:text-white text-left">
+      <header className="fixed top-0 left-0 right-0 h-16 bg-black/95 backdrop-blur-xl border-b border-zinc-800 z-[200] flex items-center justify-between px-6">
+        <div className="flex items-center gap-12">
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-[#ff5351] animate-pulse" />
+            <span className="text-xl font-black tracking-tighter uppercase text-white">{firstName}</span>
           </div>
         </div>
 
-        <div className=\"flex items-center gap-2 md:gap-4 relative\" ref={dropdownRef}>
+        <div className="flex items-center gap-2 md:gap-4 relative" ref={dropdownRef}>
           <button
             onClick={() => navigate('/teleprompter')}
-            className=\"flex md:hidden p-2 text-zinc-400 hover:text-white transition-all group\"
-            title=\"Teleprompter\"
+            className="flex md:hidden p-2 text-zinc-400 hover:text-white transition-all group"
+            title="Teleprompter"
           >
-            <Tv className=\"w-6 h-6\" />
+            <Tv className="w-6 h-6" />
           </button>
 
           <button
             onClick={() => setShowNotificationDropdown(!showNotificationDropdown)}
-            className=\"relative p-2 text-zinc-400 hover:text-white transition-all group\"
+            className="relative p-2 text-zinc-400 hover:text-white transition-all group"
           >
             <Bell className={cn(
-              \"w-6 h-6 transition-all\",
-              pendingNotifications.length > 0 && \"text-[#ff5351] animate-[bell_2s_infinite_ease-in-out]\"
+              "w-6 h-6 transition-all",
+              pendingNotifications.length > 0 && "text-[#ff5351] animate-[bell_2s_infinite_ease-in-out]"
             )} />
             
             {pendingNotifications.length > 0 && (
-              <span className=\"absolute top-1 right-1 w-4 h-4 bg-[#ff5351] text-white text-[9px] font-black rounded-full flex items-center justify-center border-2 border-black animate-in zoom-in duration-300\">
+              <span className="absolute top-1 right-1 w-4 h-4 bg-[#ff5351] text-white text-[9px] font-black rounded-full flex items-center justify-center border-2 border-black animate-in zoom-in duration-300">
                 {pendingNotifications.length}
               </span>
             )}
@@ -197,33 +202,33 @@ export default function AppLayout({ children, userRole = 'cliente', userName = '
           </button>
 
           {showNotificationDropdown && (
-            <div className=\"absolute top-full right-0 mt-2 w-80 bg-[#1a1a1a] border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200 z-[300]\">
-              <div className=\"p-4 border-b border-zinc-800 flex items-center justify-between\">
-                <span className=\"text-[10px] font-black uppercase tracking-widest text-white italic\">Notificações</span>
+            <div className="absolute top-full right-0 mt-2 w-80 bg-[#1a1a1a] border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200 z-[300]">
+              <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
+                <span className="text-[10px] font-black uppercase tracking-widest text-white italic">Notificações</span>
                 {pendingNotifications.length > 0 && (
-                  <span className=\"px-2 py-0.5 bg-[#ff5351] text-white text-[9px] font-black rounded-full\">{pendingNotifications.length}</span>
+                  <span className="px-2 py-0.5 bg-[#ff5351] text-white text-[9px] font-black rounded-full">{pendingNotifications.length}</span>
                 )}
               </div>
               
-              <div className=\"max-h-64 overflow-y-auto\">
+              <div className="max-h-64 overflow-y-auto">
                 {pendingNotifications.length === 0 ? (
-                  <div className=\"p-8 text-center text-zinc-600\">
-                    <CheckSquare className=\"w-8 h-8 mx-auto mb-2 opacity-20\" />
-                    <p className=\"text-xs font-bold uppercase tracking-widest\">Tudo limpo!</p>
+                  <div className="p-8 text-center text-zinc-600">
+                    <CheckSquare className="w-8 h-8 mx-auto mb-2 opacity-20" />
+                    <p className="text-xs font-bold uppercase tracking-widest">Tudo limpo!</p>
                   </div>
                 ) : (
                   pendingNotifications.map((notif) => (
                     <button
                       key={notif.id}
                       onClick={() => handleNotificationClick(notif)}
-                      className=\"w-full p-4 text-left border-b border-zinc-800/50 hover:bg-[#ff5351]/5 transition-all flex items-start gap-3 group/item\"
+                      className="w-full p-4 text-left border-b border-zinc-800/50 hover:bg-[#ff5351]/5 transition-all flex items-start gap-3 group/item"
                     >
-                      <div className=\"w-2 h-2 rounded-full bg-[#ff5351] mt-1.5 shadow-[0_0_8px_rgba(255,83,81,0.4)]\" />
-                      <div className=\"flex-1 overflow-hidden\">
-                        <p className=\"text-xs font-bold text-white uppercase truncate group-hover/item:text-[#ff5351] transition-colors\">{notif.titulo}</p>
-                        <p className=\"text-[9px] text-zinc-500 font-black uppercase tracking-widest mt-1\">{notif.descricao}</p>
+                      <div className="w-2 h-2 rounded-full bg-[#ff5351] mt-1.5 shadow-[0_0_8px_rgba(255,83,81,0.4)]" />
+                      <div className="flex-1 overflow-hidden">
+                        <p className="text-xs font-bold text-white uppercase truncate group-hover/item:text-[#ff5351] transition-colors">{notif.titulo}</p>
+                        <p className="text-[9px] text-zinc-500 font-black uppercase tracking-widest mt-1">{notif.descricao}</p>
                       </div>
-                      <ChevronRight className=\"w-4 h-4 text-zinc-700 group-hover/item:text-[#ff5351] transition-colors\" />
+                      <ChevronRight className="w-4 h-4 text-zinc-700 group-hover/item:text-[#ff5351] transition-colors" />
                     </button>
                   ))
                 )}
@@ -231,48 +236,48 @@ export default function AppLayout({ children, userRole = 'cliente', userName = '
 
               <button
                 onClick={() => { setShowNotificationDropdown(false); navigate('/tarefas'); }}
-                className=\"w-full p-4 bg-zinc-900/50 text-[10px] font-black uppercase tracking-widest text-zinc-400 hover:text-white hover:bg-zinc-800 transition-all border-t border-zinc-800 flex items-center justify-center gap-2\"
+                className="w-full p-4 bg-zinc-900/50 text-[10px] font-black uppercase tracking-widest text-zinc-400 hover:text-white hover:bg-zinc-800 transition-all border-t border-zinc-800 flex items-center justify-center gap-2"
               >
-                Ver todas as tarefas <ArrowRight className=\"w-3 h-3\" />
+                Ver todas as tarefas <ArrowRight className="w-3 h-3" />
               </button>
             </div>
           )}
         </div>
       </header>
 
-      <div className=\"flex pt-16\">
-        <aside className=\"hidden lg:flex flex-col w-64 fixed left-0 top-16 bottom-0 bg-[#0e0e0e] border-r border-zinc-800 p-4\">
-          <div className=\"mb-8 px-2 flex items-center gap-4\">
-            <div className=\"w-12 h-12 rounded-full overflow-hidden border border-zinc-700 bg-zinc-800\">
+      <div className="flex pt-16">
+        <aside className="hidden lg:flex flex-col w-64 fixed left-0 top-16 bottom-0 bg-[#0e0e0e] border-r border-zinc-800 p-4">
+          <div className="mb-8 px-2 flex items-center gap-4">
+            <div className="w-12 h-12 rounded-full overflow-hidden border border-zinc-700 bg-zinc-800">
               {user?.photoURL ? (
-                <img src={user.photoURL} alt=\"Avatar\" className=\"w-full h-full object-cover\" />
+                <img src={user.photoURL} alt="Avatar" className="w-full h-full object-cover" />
               ) : (
-                <div className=\"w-full h-full flex items-center justify-center text-[#ff5351] font-black text-sm\">{initials}</div>
+                <div className="w-full h-full flex items-center justify-center text-[#ff5351] font-black text-sm">{initials}</div>
               )}
             </div>
             <div>
-              <div className=\"text-sm font-bold text-white truncate max-w-[140px]\">{firstName}</div>
-              <div className=\"text-[10px] uppercase tracking-widest text-[#ff5351] font-black italic\">{userRole}</div>
+              <div className="text-sm font-bold text-white truncate max-w-[140px]">{firstName}</div>
+              <div className="text-[10px] uppercase tracking-widest text-[#ff5351] font-black italic">{userRole}</div>
             </div>
           </div>
 
-          <nav className=\"flex-1 space-y-1\">
+          <nav className="flex-1 space-y-1">
             {navItems.map((item) => (
               <NavLink key={item.id} to={item.path} className={({ isActive }) => cn('flex items-center gap-3 px-4 py-3 rounded-lg transition-all text-sm font-medium', isActive ? 'bg-zinc-800/50 text-[#ff5351] border-l-2 border-[#ff5351]' : 'text-zinc-400 hover:text-white hover:bg-zinc-800')}>
-                <item.icon className=\"w-4 h-4\" />{item.label}
+                <item.icon className="w-4 h-4" />{item.label}
               </NavLink>
             ))}
           </nav>
 
-          <div className=\"mt-auto pt-4 border-t border-zinc-800 space-y-1\">
-            <button onClick={handleLogout} className=\"w-full flex items-center gap-3 px-4 py-3 text-zinc-400 hover:text-[#ff5351] transition-all text-sm font-medium\">
-              <LogOut className=\"w-4 h-4\" />Logout
+          <div className="mt-auto pt-4 border-t border-zinc-800 space-y-1">
+            <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-3 text-zinc-400 hover:text-[#ff5351] transition-all text-sm font-medium">
+              <LogOut className="w-4 h-4" />Logout
             </button>
           </div>
         </aside>
 
-        <main className=\"flex-1 lg:ml-64 p-8\">
-          <div className=\"max-w-7xl mx-auto\">{children}</div>
+        <main className="flex-1 lg:ml-64 p-8">
+          <div className="max-w-7xl mx-auto">{children}</div>
         </main>
       </div>
     </div>
