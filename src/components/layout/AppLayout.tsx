@@ -61,6 +61,7 @@ export default function AppLayout({ children, userRole = 'cliente', userName = '
       }
       const ctx = audioContext.current;
       if (ctx.state === 'suspended') ctx.resume();
+      
       [523, 659, 784].forEach((freq, i) => {
         const o = ctx.createOscillator();
         const g = ctx.createGain();
