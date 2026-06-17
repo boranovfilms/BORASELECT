@@ -142,8 +142,11 @@ export default function AppLayout({ children, userRole = 'cliente', userName = '
 
   const MENU_POR_ROLE: Record<string, string[]> = {
     master: ['dashboard','projetos','clientes','equipe','pacotes','modelos','creditos','tarefas','teleprompter','painel_master','diagnostico'],
+    admin: ['dashboard','projetos','clientes','equipe','pacotes','modelos','creditos','tarefas','teleprompter','painel_master','diagnostico'],
     redator: ['dashboard','minhas_demandas','tarefas','notificacoes'],
+    midia_social: ['dashboard','minhas_demandas','tarefas','notificacoes'],
     editor: ['dashboard','minhas_demandas','tarefas','notificacoes'],
+    designer: ['dashboard','minhas_demandas','tarefas','notificacoes'],
     cliente: ['dashboard','minhas_demandas','projetos','notificacoes'],
     equipe: ['dashboard','minhas_demandas','projetos','notificacoes'],
   };
