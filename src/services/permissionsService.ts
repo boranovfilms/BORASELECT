@@ -13,7 +13,17 @@ const DEFAULT_PERMISSIONS: PermissionsMatrix = {
   creditos: { master: true, editor: false, designer: false, cliente: false, equipe: false },
   configuracoes: { master: true, editor: false, designer: false, cliente: false, equipe: false },
   painel_master: { master: true, editor: false, designer: false, cliente: false, equipe: false },
-  tarefas: { master: true, editor: true, designer: true, cliente: false, equipe: false }
+  tarefas: { master: true, editor: true, designer: true, cliente: false, equipe: false },
+  minhas_demandas: {
+    master: false,
+    admin: false,
+    redator: true,
+    editor: true,
+    designer: true,
+    midia_social: true,
+    cliente: true,
+    equipe: true,
+  },
 };
 
 export const permissionsService = {

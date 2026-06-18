@@ -61,6 +61,7 @@ export default function AppLayout({ children, userRole = 'cliente', userName = '
       }
       const ctx = audioContext.current;
       if (ctx.state === 'suspended') ctx.resume();
+      
       [523, 659, 784].forEach((freq, i) => {
         const o = ctx.createOscillator();
         const g = ctx.createGain();
@@ -127,6 +128,7 @@ export default function AppLayout({ children, userRole = 'cliente', userName = '
     { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard', path: '/' },
     { id: 'projetos', icon: Library, label: 'Projetos', path: '/projetos' },
     { id: 'planejamentos', icon: FileText, label: 'Planejamentos', path: '/meus-planejamentos' },
+    { id: 'minhas_demandas', icon: FileText, label: '📋 Minhas Demandas', path: '/minhas-demandas' },
     { id: 'clientes', icon: Users, label: 'Clientes', path: '/clients' },
     { id: 'equipe', icon: UsersRound, label: 'Equipe', path: '/equipe' },
     { id: 'pacotes', icon: Package, label: 'Serviços', path: '/packages' },
