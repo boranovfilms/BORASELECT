@@ -33,10 +33,14 @@ export const permissionsService = {
       const docSnap = await getDoc(docRef);
       if (docSnap.exists()) {
         const dbPerms = docSnap.data() as PermissionsMatrix;
-        // Garante que se o banco for antigo e não tiver 'tarefas', ele injeta a permissão padrão
-        if (!dbPerms.tarefas) {
-          dbPerms.tarefas = DEFAULT_PERMISSIONS.tarefas;
-        }
+        
+        // Injeta automaticamente módulos do DEFAULT_PERMISSIONS que não estão no banco
+        Object.keys(DEFAULT_PERMISSIONS).forEach(key => {
+          if (!dbPerms[key]) {
+            dbPerms[key] = DEFAULT_PERMISSIONS[key];
+          }
+        });
+        
         return dbPerms;
       }
       return DEFAULT_PERMISSIONS;
