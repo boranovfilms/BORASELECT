@@ -15,8 +15,8 @@ const DEFAULT_PERMISSIONS: PermissionsMatrix = {
   painel_master: { master: true, editor: false, designer: false, cliente: false, equipe: false },
   tarefas: { master: true, editor: true, designer: true, cliente: false, equipe: false },
   minhas_demandas: {
-    master: false,
-    admin: false,
+    master: true,
+    admin: true,
     redator: true,
     editor: true,
     designer: true,
