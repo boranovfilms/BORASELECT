@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { 
-  Users, UserPlus, Library, CheckSquare, ArrowRight, Loader2, Shield, Clock, CheckCircle2, Wallet, Bell
+  Users, Library, CheckSquare, ArrowRight, Loader2, 
+  Clock, CheckCircle2, Wallet, Bell, FileText, Zap
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { auth, db } from '../lib/firebase';
@@ -11,11 +12,11 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [userRole, setUserRole] = useState<string>('cliente');
   const [userData, setUserData] = useState<any>(null);
+  const [userClientId, setUserClientId] = useState<string | null>(null);
   const navigate = useNavigate();
   
   const [adminMetrics, setAdminMetrics] = useState({
     activeClients: 0,
-    pendingClients: 0,
     activeProjects: 0,
     completedProjects: 0,
     pendingTasks: 0,
@@ -23,10 +24,16 @@ export default function Dashboard() {
     totalCredits: 0
   });
 
+  const [editorMetrics, setEditorMetrics] = useState({
+    demandasPendentes: 0,
+    demandasEmAndamento: 0,
+    demandasConcluidas: 0,
+  });
+
   const [clientMetrics, setClientMetrics] = useState({
-    myProjects: 0,
-    completed: 0,
-    myTasks: 0
+    totalPosts: 0,
+    postsPendentes: 0,
+    postsAprovados: 0,
   });
 
   const [todayTasks, setTodayTasks] = useState<any[]>([]);
@@ -38,25 +45,36 @@ export default function Dashboard() {
   const loadUserAndInit = async () => {
     const user = auth.currentUser;
     if (!user) return;
-
     const cleanEmail = user.email?.toLowerCase().trim() || '';
 
     try {
       let role = 'cliente';
+      let clientId: string | null = null;
 
       if (cleanEmail === 'admin@boraselect.com.br') {
         role = 'master';
       } else {
-        const q = query(collection(db, 'clientes'), where('email', '==', cleanEmail));
-        const snap = await getDocs(q);
-        if (!snap.empty) {
-          const data = snap.docs[0].data();
-          role = data.role || 'cliente';
+        const qBora = query(collection(db, 'boraselect'), where('email', '==', cleanEmail));
+        const snapBora = await getDocs(qBora);
+        if (!snapBora.empty) {
+          const data = snapBora.docs[0].data();
+          role = data.role || 'redator';
           setUserData(data);
+        } else {
+          const qCliente = query(collection(db, 'clientes'), where('email', '==', cleanEmail));
+          const snapCliente = await getDocs(qCliente);
+          if (!snapCliente.empty) {
+            const data = snapCliente.docs[0].data();
+            role = data.role || 'cliente';
+            clientId = data.companyId || snapCliente.docs[0].id;
+            setUserData(data);
+          }
         }
       }
+
       setUserRole(role);
-      initListeners(role, cleanEmail);
+      setUserClientId(clientId);
+      initListeners(role, cleanEmail, clientId);
     } catch (error) {
       console.error(error);
     } finally {
@@ -64,27 +82,30 @@ export default function Dashboard() {
     }
   };
 
-  const initListeners = (role: string, email: string) => {
-    const isAdmin = ['master', 'admin'].includes(role);
-    const isEditor = ['editor', 'designer', 'redator'].includes(role);
+  const initListeners = (role: string, email: string, clientId: string | null) => {
     const today = new Date().toISOString().split('T')[0];
+    const isMasterOrRedator = ['master', 'admin', 'redator'].includes(role);
+    const isEditorDesigner = ['editor', 'designer', 'midia_social'].includes(role);
+    const isClienteOrEquipe = ['cliente', 'equipe'].includes(role);
 
-    if (isAdmin) {
-      onSnapshot(collection(db, 'clientes'), (snap) => {
-        const docs = snap.docs.map(d => d.data());
+    // MASTER / REDATOR
+    if (isMasterOrRedator) {
+      onSnapshot(query(collection(db, 'clientes'), where('role', '==', 'cliente')), (snap) => {
         setAdminMetrics(prev => ({
           ...prev,
-          activeClients: docs.filter(d => d.role === 'cliente' && d.status === 'confirmed').length,
-          pendingClients: docs.filter(d => d.role === 'cliente' && d.status === 'pending').length
+          activeClients: snap.docs.filter(d => d.data().status === 'confirmed').length,
         }));
       });
 
-      onSnapshot(collection(db, 'projects'), (snap) => {
+      onSnapshot(collection(db, 'demandas'), (snap) => {
         const docs = snap.docs.map(d => d.data());
         setAdminMetrics(prev => ({
           ...prev,
           activeProjects: docs.filter(d => d.status !== 'concluido').length,
-          completedProjects: docs.filter(d => d.status === 'concluido').length
+          completedProjects: docs.filter(d => d.status === 'concluido').length,
+          awaitingApproval: docs.filter(d => 
+            ['aguardando_cliente', 'aguardando_validacao_equipe'].includes(d.status)
+          ).length,
         }));
       });
 
@@ -93,46 +114,55 @@ export default function Dashboard() {
         setAdminMetrics(prev => ({
           ...prev,
           pendingTasks: docs.filter(d => d.status === 'pendente').length,
-          awaitingApproval: docs.filter(d => d.aguardandoAprovacao === true).length
         }));
-        setTodayTasks(docs.filter(d => d.dataLimite === today && d.status === 'pendente'));
+        setTodayTasks(docs.filter((d: any) => d.dataLimite === today && d.status === 'pendente'));
       });
-      
-      onSnapshot(collection(db, 'clientes'), (snap) => {
-        const docs = snap.docs.map(d => d.data());
-        const total = docs.reduce((sum, d) => sum + (Number(d.creditsTotal) || 0), 0);
+
+      onSnapshot(query(collection(db, 'clientes'), where('role', '==', 'cliente')), (snap) => {
+        const total = snap.docs.reduce((sum, d) => sum + (Number(d.data().creditsTotal) || 0), 0);
         setAdminMetrics(prev => ({ ...prev, totalCredits: total }));
       });
+    }
 
-    } else if (isEditor) {
-      onSnapshot(query(collection(db, 'projects'), where('clientEmail', '==', email)), (snap) => {
-        const docs = snap.docs.map(d => d.data());
-        setClientMetrics(prev => ({
-          ...prev,
-          myProjects: docs.filter(d => d.status !== 'concluido').length,
-          completed: docs.filter(d => d.status === 'concluido').length
-        }));
+    // EDITOR / DESIGNER
+    if (isEditorDesigner) {
+      onSnapshot(collection(db, 'demandas'), (snap) => {
+        let pendentes = 0, emAndamento = 0, concluidas = 0;
+        snap.docs.forEach(d => {
+          const posts = d.data().posts || [];
+          posts.forEach((post: any) => {
+            const tasks = post.tasks || [];
+            tasks.forEach((task: any) => {
+              if (task.responsibleEmail?.toLowerCase() === email) {
+                if (task.status === 'pendente') pendentes++;
+                if (task.status === 'em_andamento') emAndamento++;
+                if (task.status === 'concluido') concluidas++;
+              }
+            });
+          });
+        });
+        setEditorMetrics({ demandasPendentes: pendentes, demandasEmAndamento: emAndamento, demandasConcluidas: concluidas });
       });
 
       onSnapshot(query(collection(db, 'tarefas'), where('delegadoPara', '==', email)), (snap) => {
         const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        setClientMetrics(prev => ({ ...prev, myTasks: docs.filter(d => d.status === 'pendente').length }));
-        setTodayTasks(docs.filter(d => d.dataLimite === today && d.status === 'pendente'));
+        setTodayTasks(docs.filter((d: any) => d.dataLimite === today && d.status === 'pendente'));
       });
-    } else {
-      onSnapshot(query(collection(db, 'projects'), where('clientEmail', '==', email)), (snap) => {
-        const docs = snap.docs.map(d => d.data());
-        setClientMetrics(prev => ({
-          ...prev,
-          myProjects: docs.filter(d => d.status !== 'concluido').length,
-          completed: docs.filter(d => d.status === 'concluido').length
-        }));
-      });
+    }
 
-      onSnapshot(query(collection(db, 'tarefas'), where('delegadoPara', '==', email)), (snap) => {
-        const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        setClientMetrics(prev => ({ ...prev, myTasks: docs.filter(d => d.status === 'pendente').length }));
-        setTodayTasks(docs.filter(d => d.dataLimite === today && d.status === 'pendente'));
+    // CLIENTE / EQUIPE
+    if (isClienteOrEquipe && clientId) {
+      onSnapshot(query(collection(db, 'demandas'), where('clientId', '==', clientId)), (snap) => {
+        let totalPosts = 0, postsPendentes = 0, postsAprovados = 0;
+        snap.docs.forEach(d => {
+          const posts = d.data().posts || [];
+          totalPosts += posts.length;
+          postsPendentes += posts.filter((p: any) => p.status === 'pendente').length;
+          postsAprovados += posts.filter((p: any) => 
+            ['aprovado', 'validado_equipe'].includes(p.status)
+          ).length;
+        });
+        setClientMetrics({ totalPosts, postsPendentes, postsAprovados });
       });
     }
   };
@@ -145,103 +175,143 @@ export default function Dashboard() {
     );
   }
 
-  const isAdmin = ['master', 'admin'].includes(userRole);
-  const isEditor = ['editor', 'designer', 'redator'].includes(userRole);
+  const isMasterOrRedator = ['master', 'admin', 'redator'].includes(userRole);
+  const isEditorDesigner = ['editor', 'designer', 'midia_social'].includes(userRole);
+  const isClienteOrEquipe = ['cliente', 'equipe'].includes(userRole);
 
-  // Admin View
-  if (isAdmin) {
+  // MASTER / REDATOR
+  if (isMasterOrRedator) {
     return (
       <div className="space-y-8 pb-20 animate-in fade-in duration-700">
         <header>
-          <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#ff5351] mb-2">Visão Administrativa</p>
+          <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#ff5351] mb-2">Visão Geral</p>
           <h1 className="text-5xl font-black text-white uppercase italic tracking-tighter">Dashboard</h1>
         </header>
 
         {adminMetrics.awaitingApproval > 0 && (
-          <div className="bg-[#ff5351]/10 border border-[#ff5351]/20 rounded-3xl p-6 flex items-center justify-between animate-pulse">
+          <div className="bg-[#ff5351]/10 border border-[#ff5351]/20 rounded-3xl p-6 flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-[#ff5351] flex items-center justify-center shadow-lg shadow-[#ff5351]/20">
+              <div className="w-12 h-12 rounded-2xl bg-[#ff5351] flex items-center justify-center">
                 <Bell className="w-6 h-6 text-white" />
               </div>
               <div>
-                <h3 className="text-white font-bold uppercase italic">Atenção Master</h3>
-                <p className="text-zinc-500 text-xs font-medium">Existem tarefas aguardando aprovação.</p>
+                <h3 className="text-white font-bold uppercase italic">Atenção!</h3>
+                <p className="text-zinc-500 text-xs font-medium">Existem demandas aguardando aprovação.</p>
               </div>
             </div>
-            <div className="px-4 py-2 bg-[#ff5351] text-white text-xs font-black rounded-xl">{adminMetrics.awaitingApproval} PENDENTES</div>
+            <div className="px-4 py-2 bg-[#ff5351] text-white text-xs font-black rounded-xl">
+              {adminMetrics.awaitingApproval} PENDENTES
+            </div>
           </div>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
           <StatCard label="Clientes Ativos" value={adminMetrics.activeClients} icon={Users} color="emerald" />
-          <StatCard label="Clientes Inativos" value={adminMetrics.pendingClients} icon={UserPlus} color="amber" />
-          <StatCard label="Projetos Ativos" value={adminMetrics.activeProjects} icon={Library} color="blue" />
-          <StatCard label="Concluídos" value={adminMetrics.completedProjects} icon={CheckCircle2} color="indigo" />
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <StatCard label="Tarefas Pendentes" value={adminMetrics.pendingTasks} icon={CheckSquare} color="orange" />
-          <StatCard label="Aguardando Aprovação" value={adminMetrics.awaitingApproval} icon={Clock} color="rose" />
+          <StatCard label="Demandas Ativas" value={adminMetrics.activeProjects} icon={FileText} color="blue" />
+          <StatCard label="Concluídas" value={adminMetrics.completedProjects} icon={CheckCircle2} color="indigo" />
           <StatCard label="Créditos em Conta" value={adminMetrics.totalCredits} icon={Wallet} color="cyan" />
         </div>
 
-        <TodayTasks tasks={todayTasks} isAdmin={true} navigate={navigate} />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <StatCard label="Tarefas Pendentes" value={adminMetrics.pendingTasks} icon={CheckSquare} color="orange" />
+          <StatCard label="Aguardando Aprovação" value={adminMetrics.awaitingApproval} icon={Clock} color="rose" />
+        </div>
+
+        <TodayTasks tasks={todayTasks} navigate={navigate} />
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <button 
+            onClick={() => navigate('/minhas-demandas')} 
+            className="h-14 bg-[#ff5351] text-white rounded-2xl font-black uppercase text-xs tracking-widest hover:brightness-110 transition-all shadow-xl flex items-center justify-center gap-3"
+          >
+            <FileText className="w-4 h-4" /> Minhas Demandas
+          </button>
+          <button 
+            onClick={() => navigate('/tarefas')} 
+            className="h-14 bg-zinc-900 border border-zinc-800 text-white rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-zinc-800 transition-all flex items-center justify-center gap-3"
+          >
+            <CheckSquare className="w-4 h-4" /> Tarefas Diárias
+          </button>
+        </div>
       </div>
     );
   }
 
-  // Editor/Designer View
-  if (isEditor) {
+  // EDITOR / DESIGNER
+  if (isEditorDesigner) {
     return (
       <div className="space-y-8 pb-20 animate-in fade-in duration-700">
         <header>
           <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#ff5351] mb-2">Seu Painel</p>
-          <h1 className="text-5xl font-black text-white uppercase italic tracking-tighter">Olá, Editor</h1>
+          <h1 className="text-5xl font-black text-white uppercase italic tracking-tighter">
+            Olá, {userData?.name?.split(' ')[0] || 'Editor'}
+          </h1>
         </header>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <StatCard label="Meus Projetos" value={clientMetrics.myProjects} icon={Library} color="blue" />
-          <StatCard label="Concluídos" value={clientMetrics.completed} icon={CheckCircle2} color="emerald" />
-          <StatCard label="Minhas Tarefas" value={clientMetrics.myTasks} icon={CheckSquare} color="orange" />
+          <StatCard label="Demandas Pendentes" value={editorMetrics.demandasPendentes} icon={Clock} color="amber" />
+          <StatCard label="Em Andamento" value={editorMetrics.demandasEmAndamento} icon={Zap} color="blue" />
+          <StatCard label="Concluídas" value={editorMetrics.demandasConcluidas} icon={CheckCircle2} color="emerald" />
         </div>
 
-        <TodayTasks tasks={todayTasks} isAdmin={false} navigate={navigate} />
+        <TodayTasks tasks={todayTasks} navigate={navigate} />
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <button onClick={() => navigate('/projetos')} className="h-14 bg-white text-black rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-[#ff5351] hover:text-white transition-all shadow-xl flex items-center justify-center gap-3">Acessar Meus Projetos <ArrowRight className="w-4 h-4" /></button>
-          <button onClick={() => navigate('/tarefas')} className="h-14 bg-zinc-900 border border-zinc-800 text-white rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-zinc-800 transition-all flex items-center justify-center gap-3">Tarefas Diárias</button>
+          <button 
+            onClick={() => navigate('/minhas-demandas')} 
+            className="h-14 bg-[#ff5351] text-white rounded-2xl font-black uppercase text-xs tracking-widest hover:brightness-110 transition-all shadow-xl flex items-center justify-center gap-3"
+          >
+            <FileText className="w-4 h-4" /> Minhas Demandas
+          </button>
+          <button 
+            onClick={() => navigate('/tarefas')} 
+            className="h-14 bg-zinc-900 border border-zinc-800 text-white rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-zinc-800 transition-all flex items-center justify-center gap-3"
+          >
+            <CheckSquare className="w-4 h-4" /> Tarefas Diárias
+          </button>
         </div>
       </div>
     );
   }
 
-  // Cliente View (padrão)
+  // CLIENTE / EQUIPE
   return (
     <div className="space-y-8 pb-20 animate-in fade-in duration-700">
       <header>
         <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#ff5351] mb-2">Cockpit Boranov</p>
-        <h1 className="text-4xl font-black text-white uppercase italic tracking-tighter">{userData?.name || 'Cliente'}</h1>
+        <h1 className="text-4xl font-black text-white uppercase italic tracking-tighter">
+          {userData?.name || 'Bem-vindo'}
+        </h1>
       </header>
 
-      <div className="bg-[linear-gradient(135deg,rgba(255,83,81,0.1),transparent)] border border-[#ff5351]/20 rounded-[40px] p-10 shadow-2xl relative overflow-hidden">
-        <div className="relative z-10">
-          <h2 className="text-3xl font-black text-white uppercase italic leading-tight mb-2">Bem-vindo ao<br/>Cockpit Boranov</h2>
-          <p className="text-zinc-400 text-sm max-w-sm">Acompanhe seus projetos em tempo real e aprove novos conteúdos com um clique.</p>
-        </div>
-        <Shield className="absolute -bottom-10 -right-10 w-48 h-48 text-[#ff5351]/5 rotate-12" />
+      <div className="bg-[linear-gradient(135deg,rgba(255,83,81,0.1),transparent)] border border-[#ff5351]/20 rounded-[40px] p-10 shadow-2xl">
+        <h2 className="text-3xl font-black text-white uppercase italic leading-tight mb-2">
+          Acompanhe seu<br/>conteúdo em tempo real
+        </h2>
+        <p className="text-zinc-400 text-sm max-w-sm">
+          Visualize o status de cada post e aprove conteúdos com um clique.
+        </p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <StatCard label="Meus Projetos" value={clientMetrics.myProjects} icon={Library} color="blue" />
-        <StatCard label="Concluídos" value={clientMetrics.completed} icon={CheckCircle2} color="indigo" />
-        <StatCard label="Minhas Tarefas" value={clientMetrics.myTasks} icon={CheckSquare} color="orange" />
+        <StatCard label="Total de Posts" value={clientMetrics.totalPosts} icon={FileText} color="blue" />
+        <StatCard label="Aguardando Aprovação" value={clientMetrics.postsPendentes} icon={Clock} color="amber" />
+        <StatCard label="Aprovados" value={clientMetrics.postsAprovados} icon={CheckCircle2} color="emerald" />
       </div>
 
-      <TodayTasks tasks={todayTasks} isAdmin={false} navigate={navigate} />
-
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <button onClick={() => navigate('/projetos')} className="h-14 bg-white text-black rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-[#ff5351] hover:text-white transition-all shadow-xl flex items-center justify-center gap-3">Acessar Meus Projetos <ArrowRight className="w-4 h-4" /></button>
-        <button onClick={() => navigate('/tarefas')} className="h-14 bg-zinc-900 border border-zinc-800 text-white rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-zinc-800 transition-all flex items-center justify-center gap-3">Ver Tarefas</button>
+        <button 
+          onClick={() => navigate('/minhas-demandas')} 
+          className="h-14 bg-[#ff5351] text-white rounded-2xl font-black uppercase text-xs tracking-widest hover:brightness-110 transition-all shadow-xl flex items-center justify-center gap-3"
+        >
+          <FileText className="w-4 h-4" /> Ver Meus Conteúdos
+        </button>
+        <button 
+          onClick={() => navigate('/projetos')} 
+          className="h-14 bg-zinc-900 border border-zinc-800 text-white rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-zinc-800 transition-all flex items-center justify-center gap-3"
+        >
+          <Library className="w-4 h-4" /> Projetos de Seleção
+        </button>
       </div>
     </div>
   );
@@ -255,7 +325,7 @@ function StatCard({ label, value, icon: Icon, color }: any) {
     indigo: 'bg-indigo-400/10 text-indigo-400 border-indigo-400/10',
     orange: 'bg-orange-400/10 text-orange-400 border-orange-400/10',
     rose: 'bg-rose-400/10 text-rose-400 border-rose-400/10',
-    cyan: 'bg-cyan-400/10 text-cyan-400 border-cyan-400/10'
+    cyan: 'bg-cyan-400/10 text-cyan-400 border-cyan-400/10',
   };
 
   return (
@@ -269,7 +339,7 @@ function StatCard({ label, value, icon: Icon, color }: any) {
   );
 }
 
-function TodayTasks({ tasks, isAdmin, navigate }: any) {
+function TodayTasks({ tasks, navigate }: any) {
   const getPriorityBadge = (p: string) => {
     const colors: any = { 
       alta: 'bg-red-500/10 text-red-400 border-red-500/20', 
@@ -283,35 +353,39 @@ function TodayTasks({ tasks, isAdmin, navigate }: any) {
     <section className="bg-[#1a1a1a] border border-zinc-800 rounded-[32px] overflow-hidden shadow-xl">
       <div className="p-8 border-b border-zinc-800 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="p-2 bg-[#ff5351]/10 rounded-lg"><Clock className="w-4 h-4 text-[#ff5351]" /></div>
+          <div className="p-2 bg-[#ff5351]/10 rounded-lg">
+            <Clock className="w-4 h-4 text-[#ff5351]" />
+          </div>
           <div>
             <h2 className="text-xl font-black text-white uppercase tracking-tight italic">Tarefas Diárias</h2>
             <p className="text-zinc-500 text-[10px] font-bold uppercase tracking-widest">Atividades com prazo para hoje</p>
           </div>
         </div>
-        <button onClick={() => navigate('/tarefas')} className="px-4 py-2 border border-zinc-700 hover:border-[#ff5351] rounded-xl text-[10px] font-black uppercase tracking-widest text-zinc-400 hover:text-white transition-all flex items-center gap-2">Ver Todas <ArrowRight className="w-3 h-3" /></button>
+        <button 
+          onClick={() => navigate('/tarefas')} 
+          className="px-4 py-2 border border-zinc-700 hover:border-[#ff5351] rounded-xl text-[10px] font-black uppercase tracking-widest text-zinc-400 hover:text-white transition-all flex items-center gap-2"
+        >
+          Ver Todas <ArrowRight className="w-3 h-3" />
+        </button>
       </div>
 
       <div className="p-4 space-y-2">
         {tasks.length === 0 ? (
-          <div className="py-10 text-center text-zinc-600 italic text-sm font-medium">Nenhuma tarefa urgente para hoje.</div>
+          <div className="py-10 text-center text-zinc-600 italic text-sm font-medium">
+            Nenhuma tarefa urgente para hoje.
+          </div>
         ) : (
           tasks.map((task: any) => (
             <div 
               key={task.id} 
               onClick={() => navigate('/tarefas')}
-              className="flex items-center justify-between p-4 bg-zinc-900/50 border border-zinc-800 rounded-2xl hover:border-[#ff5351]/30 transition-all group cursor-pointer"
+              className="flex items-center justify-between p-4 bg-zinc-900/50 border border-zinc-800 rounded-2xl hover:border-[#ff5351]/30 transition-all cursor-pointer"
             >
               <div className="flex items-center gap-4">
-                <div className="w-1.5 h-1.5 rounded-full bg-[#ff5351] shadow-[0_0_8px_#ff5351]" />
-                <div>
-                  <p className="text-white text-sm font-bold uppercase group-hover:text-[#ff5351] transition-colors">{task.nome}</p>
-                  <p className="text-zinc-500 text-[9px] font-black uppercase tracking-widest">{isAdmin ? task.responsavelTarefa : 'Equipe'}</p>
-                </div>
+                <div className="w-1.5 h-1.5 rounded-full bg-[#ff5351]" />
+                <p className="text-white text-sm font-bold uppercase">{task.nome}</p>
               </div>
-              <div className="flex items-center gap-4">
-                {getPriorityBadge(task.prioridade)}
-              </div>
+              {getPriorityBadge(task.prioridade)}
             </div>
           ))
         )}
