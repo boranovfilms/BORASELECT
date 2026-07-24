@@ -158,7 +158,7 @@ export default function AppLayout({ children, userRole = 'cliente', userName = '
         <div className="flex items-center gap-12">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-[#ff5351] animate-pulse" />
-            <span className="text-xl font-black tracking-tighter uppercase text-white">{firstName}</span>
+            <span className="text-xl font-black tracking-tighter uppercase text-white">BORASELECT</span>
           </div>
         </div>
 
@@ -252,6 +252,7 @@ export default function AppLayout({ children, userRole = 'cliente', userName = '
             </div>
             <div>
               <div className="text-sm font-bold text-white truncate max-w-[140px]">{firstName}</div>
+              <div className="text-[10px] text-zinc-500 truncate max-w-[140px]">{user?.email}</div>
               <div className="text-[10px] uppercase tracking-widest text-[#ff5351] font-black italic">{userRole}</div>
             </div>
           </div>
