@@ -278,7 +278,7 @@ export default function Dashboard() {
   return (
     <div className="space-y-8 pb-20 animate-in fade-in duration-700">
       <header>
-        <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#ff5351] mb-2">Cockpit Boranov</p>
+        <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#ff5351] mb-2">Seu Painel</p>
         <h1 className="text-4xl font-black text-white uppercase italic tracking-tighter">
           {userData?.name || 'Bem-vindo'}
         </h1>
