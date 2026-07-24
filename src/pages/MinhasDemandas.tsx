@@ -1,0 +1,405 @@
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
+import { auth, db } from '../lib/firebase';
+import { Loader2, ChevronRight, AlertCircle, CheckCircle2, Clock } from 'lucide-react';
+import { cn } from '../lib/utils';
+import { DataTable } from '../components/ui/DataTable';
+
+export default function MinhasDemandas() {
+  const [loading, setLoading] = useState(true);
+  const [userRole, setUserRole] = useState('cliente');
+  const [userEmail, setUserEmail] = useState('');
+  const [userClientId, setUserClientId] = useState<string | null>(null);
+  const [clientes, setClientes] = useState<any[]>([]);
+  const [demandas, setDemandas] = useState<any[]>([]);
+  const [clienteSelecionado, setClienteSelecionado] = useState<any | null>(null);
+  const [demandasCliente, setDemandasCliente] = useState<any[]>([]);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    init();
+  }, []);
+
+  const init = async () => {
+    const user = auth.currentUser;
+    if (!user) return;
+    const email = user.email?.toLowerCase().trim() || '';
+    setUserEmail(email);
+
+    let role = 'cliente';
+    let clientId: string | null = null;
+
+    if (email === 'admin@boraselect.com.br') {
+      role = 'master';
+    } else {
+      const qBora = query(collection(db, 'boraselect'), where('email', '==', email));
+      const snapBora = await getDocs(qBora);
+      if (!snapBora.empty) {
+        role = snapBora.docs[0].data().role || 'redator';
+      } else {
+        const qCliente = query(collection(db, 'clientes'), where('email', '==', email));
+        const snapCliente = await getDocs(qCliente);
+        if (!snapCliente.empty) {
+          const data = snapCliente.docs[0].data();
+          role = data.role || 'cliente';
+          clientId = data.companyId || snapCliente.docs[0].id;
+        }
+      }
+    }
+
+    setUserRole(role);
+    setUserClientId(clientId);
+
+    const isMasterOrRedator = ['master', 'admin', 'redator'].includes(role);
+    const isEditorDesigner = ['editor', 'designer', 'midia_social'].includes(role);
+    const isClienteOrEquipe = ['cliente', 'equipe'].includes(role);
+
+    if (isMasterOrRedator) {
+      await loadClientes();
+    } else if (isEditorDesigner) {
+      await loadDemandasEditor(email);
+    } else if (isClienteOrEquipe && clientId) {
+      await loadDemandasCliente(clientId);
+    }
+
+    setLoading(false);
+  };
+
+  const loadClientes = async () => {
+    const snap = await getDocs(query(collection(db, 'clientes'), where('role', '==', 'cliente')));
+    const clientesData = await Promise.all(snap.docs.map(async d => {
+      const clientId = d.id;
+      const demandasSnap = await getDocs(query(collection(db, 'demandas'), where('clientId', '==', clientId)));
+      const demandas = demandasSnap.docs.map(dd => dd.data());
+      const pendentes = demandas.filter(dem => 
+        ['rascunho', 'aguardando_cliente', 'devolvido', 'aguardando_validacao_equipe'].includes(dem.status)
+      ).length;
+      return {
+        id: clientId,
+        ...d.data(),
+        totalDemandas: demandas.length,
+        pendentes
+      };
+    }));
+    setClientes(clientesData);
+  };
+
+  const loadDemandasDoCliente = async (cliente: any) => {
+    setClienteSelecionado(cliente);
+    const snap = await getDocs(query(collection(db, 'demandas'), where('clientId', '==', cliente.id)));
+    const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    setDemandasCliente(data);
+  };
+
+  const loadDemandasEditor = async (email: string) => {
+    const snap = await getDocs(collection(db, 'demandas'));
+    const itens: any[] = [];
+    snap.docs.forEach(d => {
+      const demanda = { id: d.id, ...d.data() } as any;
+      const posts = demanda.posts || [];
+      posts.forEach((post: any) => {
+        const tasks = post.tasks || [];
+        tasks.forEach((task: any) => {
+          if (task.responsibleEmail?.toLowerCase() === email && !task.responsibleEmail?.includes('@') === false) {
+            itens.push({
+              postId: post.id,
+              demandaId: demanda.id,
+              demandaNome: demanda.name,
+              clienteId: demanda.clientId,
+              numero: post.number,
+              headline: post.headline,
+              tipo: post.type,
+              taskTipo: task.dept,
+              taskLabel: task.deptLabel,
+              taskStatus: task.status,
+              publishDate: post.publishDate,
+              status: task.status,
+            });
+          }
+        });
+      });
+    });
+
+    // Busca nomes dos clientes
+    const clienteIds = [...new Set(itens.map(i => i.clienteId))];
+    const clienteNomes: Record<string, string> = {};
+    await Promise.all(clienteIds.map(async id => {
+      const snap = await getDoc(doc(db, 'clientes', id));
+      if (snap.exists()) clienteNomes[id] = snap.data().name;
+    }));
+
+    setDemandas(itens.map(i => ({ ...i, clienteNome: clienteNomes[i.clienteId] || i.clienteId })));
+  };
+
+  const loadDemandasCliente = async (clientId: string) => {
+    const snap = await getDocs(query(collection(db, 'demandas'), where('clientId', '==', clientId)));
+    const todasDemandas = snap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
+    
+    const itens: any[] = [];
+    todasDemandas.forEach(demanda => {
+      const posts = demanda.posts || [];
+      posts.forEach((post: any) => {
+        itens.push({
+          postId: post.id,
+          demandaId: demanda.id,
+          demandaNome: demanda.name,
+          numero: post.number,
+          headline: post.headline,
+          tipo: post.type,
+          publishDate: post.publishDate,
+          status: post.status,
+        });
+      });
+    });
+
+    setDemandas(itens);
+  };
+
+  const getStatusBadge = (status: string) => {
+    const configs: any = {
+      pendente: { label: 'Pendente', class: 'bg-amber-500/10 text-amber-400 border-amber-500/20' },
+      em_andamento: { label: 'Em Andamento', class: 'bg-blue-500/10 text-blue-400 border-blue-500/20' },
+      concluido: { label: 'Concluído', class: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' },
+      fazer_correcao: { label: 'Correção', class: 'bg-red-500/10 text-red-400 border-red-500/20' },
+      aprovado: { label: 'Aprovado', class: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' },
+      reprovado: { label: 'Reprovado', class: 'bg-red-500/10 text-red-400 border-red-500/20' },
+      em_revisao: { label: 'Em Revisão', class: 'bg-purple-500/10 text-purple-400 border-purple-500/20' },
+      aguardando_cliente: { label: 'Aguard. Cliente', class: 'bg-amber-500/10 text-amber-400 border-amber-500/20' },
+      rascunho: { label: 'Rascunho', class: 'bg-zinc-800 text-zinc-400 border-zinc-700' },
+      devolvido: { label: 'Devolvido', class: 'bg-red-500/10 text-red-400 border-red-500/20' },
+    };
+    const config = configs[status] || configs.rascunho;
+    return <span className={cn("px-2 py-1 rounded-full border text-[9px] font-black uppercase tracking-widest", config.class)}>{config.label}</span>;
+  };
+
+  const getDeptIcon = (dept: string) => {
+    const icons: any = { video: '🎬', design: '🎨', redacao: '✍️', midia_social: '📱' };
+    return icons[dept] || '•';
+  };
+
+  if (loading) return (
+    <div className="min-h-[60vh] flex items-center justify-center">
+      <Loader2 className="w-8 h-8 animate-spin text-[#ff5351]" />
+    </div>
+  );
+
+  const isMasterOrRedator = ['master', 'admin', 'redator'].includes(userRole);
+  const isEditorDesigner = ['editor', 'designer', 'midia_social'].includes(userRole);
+
+  return (
+    <div className="space-y-8 pb-20">
+      <header>
+        <p className="text-[11px] uppercase tracking-[0.4em] text-[#ff5351] font-black mb-2">
+          {isMasterOrRedator ? 'Gestão de Demandas' : isEditorDesigner ? 'Minhas Tarefas' : 'Meus Conteúdos'}
+        </p>
+        <h1 className="text-5xl font-black text-white uppercase italic tracking-tight">
+          {clienteSelecionado ? clienteSelecionado.name : 'Minhas Demandas'}
+        </h1>
+        {clienteSelecionado && (
+          <button
+            onClick={() => setClienteSelecionado(null)}
+            className="mt-2 text-[10px] font-black uppercase tracking-widest text-zinc-500 hover:text-white transition-all flex items-center gap-1"
+          >
+            ← Voltar para clientes
+          </button>
+        )}
+      </header>
+
+      {/* MASTER / REDATOR — Lista de clientes */}
+      {isMasterOrRedator && !clienteSelecionado && (
+        <DataTable
+          data={clientes}
+          onRowClick={loadDemandasDoCliente}
+          emptyMessage="Nenhum cliente encontrado."
+          columns={[
+            {
+              header: 'Cliente',
+              accessor: (c) => (
+                <div className="flex items-center gap-3 py-1">
+                  <div className="w-8 h-8 rounded-full bg-[#ff5351]/10 border border-[#ff5351]/20 flex items-center justify-center text-[#ff5351] font-black text-xs">
+                    {c.name?.charAt(0)}
+                  </div>
+                  <span className="text-white font-black uppercase text-sm">{c.name}</span>
+                </div>
+              )
+            },
+            {
+              header: 'Total Demandas',
+              accessor: (c) => (
+                <span className="text-white font-black">{c.totalDemandas}</span>
+              ),
+              align: 'center'
+            },
+            {
+              header: 'Pendentes',
+              accessor: (c) => c.pendentes > 0 ? (
+                <div className="flex items-center justify-center gap-1">
+                  <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
+                  <span className="text-amber-400 font-black text-xs">{c.pendentes}</span>
+                </div>
+              ) : (
+                <div className="flex items-center justify-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                  <span className="text-emerald-400 font-black text-xs">Em dia</span>
+                </div>
+              ),
+              align: 'center'
+            },
+            {
+              header: 'Última Atividade',
+              accessor: (c) => (
+                <div className="flex items-center gap-2 text-zinc-500 text-xs">
+                  <Clock className="w-3.5 h-3.5" />
+                  {c.updatedAt ? new Intl.DateTimeFormat('pt-BR').format(
+                    c.updatedAt?.toDate ? c.updatedAt.toDate() : new Date(c.updatedAt)
+                  ) : '—'}
+                </div>
+              )
+            }
+          ]}
+          actions={() => (
+            <ChevronRight className="w-4 h-4 text-zinc-600" />
+          )}
+        />
+      )}
+
+      {/* MASTER / REDATOR — Demandas do cliente selecionado */}
+      {isMasterOrRedator && clienteSelecionado && (
+        <DataTable
+          data={demandasCliente}
+          onRowClick={(d) => navigate(`/planejamento/${d.id}`)}
+          emptyMessage="Nenhuma demanda encontrada para este cliente."
+          columns={[
+            {
+              header: 'Demanda',
+              accessor: (d) => (
+                <span className="text-white font-black uppercase text-sm">{d.name}</span>
+              )
+            },
+            {
+              header: 'Tipo',
+              accessor: (d) => (
+                <span className="px-2 py-0.5 rounded bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[9px] font-black uppercase tracking-widest">
+                  {d.type || 'Planejamento'}
+                </span>
+              ),
+              align: 'center'
+            },
+            { header: 'Status', accessor: (d) => getStatusBadge(d.status), align: 'center' },
+            {
+              header: 'Progresso',
+              accessor: (d) => (
+                <div className="flex items-center gap-2">
+                  <div className="w-24 h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                    <div className="h-full bg-[#ff5351] rounded-full" style={{ width: `${d.progresso || 0}%` }} />
+                  </div>
+                  <span className="text-[10px] font-black text-[#ff5351]">{d.progresso || 0}%</span>
+                </div>
+              ),
+              align: 'center'
+            },
+            {
+              header: 'Data',
+              accessor: (d) => (
+                <span className="text-zinc-500 text-xs">
+                  {d.updatedAt ? new Intl.DateTimeFormat('pt-BR').format(
+                    d.updatedAt?.toDate ? d.updatedAt.toDate() : new Date(d.updatedAt)
+                  ) : '—'}
+                </span>
+              )
+            }
+          ]}
+        />
+      )}
+
+      {/* EDITOR / DESIGNER — Posts delegados */}
+      {isEditorDesigner && (
+        <DataTable
+          data={demandas}
+          onRowClick={(item) => navigate(`/planejamento/${item.demandaId}`)}
+          emptyMessage="Nenhuma demanda delegada para você."
+          columns={[
+            {
+              header: 'Item',
+              accessor: (item) => (
+                <span className="text-white font-black uppercase text-sm">
+                  #{String(item.numero).padStart(2, '0')} {item.headline}
+                </span>
+              )
+            },
+            {
+              header: 'Planejamento',
+              accessor: (item) => (
+                <span className="text-zinc-400 text-xs font-bold uppercase">📋 {item.demandaNome}</span>
+              )
+            },
+            {
+              header: 'Cliente',
+              accessor: (item) => (
+                <span className="text-zinc-300 text-xs font-black uppercase">{item.clienteNome}</span>
+              )
+            },
+            {
+              header: 'Tipo',
+              accessor: (item) => (
+                <span className="px-2 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-zinc-300 text-[9px] font-black uppercase tracking-widest">
+                  {getDeptIcon(item.taskTipo)} {item.taskLabel}
+                </span>
+              ),
+              align: 'center'
+            },
+            { header: 'Status', accessor: (item) => getStatusBadge(item.taskStatus), align: 'center' },
+            {
+              header: 'Data',
+              accessor: (item) => (
+                <span className="text-zinc-500 text-xs">{item.publishDate || '—'}</span>
+              )
+            }
+          ]}
+        />
+      )}
+
+      {/* CLIENTE / EQUIPE — Posts do planejamento */}
+      {['cliente', 'equipe'].includes(userRole) && (
+        <DataTable
+          data={demandas}
+          onRowClick={(item) => navigate(`/planejamento/${item.demandaId}`)}
+          emptyMessage="Nenhum conteúdo disponível."
+          columns={[
+            {
+              header: 'Item',
+              accessor: (item) => (
+                <span className="text-white font-black uppercase text-sm">
+                  #{String(item.numero).padStart(2, '0')} {item.headline}
+                </span>
+              )
+            },
+            {
+              header: 'Planejamento',
+              accessor: (item) => (
+                <span className="text-zinc-400 text-xs font-bold uppercase">📋 {item.demandaNome}</span>
+              )
+            },
+            {
+              header: 'Tipo',
+              accessor: (item) => (
+                <span className="px-2 py-0.5 rounded bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[9px] font-black uppercase tracking-widest">
+                  {item.tipo}
+                </span>
+              ),
+              align: 'center'
+            },
+            { header: 'Status', accessor: (item) => getStatusBadge(item.status), align: 'center' },
+            {
+              header: 'Data',
+              accessor: (item) => (
+                <span className="text-zinc-500 text-xs">{item.publishDate || '—'}</span>
+              )
+            }
+          ]}
+        />
+      )}
+    </div>
+  );
+}
