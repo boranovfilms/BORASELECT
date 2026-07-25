@@ -196,15 +196,16 @@ export default function MinhaDemandaDetalhe() {
     await updateDoc(doc(db, 'demandas', planId), { posts: updatedPosts, updatedAt: serverTimestamp() });
 
     // Notifica o redator
-    await notificacaoService.criar({
-      para: 'boranovfilms@gmail.com',
-      tipo: 'arquivo_enviado',
-      titulo: 'Arquivo Enviado para Revisão',
-      descricao: `Post #${String(post.number).padStart(2, '0')} — ${post.headline?.slice(0, 50)} está pronto para revisão`,
-      planId: planId,
-      visto: false,
-      criadoEm: new Date().toISOString()
-    });
+   await notificacaoService.criar({
+  para: 'boranovfilms@gmail.com',
+  tipo: 'arquivo_enviado',
+  titulo: 'Arquivo Enviado para Revisão',
+  descricao: `Post #${String(post.number).padStart(2, '0')} — ${post.headline?.slice(0, 50)} está pronto para revisão`,
+  planId: planId,
+  postId: post.id,
+  visto: false,
+  criadoEm: new Date().toISOString()
+});
 
     await loadData();
   };
