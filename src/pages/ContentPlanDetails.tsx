@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Loader2, Save, Check, X, Clock, User, ChevronDown, ChevronUp } from 'lucide-react';
+import { ArrowLeft, Loader2, Save, Check, X, Clock, User, ChevronDown, ChevronUp, Zap } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { doc, getDoc, updateDoc, collection, query, where, getDocs, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
@@ -35,7 +35,6 @@ export default function ContentPlanDetails() {
     if (!planId) return;
     setLoading(true);
     try {
-      // Carrega role do usuário
       const email = user?.email?.toLowerCase().trim() || '';
       setUserEmail(email);
 
@@ -64,7 +63,6 @@ export default function ContentPlanDetails() {
       setUserRole(role);
       setUserName(name);
 
-      // Carrega planejamento
       const planData = await contentPlanService.getPlanById(planId);
       if (!planData) {
         toast.error('Planejamento não encontrado');
@@ -74,14 +72,12 @@ export default function ContentPlanDetails() {
       setPlan(planData);
       setEditingText(planData.currentText || '');
 
-      // Carrega cliente
       const clientSnap = await getDoc(doc(db, 'clientes', planData.clientId));
       if (clientSnap.exists()) {
         setClientEmail(clientSnap.data().email?.toLowerCase() || '');
         setClientId(planData.clientId);
       }
 
-      // Verifica se tem equipe
       const teamSnap = await getDocs(query(
         collection(db, 'clientes'),
         where('type', '==', 'membro'),
@@ -95,6 +91,19 @@ export default function ContentPlanDetails() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const calcProgresso = (status: string) => {
+    const map: any = {
+      rascunho: 10,
+      aguardando_cliente: 30,
+      aguardando_validacao_equipe: 50,
+      aprovado_equipe: 100,
+      em_producao: 70,
+      concluido: 100,
+      devolvido: 20,
+    };
+    return map[status] || 0;
   };
 
   const handleSaveText = async () => {
@@ -134,14 +143,11 @@ export default function ContentPlanDetails() {
     }
   };
 
-  // MASTER aprova e envia para cliente
   const handleMasterApprove = async () => {
     if (!planId || !plan) return;
     setSaving(true);
     try {
       await contentPlanService.updateStatus(planId, 'aguardando_cliente');
-
-      // Notifica cliente
       await notificacaoService.criar({
         para: clientEmail,
         tipo: 'planejamento_enviado',
@@ -151,7 +157,6 @@ export default function ContentPlanDetails() {
         visto: false,
         criadoEm: new Date().toISOString()
       });
-
       toast.success('Enviado para o cliente!');
       await loadAll();
     } catch (error) {
@@ -161,7 +166,6 @@ export default function ContentPlanDetails() {
     }
   };
 
-  // MASTER devolve para redator
   const handleMasterReject = async () => {
     if (!planId) return;
     setSaving(true);
@@ -176,22 +180,17 @@ export default function ContentPlanDetails() {
     }
   };
 
-  // CLIENTE aprova planejamento
   const handleClientApprove = async () => {
     if (!planId || !plan || !user) return;
     setSaving(true);
     try {
       if (hasTeam) {
-        // Tem equipe → vai para validação da equipe
         await contentPlanService.updateStatus(planId, 'aguardando_validacao_equipe');
-
-        // Notifica equipe
         const teamSnap = await getDocs(query(
           collection(db, 'clientes'),
           where('type', '==', 'membro'),
           where('companyId', '==', clientId)
         ));
-
         for (const member of teamSnap.docs) {
           await notificacaoService.criar({
             para: member.data().email?.toLowerCase(),
@@ -203,13 +202,10 @@ export default function ContentPlanDetails() {
             criadoEm: new Date().toISOString()
           });
         }
-
         toast.success('Aprovado! Equipe foi notificada para validar.');
       } else {
-        // Sem equipe → cria posts automaticamente
         await criarPostsEFinalizar();
       }
-
       await loadAll();
     } catch (error) {
       toast.error('Erro ao aprovar');
@@ -218,7 +214,6 @@ export default function ContentPlanDetails() {
     }
   };
 
-  // EQUIPE valida planejamento
   const handleEquipeValidate = async () => {
     if (!planId || !plan) return;
     setSaving(true);
@@ -232,19 +227,14 @@ export default function ContentPlanDetails() {
     }
   };
 
-  // Cria posts automaticamente e notifica redator
   const criarPostsEFinalizar = async () => {
     if (!planId || !plan) return;
-
     const posts = parsePostsFromText(plan.currentText || editingText);
-
     await updateDoc(doc(db, 'demandas', planId), {
       posts,
       status: 'aprovado_equipe',
       updatedAt: serverTimestamp()
     });
-
-    // Notifica redator
     await notificacaoService.criar({
       para: 'boranovfilms@gmail.com',
       tipo: 'planejamento_validado_equipe',
@@ -254,7 +244,6 @@ export default function ContentPlanDetails() {
       visto: false,
       criadoEm: new Date().toISOString()
     });
-
     toast.success('Planejamento aprovado! Redator foi notificado.');
   };
 
@@ -287,6 +276,8 @@ export default function ContentPlanDetails() {
     </div>
   );
 
+  const progresso = calcProgresso(plan.status);
+
   return (
     <div className="max-w-4xl mx-auto space-y-8 pb-32 text-left">
 
@@ -308,8 +299,29 @@ export default function ContentPlanDetails() {
             </h1>
             <p className="text-zinc-500 text-sm mt-1">{plan.monthReference}</p>
           </div>
-          <div className="shrink-0 mt-2">
+          <div className="shrink-0 mt-2 flex flex-col items-end gap-3">
             {getStatusLabel(plan.status)}
+            
+            {/* Progresso */}
+            <div className="flex items-center gap-2">
+              <div className="w-32 h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-[#ff5351] rounded-full transition-all duration-500"
+                  style={{ width: `${progresso}%` }}
+                />
+              </div>
+              <span className="text-[10px] font-black text-[#ff5351]">{progresso}%</span>
+            </div>
+
+            {/* Botão Delegar */}
+            {isMasterOrRedator && plan.status === 'aprovado_equipe' && (
+              <button
+                onClick={() => navigate(`/planejamento/${planId}/tarefas`)}
+                className="h-10 px-6 bg-[#ff5351] text-white rounded-xl font-black uppercase tracking-widest text-[10px] hover:brightness-110 transition-all flex items-center gap-2 shadow-xl shadow-[#ff5351]/20"
+              >
+                <Zap className="w-4 h-4" /> Delegar Tarefas
+              </button>
+            )}
           </div>
         </div>
       </header>
@@ -460,12 +472,10 @@ export default function ContentPlanDetails() {
         </div>
       )}
 
-      {/* Botões de Ação — fixos no rodapé */}
+      {/* Botões de Ação */}
       {canApprove && (
         <div className="fixed bottom-0 left-0 right-0 p-6 bg-black/90 backdrop-blur-md border-t border-zinc-800 z-50">
           <div className="max-w-4xl mx-auto flex items-center justify-end gap-4">
-
-            {/* Master */}
             {isMasterOrRedator && plan.status === 'rascunho' && (
               <>
                 <button
@@ -486,7 +496,6 @@ export default function ContentPlanDetails() {
               </>
             )}
 
-            {/* Cliente */}
             {isCliente && plan.status === 'aguardando_cliente' && (
               <button
                 onClick={handleClientApprove}
@@ -498,7 +507,6 @@ export default function ContentPlanDetails() {
               </button>
             )}
 
-            {/* Equipe */}
             {isEquipe && plan.status === 'aguardando_validacao_equipe' && (
               <button
                 onClick={handleEquipeValidate}
