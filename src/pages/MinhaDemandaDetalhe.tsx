@@ -389,14 +389,14 @@ export default function MinhaDemandaDetalhe() {
                     </p>
                     <div className="relative bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
                       {previewType === 'video' ? (
-                        <div className="relative aspect-video">
-                          <iframe
-                            src={previewUrl}
-                            className="w-full h-full"
-                            allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture"
-                            allowFullScreen
-                          />
-                        </div>
+  <div className="relative aspect-video">
+    <iframe
+      src={previewUrl.replace('/watch', '') + '/iframe'}
+      className="w-full h-full"
+      allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture"
+      allowFullScreen
+    />
+  </div>
                       ) : (
                         <img
                           src={previewUrl}
