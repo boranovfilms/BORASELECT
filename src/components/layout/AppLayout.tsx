@@ -107,17 +107,19 @@ export default function AppLayout({ children, userRole = 'cliente', userName = '
     return () => unsubscribe();
   }, [user]);
 
-  const handleNotificationClick = async (notif: Notificacao) => {
-    try {
-      await notificacaoService.marcarComoVisto(notif.id!);
-    } catch(e) {}
-    setShowNotificationDropdown(false);
-    if (notif.planId) {
-      navigate(`/planejamento/${notif.planId}`);
-    } else {
-      navigate('/tarefas');
-    }
-  };
+const handleNotificationClick = async (notif: Notificacao) => {
+  try {
+    await notificacaoService.marcarComoVisto(notif.id!);
+  } catch(e) {}
+  setShowNotificationDropdown(false);
+  if (notif.tipo === 'arquivo_enviado' && notif.planId && (notif as any).postId) {
+    navigate(`/revisar-arquivo/${notif.planId}/${(notif as any).postId}`);
+  } else if (notif.planId) {
+    navigate(`/planejamento/${notif.planId}`);
+  } else {
+    navigate('/tarefas');
+  }
+};
 
   const handleLogout = async () => {
     await auth.signOut();
