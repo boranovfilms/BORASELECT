@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
-import { Loader2, ChevronRight, AlertCircle, CheckCircle2, Clock } from 'lucide-react';
+import { Loader2, ChevronRight, AlertCircle, CheckCircle2, Clock, FileText } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { DataTable } from '../components/ui/DataTable';
 
@@ -72,7 +72,7 @@ export default function MinhasDemandas() {
       const clientId = d.id;
       const demandasSnap = await getDocs(query(collection(db, 'demandas'), where('clientId', '==', clientId)));
       const demandas = demandasSnap.docs.map(dd => dd.data());
-      const pendentes = demandas.filter(dem => 
+      const pendentes = demandas.filter(dem =>
         ['rascunho', 'aguardando_cliente', 'devolvido', 'aguardando_validacao_equipe'].includes(dem.status)
       ).length;
       return {
@@ -101,7 +101,7 @@ export default function MinhasDemandas() {
       posts.forEach((post: any) => {
         const tasks = post.tasks || [];
         tasks.forEach((task: any) => {
-          if (task.responsibleEmail?.toLowerCase() === email && !task.responsibleEmail?.includes('@') === false) {
+          if (task.responsibleEmail?.toLowerCase() === email) {
             itens.push({
               postId: post.id,
               demandaId: demanda.id,
@@ -121,7 +121,6 @@ export default function MinhasDemandas() {
       });
     });
 
-    // Busca nomes dos clientes
     const clienteIds = [...new Set(itens.map(i => i.clienteId))];
     const clienteNomes: Record<string, string> = {};
     await Promise.all(clienteIds.map(async id => {
@@ -135,22 +134,38 @@ export default function MinhasDemandas() {
   const loadDemandasCliente = async (clientId: string) => {
     const snap = await getDocs(query(collection(db, 'demandas'), where('clientId', '==', clientId)));
     const todasDemandas = snap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
-    
+
+    const statusAprovado = ['aprovado_equipe', 'em_producao', 'concluido'];
+
     const itens: any[] = [];
     todasDemandas.forEach(demanda => {
-      const posts = demanda.posts || [];
-      posts.forEach((post: any) => {
+      if (statusAprovado.includes(demanda.status)) {
+        // Planejamento aprovado → mostra posts individuais
+        const posts = demanda.posts || [];
+        posts.forEach((post: any) => {
+          itens.push({
+            tipo: 'post',
+            postId: post.id,
+            demandaId: demanda.id,
+            demandaNome: demanda.name,
+            numero: post.number,
+            headline: post.headline,
+            postTipo: post.type,
+            publishDate: post.publishDate,
+            status: post.status,
+          });
+        });
+      } else {
+        // Planejamento pendente → mostra o planejamento inteiro
         itens.push({
-          postId: post.id,
+          tipo: 'planejamento',
           demandaId: demanda.id,
           demandaNome: demanda.name,
-          numero: post.number,
-          headline: post.headline,
-          tipo: post.type,
-          publishDate: post.publishDate,
-          status: post.status,
+          postTipo: demanda.type || 'Planejamento',
+          status: demanda.status,
+          publishDate: demanda.updatedAt,
         });
-      });
+      }
     });
 
     setDemandas(itens);
@@ -163,9 +178,11 @@ export default function MinhasDemandas() {
       concluido: { label: 'Concluído', class: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' },
       fazer_correcao: { label: 'Correção', class: 'bg-red-500/10 text-red-400 border-red-500/20' },
       aprovado: { label: 'Aprovado', class: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' },
+      aprovado_equipe: { label: 'Aprovado ✓', class: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' },
       reprovado: { label: 'Reprovado', class: 'bg-red-500/10 text-red-400 border-red-500/20' },
       em_revisao: { label: 'Em Revisão', class: 'bg-purple-500/10 text-purple-400 border-purple-500/20' },
-      aguardando_cliente: { label: 'Aguard. Cliente', class: 'bg-amber-500/10 text-amber-400 border-amber-500/20' },
+      aguardando_cliente: { label: 'Aguard. Aprovação', class: 'bg-amber-500/10 text-amber-400 border-amber-500/20' },
+      aguardando_validacao_equipe: { label: 'Aguard. Validação', class: 'bg-blue-500/10 text-blue-400 border-blue-500/20' },
       rascunho: { label: 'Rascunho', class: 'bg-zinc-800 text-zinc-400 border-zinc-700' },
       devolvido: { label: 'Devolvido', class: 'bg-red-500/10 text-red-400 border-red-500/20' },
     };
@@ -274,7 +291,12 @@ export default function MinhasDemandas() {
             {
               header: 'Demanda',
               accessor: (d) => (
-                <span className="text-white font-black uppercase text-sm">{d.name}</span>
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-zinc-900 border border-zinc-800 rounded-xl">
+                    <FileText className="w-4 h-4 text-[#ff5351]" />
+                  </div>
+                  <span className="text-white font-black uppercase text-sm">{d.name}</span>
+                </div>
               )
             },
             {
@@ -360,7 +382,7 @@ export default function MinhasDemandas() {
         />
       )}
 
-      {/* CLIENTE / EQUIPE — Posts do planejamento */}
+      {/* CLIENTE / EQUIPE — Planejamentos e Posts */}
       {['cliente', 'equipe'].includes(userRole) && (
         <DataTable
           data={demandas}
@@ -370,32 +392,54 @@ export default function MinhasDemandas() {
             {
               header: 'Item',
               accessor: (item) => (
-                <span className="text-white font-black uppercase text-sm">
-                  #{String(item.numero).padStart(2, '0')} {item.headline}
-                </span>
-              )
-            },
-            {
-              header: 'Planejamento',
-              accessor: (item) => (
-                <span className="text-zinc-400 text-xs font-bold uppercase">📋 {item.demandaNome}</span>
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-zinc-900 border border-zinc-800 rounded-xl">
+                    <FileText className="w-4 h-4 text-[#ff5351]" />
+                  </div>
+                  <div>
+                    <p className="text-white font-black uppercase text-sm">
+                      {item.tipo === 'post'
+                        ? `#${String(item.numero).padStart(2, '0')} ${item.headline}`
+                        : item.demandaNome
+                      }
+                    </p>
+                    {item.tipo === 'post' && (
+                      <p className="text-zinc-500 text-[10px] uppercase">📋 {item.demandaNome}</p>
+                    )}
+                  </div>
+                </div>
               )
             },
             {
               header: 'Tipo',
               accessor: (item) => (
                 <span className="px-2 py-0.5 rounded bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[9px] font-black uppercase tracking-widest">
-                  {item.tipo}
+                  {item.postTipo || 'Planejamento'}
                 </span>
               ),
               align: 'center'
             },
-            { header: 'Status', accessor: (item) => getStatusBadge(item.status), align: 'center' },
+            {
+              header: 'Status',
+              accessor: (item) => getStatusBadge(item.status),
+              align: 'center'
+            },
             {
               header: 'Data',
-              accessor: (item) => (
-                <span className="text-zinc-500 text-xs">{item.publishDate || '—'}</span>
-              )
+              accessor: (item) => {
+                try {
+                  const date = item.publishDate?.toDate
+                    ? item.publishDate.toDate()
+                    : new Date(item.publishDate);
+                  return (
+                    <span className="text-zinc-500 text-xs">
+                      {new Intl.DateTimeFormat('pt-BR').format(date)}
+                    </span>
+                  );
+                } catch {
+                  return <span className="text-zinc-600">—</span>;
+                }
+              }
             }
           ]}
         />
