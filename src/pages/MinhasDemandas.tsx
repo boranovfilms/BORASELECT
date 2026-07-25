@@ -343,6 +343,7 @@ export default function MinhasDemandas() {
           columns={[
             {
               header: 'Item',
+              className: 'w-80',
               accessor: (item) => (
                 <div>
                   <p className="text-white font-black uppercase text-sm line-clamp-2 leading-tight">
@@ -393,6 +394,7 @@ export default function MinhasDemandas() {
           columns={[
             {
               header: 'Item',
+              className: 'w-80',
               accessor: (item) => (
                 <div className="flex items-center gap-3">
                   <div className="p-2 bg-zinc-900 border border-zinc-800 rounded-xl shrink-0">
