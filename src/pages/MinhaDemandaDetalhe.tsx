@@ -490,16 +490,14 @@ export default function MinhaDemandaDetalhe() {
                       <div className="w-full h-10 bg-purple-500/10 border border-purple-500/20 text-purple-400 rounded-xl font-black uppercase tracking-widest text-[10px] flex items-center justify-center gap-2">
                         📎 Arquivo Enviado — Aguardando Revisão
                       </div>
-                      {userTask.driveDownloadUrl && (
-                        
-                          href={userTask.driveDownloadUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="w-full h-10 bg-blue-500/10 border border-blue-500/20 text-blue-400 rounded-xl font-black uppercase tracking-widest text-[10px] flex items-center justify-center gap-2 hover:brightness-110 transition-all"
-                        >
-                          ⬇️ Download Alta Qualidade
-                        </a>
-                      )}
+                     {userTask.driveDownloadUrl && (
+  
+    href={userTask.driveDownloadUrl}
+    target="_blank"
+    rel="noopener noreferrer"
+    className="w-full h-10 bg-blue-500/10 border border-blue-500/20 text-blue-400 rounded-xl font-black uppercase tracking-widest text-[10px] flex items-center justify-center gap-2 hover:brightness-110 transition-all"
+  >⬇️ Download Alta Qualidade</a>
+)}
                       <button
                         onClick={() => fileInputRef.current?.click()}
                         disabled={uploading}
