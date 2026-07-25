@@ -345,9 +345,9 @@ export default function MinhasDemandas() {
               header: 'Item',
               accessor: (item) => (
                 <div>
-                  <p className="text-white font-black uppercase text-sm line-clamp-3 leading-tight">
-                    #{String(item.numero).padStart(2, '0')} {item.headline}
-                  </p>
+                  <p className="text-white font-black uppercase text-sm line-clamp-2 leading-tight">
+  #{String(item.numero).padStart(2, '0')} {item.headline}
+</p>
                   <p className="text-zinc-500 text-[10px] uppercase mt-1">📋 {item.demandaNome}</p>
                 </div>
               )
@@ -363,9 +363,9 @@ export default function MinhasDemandas() {
             {
               header: 'Tipo',
               accessor: (item) => (
-                <span className="px-2 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-zinc-300 text-[9px] font-black uppercase tracking-widest">
-                  {getDeptIcon(item.taskTipo)} {item.taskLabel}
-                </span>
+                <span className="px-2 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-zinc-300 text-[9px] font-black uppercase tracking-widest whitespace-nowrap">
+  {getDeptIcon(item.taskTipo)} {item.taskLabel}
+</span>
               ),
               align: 'center'
             },
@@ -399,7 +399,7 @@ export default function MinhasDemandas() {
                     <FileText className="w-4 h-4 text-[#ff5351]" />
                   </div>
                   <div>
-                    <p className="text-white font-black uppercase text-sm line-clamp-3 leading-tight">
+                    <p className="text-white font-black uppercase text-sm line-clamp-2 leading-tight">
                       {item.tipo === 'post'
                         ? `#${String(item.numero).padStart(2, '0')} ${item.headline}`
                         : item.demandaNome
