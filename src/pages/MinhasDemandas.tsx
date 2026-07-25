@@ -17,9 +17,7 @@ export default function MinhasDemandas() {
   const [demandasCliente, setDemandasCliente] = useState<any[]>([]);
   const navigate = useNavigate();
 
-  useEffect(() => {
-    init();
-  }, []);
+  useEffect(() => { init(); }, []);
 
   const init = async () => {
     const user = auth.currentUser;
@@ -55,15 +53,15 @@ export default function MinhasDemandas() {
     const isEditorDesigner = ['editor', 'designer', 'midia_social'].includes(role);
     const isClienteOrEquipe = ['cliente', 'equipe'].includes(role);
 
-    if (isMasterOrRedator) {
-      await loadClientes();
-    } else if (isEditorDesigner) {
-      await loadDemandasEditor(email);
-    } else if (isClienteOrEquipe && clientId) {
-      await loadDemandasCliente(clientId);
-    }
+    if (isMasterOrRedator) await loadClientes();
+    else if (isEditorDesigner) await loadDemandasEditor(email);
+    else if (isClienteOrEquipe && clientId) await loadDemandasCliente(clientId);
 
     setLoading(false);
+  };
+
+  const primeiroNome = (nomeCompleto: string) => {
+    return nomeCompleto?.split(' ')[0] || nomeCompleto || '';
   };
 
   const loadClientes = async () => {
@@ -75,12 +73,7 @@ export default function MinhasDemandas() {
       const pendentes = demandas.filter(dem =>
         ['rascunho', 'aguardando_cliente', 'devolvido', 'aguardando_validacao_equipe'].includes(dem.status)
       ).length;
-      return {
-        id: clientId,
-        ...d.data(),
-        totalDemandas: demandas.length,
-        pendentes
-      };
+      return { id: clientId, ...d.data(), totalDemandas: demandas.length, pendentes };
     }));
     setClientes(clientesData);
   };
@@ -134,13 +127,10 @@ export default function MinhasDemandas() {
   const loadDemandasCliente = async (clientId: string) => {
     const snap = await getDocs(query(collection(db, 'demandas'), where('clientId', '==', clientId)));
     const todasDemandas = snap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
-
     const statusAprovado = ['aprovado_equipe', 'em_producao', 'concluido'];
-
     const itens: any[] = [];
     todasDemandas.forEach(demanda => {
       if (statusAprovado.includes(demanda.status)) {
-        // Planejamento aprovado → mostra posts individuais
         const posts = demanda.posts || [];
         posts.forEach((post: any) => {
           itens.push({
@@ -156,7 +146,6 @@ export default function MinhasDemandas() {
           });
         });
       } else {
-        // Planejamento pendente → mostra o planejamento inteiro
         itens.push({
           tipo: 'planejamento',
           demandaId: demanda.id,
@@ -167,11 +156,10 @@ export default function MinhasDemandas() {
         });
       }
     });
-
     setDemandas(itens);
   };
 
-  const getStatusBadge = (status: string) => {
+  const getStatusBadge = (status: string, isCliente = false) => {
     const configs: any = {
       pendente: { label: 'Pendente', class: 'bg-amber-500/10 text-amber-400 border-amber-500/20' },
       em_andamento: { label: 'Em Andamento', class: 'bg-blue-500/10 text-blue-400 border-blue-500/20' },
@@ -180,7 +168,10 @@ export default function MinhasDemandas() {
       aprovado: { label: 'Aprovado', class: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' },
       aprovado_equipe: { label: 'Aprovado ✓', class: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' },
       reprovado: { label: 'Reprovado', class: 'bg-red-500/10 text-red-400 border-red-500/20' },
-      em_revisao: { label: 'Em Revisão', class: 'bg-purple-500/10 text-purple-400 border-purple-500/20' },
+      em_revisao: { 
+        label: isCliente ? 'Em Produção' : 'Em Revisão', 
+        class: 'bg-purple-500/10 text-purple-400 border-purple-500/20' 
+      },
       aguardando_cliente: { label: 'Aguard. Aprovação', class: 'bg-amber-500/10 text-amber-400 border-amber-500/20' },
       aguardando_validacao_equipe: { label: 'Aguard. Validação', class: 'bg-blue-500/10 text-blue-400 border-blue-500/20' },
       rascunho: { label: 'Rascunho', class: 'bg-zinc-800 text-zinc-400 border-zinc-700' },
@@ -203,6 +194,7 @@ export default function MinhasDemandas() {
 
   const isMasterOrRedator = ['master', 'admin', 'redator'].includes(userRole);
   const isEditorDesigner = ['editor', 'designer', 'midia_social'].includes(userRole);
+  const isClienteOrEquipe = ['cliente', 'equipe'].includes(userRole);
 
   return (
     <div className="space-y-8 pb-20">
@@ -243,9 +235,7 @@ export default function MinhasDemandas() {
             },
             {
               header: 'Total Demandas',
-              accessor: (c) => (
-                <span className="text-white font-black">{c.totalDemandas}</span>
-              ),
+              accessor: (c) => <span className="text-white font-black">{c.totalDemandas}</span>,
               align: 'center'
             },
             {
@@ -275,9 +265,7 @@ export default function MinhasDemandas() {
               )
             }
           ]}
-          actions={() => (
-            <ChevronRight className="w-4 h-4 text-zinc-600" />
-          )}
+          actions={() => <ChevronRight className="w-4 h-4 text-zinc-600" />}
         />
       )}
 
@@ -311,14 +299,25 @@ export default function MinhasDemandas() {
             { header: 'Status', accessor: (d) => getStatusBadge(d.status), align: 'center' },
             {
               header: 'Progresso',
-              accessor: (d) => (
-                <div className="flex items-center gap-2">
-                  <div className="w-24 h-1.5 bg-zinc-800 rounded-full overflow-hidden">
-                    <div className="h-full bg-[#ff5351] rounded-full" style={{ width: `${d.progresso || 0}%` }} />
+              accessor: (d) => {
+                const calcProgresso = (status: string) => {
+                  const map: any = {
+                    rascunho: 10, aguardando_cliente: 30,
+                    aguardando_validacao_equipe: 50, aprovado_equipe: 100,
+                    em_producao: 70, concluido: 100, devolvido: 20,
+                  };
+                  return map[status] || 0;
+                };
+                const pct = calcProgresso(d.status);
+                return (
+                  <div className="flex items-center gap-2">
+                    <div className="w-24 h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                      <div className="h-full bg-[#ff5351] rounded-full" style={{ width: `${pct}%` }} />
+                    </div>
+                    <span className="text-[10px] font-black text-[#ff5351]">{pct}%</span>
                   </div>
-                  <span className="text-[10px] font-black text-[#ff5351]">{d.progresso || 0}%</span>
-                </div>
-              ),
+                );
+              },
               align: 'center'
             },
             {
@@ -345,21 +344,20 @@ export default function MinhasDemandas() {
             {
               header: 'Item',
               accessor: (item) => (
-                <span className="text-white font-black uppercase text-sm">
-                  #{String(item.numero).padStart(2, '0')} {item.headline}
-                </span>
-              )
-            },
-            {
-              header: 'Planejamento',
-              accessor: (item) => (
-                <span className="text-zinc-400 text-xs font-bold uppercase">📋 {item.demandaNome}</span>
+                <div>
+                  <p className="text-white font-black uppercase text-sm line-clamp-3 leading-tight">
+                    #{String(item.numero).padStart(2, '0')} {item.headline}
+                  </p>
+                  <p className="text-zinc-500 text-[10px] uppercase mt-1">📋 {item.demandaNome}</p>
+                </div>
               )
             },
             {
               header: 'Cliente',
               accessor: (item) => (
-                <span className="text-zinc-300 text-xs font-black uppercase">{item.clienteNome}</span>
+                <span className="text-zinc-300 text-xs font-black uppercase">
+                  {primeiroNome(item.clienteNome)}
+                </span>
               )
             },
             {
@@ -371,7 +369,11 @@ export default function MinhasDemandas() {
               ),
               align: 'center'
             },
-            { header: 'Status', accessor: (item) => getStatusBadge(item.taskStatus), align: 'center' },
+            { 
+              header: 'Status', 
+              accessor: (item) => getStatusBadge(item.taskStatus), 
+              align: 'center' 
+            },
             {
               header: 'Data',
               accessor: (item) => (
@@ -383,7 +385,7 @@ export default function MinhasDemandas() {
       )}
 
       {/* CLIENTE / EQUIPE — Planejamentos e Posts */}
-      {['cliente', 'equipe'].includes(userRole) && (
+      {isClienteOrEquipe && (
         <DataTable
           data={demandas}
           onRowClick={(item) => navigate(`/planejamento/${item.demandaId}`)}
@@ -393,18 +395,18 @@ export default function MinhasDemandas() {
               header: 'Item',
               accessor: (item) => (
                 <div className="flex items-center gap-3">
-                  <div className="p-2 bg-zinc-900 border border-zinc-800 rounded-xl">
+                  <div className="p-2 bg-zinc-900 border border-zinc-800 rounded-xl shrink-0">
                     <FileText className="w-4 h-4 text-[#ff5351]" />
                   </div>
                   <div>
-                    <p className="text-white font-black uppercase text-sm">
+                    <p className="text-white font-black uppercase text-sm line-clamp-3 leading-tight">
                       {item.tipo === 'post'
                         ? `#${String(item.numero).padStart(2, '0')} ${item.headline}`
                         : item.demandaNome
                       }
                     </p>
                     {item.tipo === 'post' && (
-                      <p className="text-zinc-500 text-[10px] uppercase">📋 {item.demandaNome}</p>
+                      <p className="text-zinc-500 text-[10px] uppercase mt-0.5">📋 {item.demandaNome}</p>
                     )}
                   </div>
                 </div>
@@ -421,7 +423,7 @@ export default function MinhasDemandas() {
             },
             {
               header: 'Status',
-              accessor: (item) => getStatusBadge(item.status),
+              accessor: (item) => getStatusBadge(item.status, true),
               align: 'center'
             },
             {
@@ -431,11 +433,7 @@ export default function MinhasDemandas() {
                   const date = item.publishDate?.toDate
                     ? item.publishDate.toDate()
                     : new Date(item.publishDate);
-                  return (
-                    <span className="text-zinc-500 text-xs">
-                      {new Intl.DateTimeFormat('pt-BR').format(date)}
-                    </span>
-                  );
+                  return <span className="text-zinc-500 text-xs">{new Intl.DateTimeFormat('pt-BR').format(date)}</span>;
                 } catch {
                   return <span className="text-zinc-600">—</span>;
                 }
