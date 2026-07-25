@@ -5,6 +5,7 @@ import { toast } from 'react-hot-toast';
 import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
 import { contentPlanService, ContentPlan, ContentPost, MicroTask, TaskDept } from '../services/contentPlanService';
+import { notificacaoService } from '../services/notificacaoService';
 import { cn } from '../lib/utils';
 
 interface WorkflowStage {
@@ -376,7 +377,24 @@ export default function PlanejamentoTarefas() {
       });
 
       await contentPlanService.delegatePost(plan!.id!, selectedPost.id, tasks);
-      toast.success('Tarefas delegadas com sucesso!');
+
+const emailsNotificados = new Set<string>();
+for (const task of tasks) {
+  if (task.responsibleEmail && !emailsNotificados.has(task.responsibleEmail)) {
+    emailsNotificados.add(task.responsibleEmail);
+    await notificacaoService.criar({
+      para: task.responsibleEmail,
+      tipo: 'tarefa_delegada',
+      titulo: 'Nova Tarefa Delegada',
+      descricao: `Post #${String(selectedPost.number).padStart(2, '0')} — ${selectedPost.headline?.slice(0, 50)}`,
+      planId: plan!.id!,
+      visto: false,
+      criadoEm: new Date().toISOString()
+    });
+  }
+}
+
+toast.success('Tarefas delegadas com sucesso!');
       setShowDelegModal(false);
       setSelectedDepts([]);
       setDeptResponsibles({} as any);
