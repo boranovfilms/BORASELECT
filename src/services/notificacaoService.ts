@@ -4,7 +4,7 @@ import { db } from '../lib/firebase';
 export interface Notificacao {
   id?: string;
   para: string;
-  tipo: 'planejamento' | 'producao' | 'aprovacao' | 'sistema' | 'planejamento_criado' | 'planejamento_enviado' | 'planejamento_aprovado_cliente' | 'planejamento_validado_equipe' | 'planejamento_revisado' | 'tarefa_delegada';
+  tipo: 'planejamento' | 'producao' | 'aprovacao' | 'sistema' | 'planejamento_criado' | 'planejamento_enviado' | 'planejamento_aprovado_cliente' | 'planejamento_validado_equipe' | 'planejamento_revisado' | 'tarefa_delegada' | 'arquivo_enviado';
   titulo: string;
   descricao: string;
   planId?: string;
