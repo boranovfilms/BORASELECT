@@ -6,6 +6,7 @@ import { collection, getDocs, doc, updateDoc, serverTimestamp } from 'firebase/f
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { auth, db, storage } from '../lib/firebase';
 import { contentPlanService } from '../services/contentPlanService';
+import { notificacaoService } from '../services/notificacaoService';
 import { cn } from '../lib/utils';
 
 export default function MinhaDemandaDetalhe() {
@@ -193,6 +194,18 @@ export default function MinhaDemandaDetalhe() {
       };
     });
     await updateDoc(doc(db, 'demandas', planId), { posts: updatedPosts, updatedAt: serverTimestamp() });
+
+    // Notifica o redator
+    await notificacaoService.criar({
+      para: 'boranovfilms@gmail.com',
+      tipo: 'arquivo_enviado',
+      titulo: 'Arquivo Enviado para Revisão',
+      descricao: `Post #${String(post.number).padStart(2, '0')} — ${post.headline?.slice(0, 50)} está pronto para revisão`,
+      planId: planId,
+      visto: false,
+      criadoEm: new Date().toISOString()
+    });
+
     await loadData();
   };
 
@@ -200,12 +213,6 @@ export default function MinhaDemandaDetalhe() {
     if (!planId || !plan || !post || !userTask || !driveLink) return;
     setSavingDrive(true);
     try {
-      const match = driveLink.match(/[-\w]{25,}/);
-      const fileId = match ? match[0] : null;
-      const downloadUrl = fileId
-        ? `https://drive.google.com/uc?export=download&id=${fileId}`
-        : driveLink;
-
       const updatedPosts = plan.posts.map((p: any) => {
         if (p.id !== post.id) return p;
         return {
@@ -214,7 +221,7 @@ export default function MinhaDemandaDetalhe() {
             t.id === userTask.id ? {
               ...t,
               driveLink: driveLink,
-              driveDownloadUrl: downloadUrl,
+              driveDownloadUrl: driveLink,
             } : t
           )
         };
@@ -490,14 +497,14 @@ export default function MinhaDemandaDetalhe() {
                       <div className="w-full h-10 bg-purple-500/10 border border-purple-500/20 text-purple-400 rounded-xl font-black uppercase tracking-widest text-[10px] flex items-center justify-center gap-2">
                         📎 Arquivo Enviado — Aguardando Revisão
                       </div>
-                     {userTask.driveDownloadUrl && (
-                       <button
-                         onClick={() => window.open(userTask.driveDownloadUrl, '_blank')}
-                         className="w-full h-10 bg-blue-500/10 border border-blue-500/20 text-blue-400 rounded-xl font-black uppercase tracking-widest text-[10px] flex items-center justify-center gap-2 hover:brightness-110 transition-all"
-                       >
-                         ⬇️ Download Alta Qualidade
-                       </button>
-                     )}
+                      {userTask.driveDownloadUrl && (
+                        <button
+                          onClick={() => window.open(userTask.driveDownloadUrl, '_blank')}
+                          className="w-full h-10 bg-blue-500/10 border border-blue-500/20 text-blue-400 rounded-xl font-black uppercase tracking-widest text-[10px] flex items-center justify-center gap-2 hover:brightness-110 transition-all"
+                        >
+                          ⬇️ Download Alta Qualidade
+                        </button>
+                      )}
                       <button
                         onClick={() => fileInputRef.current?.click()}
                         disabled={uploading}
