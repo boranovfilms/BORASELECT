@@ -491,13 +491,13 @@ export default function MinhaDemandaDetalhe() {
                         📎 Arquivo Enviado — Aguardando Revisão
                       </div>
                      {userTask.driveDownloadUrl && (
-  
-    href={userTask.driveDownloadUrl}
-    target="_blank"
-    rel="noopener noreferrer"
-    className="w-full h-10 bg-blue-500/10 border border-blue-500/20 text-blue-400 rounded-xl font-black uppercase tracking-widest text-[10px] flex items-center justify-center gap-2 hover:brightness-110 transition-all"
-  >⬇️ Download Alta Qualidade</a>
-)}
+                       <button
+                         onClick={() => window.open(userTask.driveDownloadUrl, '_blank')}
+                         className="w-full h-10 bg-blue-500/10 border border-blue-500/20 text-blue-400 rounded-xl font-black uppercase tracking-widest text-[10px] flex items-center justify-center gap-2 hover:brightness-110 transition-all"
+                       >
+                         ⬇️ Download Alta Qualidade
+                       </button>
+                     )}
                       <button
                         onClick={() => fileInputRef.current?.click()}
                         disabled={uploading}
