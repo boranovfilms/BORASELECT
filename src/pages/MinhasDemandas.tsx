@@ -339,7 +339,7 @@ export default function MinhasDemandas() {
       {isEditorDesigner && (
         <DataTable
           data={demandas}
-          onRowClick={(item) => navigate(`/planejamento/${item.demandaId}`)}
+          onRowClick={(item) => navigate(`/minha-demanda/${item.demandaId}/${item.postId}`)}
           emptyMessage="Nenhuma demanda delegada para você."
           columns={[
             {
