@@ -299,6 +299,8 @@ export default function MinhaDemandaDetalhe() {
 console.log('Post ID:', post.id);
 console.log('Plan ID:', planId);
 console.log('Tasks do post:', post.tasks);
+      console.log('Plan posts:', plan.posts);
+console.log('Post completo:', JSON.stringify(post));
       const updatedPosts = plan.posts.map((p: any) => {
         if (p.id !== post.id) return p;
         return {
