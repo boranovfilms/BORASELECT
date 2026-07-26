@@ -102,6 +102,7 @@ function calcularFasePost(
   }
 
   if (tasks.length > 0) {
+    const concluidas = tasks.filter((t: any) => t.status === 'concluido').length;
     const emAndamento = tasks.find((t: any) => t.status === 'em_andamento');
     return {
       faseId: 'producao',
@@ -284,7 +285,7 @@ export default function PlanejamentoTarefas() {
           id: `task_${dept}_${Date.now()}`,
           dept,
           deptLabel: deptInfo.name,
-          responsibleEmail: '', // Agora delegado para departamento
+          responsibleEmail: '', 
           responsibleName: 'Aguardando...', 
           tags: deptTags[dept] || [],
           description: deptDescriptions[dept] || '',
@@ -296,7 +297,6 @@ export default function PlanejamentoTarefas() {
 
       await contentPlanService.delegatePost(plan!.id!, selectedPost.id, tasks);
 
-      // Notificar todos os membros dos departamentos selecionados
       for (const dept of selectedDepts) {
         const deptInfo = DEPTS.find(d => d.id === dept)!;
         const roleToNotify = deptToRole[dept];
@@ -310,7 +310,7 @@ export default function PlanejamentoTarefas() {
             para: membro.email?.toLowerCase(),
             tipo: 'producao',
             titulo: `NOVA TAREFA: ${deptInfo.name} — ${selectedPost.headline}`,
-            descricao: deptDescriptions[dept] || `Nova tarefa de ${deptInfo.name} para o post \"${selectedPost.headline}\"`,
+            descricao: deptDescriptions[dept] || `Nova tarefa de ${deptInfo.name} para o post "${selectedPost.headline}"`,
             planId: plan!.id,
             postId: selectedPost.id
           });
@@ -335,35 +335,35 @@ export default function PlanejamentoTarefas() {
 
   if (loading || !plan || !roleLoaded) {
     return (
-      <div className=\"min-h-[60vh] flex items-center justify-center\">
-        <Loader2 className=\"w-8 h-8 animate-spin text-[#ff5351]\" />
+      <div className="min-h-[60vh] flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-[#ff5351]" />
       </div>
     );
   }
 
   return (
-    <div className=\"animate-in fade-in duration-700 pb-20\">
-      <header className=\"mb-8\">
+    <div className="animate-in fade-in duration-700 pb-20">
+      <header className="mb-8">
         <button
           onClick={() => navigate(-1)}
-          className=\"flex items-center gap-2 text-[#ff5351] text-[10px] font-black uppercase tracking-widest mb-4 hover:brightness-110 transition-all\"
+          className="flex items-center gap-2 text-[#ff5351] text-[10px] font-black uppercase tracking-widest mb-4 hover:brightness-110 transition-all"
         >
-          <ArrowLeft className=\"w-4 h-4\" /> Voltar
+          <ArrowLeft className="w-4 h-4" /> Voltar
         </button>
-        <p className=\"text-[10px] font-black uppercase tracking-[0.3em] text-zinc-500\">
+        <p className="text-[10px] font-black uppercase tracking-[0.3em] text-zinc-500">
           PLANEJAMENTO · {clientName}
         </p>
-        <h1 className=\"text-4xl font-black text-white uppercase italic tracking-tight\">
+        <h1 className="text-4xl font-black text-white uppercase italic tracking-tight">
           # {plan.name}
         </h1>
-        <p className=\"text-zinc-500 text-sm mt-1\">{plan.monthReference}</p>
+        <p className="text-zinc-500 text-sm mt-1">{plan.monthReference}</p>
         {isInternal && (
-          <div className=\"flex items-center gap-3 mt-4\">
-            <span className=\"px-3 py-1 bg-amber-500/10 text-amber-500 border border-amber-500/20 rounded-full text-[9px] font-black uppercase tracking-widest\">
+          <div className="flex items-center gap-3 mt-4">
+            <span className="px-3 py-1 bg-amber-500/10 text-amber-500 border border-amber-500/20 rounded-full text-[9px] font-black uppercase tracking-widest">
               {postsOrdenados.length} post{postsOrdenados.length !== 1 ? 's' : ''} aguardando delegação
             </span>
             {postsOrdenados.length === 0 && (
-              <span className=\"text-emerald-500 text-[10px] font-black uppercase tracking-widest\">
+              <span className="text-emerald-500 text-[10px] font-black uppercase tracking-widest">
                 ✓ Todos delegados!
               </span>
             )}
@@ -371,31 +371,28 @@ export default function PlanejamentoTarefas() {
         )}
       </header>
 
-      {/* Barra de Progresso Geral */}
-      <div className=\"bg-zinc-900/50 border border-zinc-800 rounded-[32px] p-8 mb-8\">
-        <div className=\"flex items-center justify-between mb-4\">
-          <span className=\"text-[10px] font-black uppercase tracking-widest text-zinc-400\">Progresso Geral</span>
-          <span className=\"text-xl font-black text-[#ff5351] italic\">{porcentagemGeral}%</span>
+      <div className="bg-zinc-900/50 border border-zinc-800 rounded-[32px] p-8 mb-8">
+        <div className="flex items-center justify-between mb-4">
+          <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Progresso Geral</span>
+          <span className="text-xl font-black text-[#ff5351] italic">{porcentagemGeral}%</span>
         </div>
-        <div className=\"grid grid-cols-4 md:grid-cols-12 gap-2\">
+        <div className="grid grid-cols-4 md:grid-cols-12 gap-2">
           {allPosts.map((post, idx) => {
-            const fase = calcularFasePost(post, plan, workflowModel);
             const isActive = idx < Math.ceil((porcentagemGeral / 100) * allPosts.length);
             return (
               <div
                 key={idx}
                 className={cn(
-                  \"h-1.5 rounded-full transition-all duration-700\",
-                  isActive ? \"bg-[#ff5351]\" : \"bg-zinc-800\"
+                  "h-1.5 rounded-full transition-all duration-700",
+                  isActive ? "bg-[#ff5351]" : "bg-zinc-800"
                 )}
-                title={`Post ${idx + 1}: ${fase.label}`}
               />
             );
           })}
         </div>
       </div>
 
-      <div className=\"bg-[#141414] border border-zinc-800 rounded-[32px] overflow-hidden shadow-2xl\">
+      <div className="bg-[#141414] border border-zinc-800 rounded-[32px] overflow-hidden shadow-2xl">
         <DataTable
           data={postsOrdenados}
           columns={[
@@ -403,11 +400,11 @@ export default function PlanejamentoTarefas() {
               header: 'POST',
               className: 'w-96',
               accessor: (post) => (
-                <div className=\"flex items-center gap-4 py-2\">
-                  <div className=\"text-zinc-600 font-black text-xl italic\">#{String(post.number).padStart(2, '0')}</div>
-                  <div className=\"flex-1 min-w-0\">
-                    <p className=\"text-white font-black uppercase text-sm truncate\">{post.headline || 'Sem título'}</p>
-                    <p className=\"text-zinc-500 text-[10px] truncate uppercase tracking-widest\">{post.caption?.slice(0, 80)}...</p>
+                <div className="flex items-center gap-4 py-2">
+                  <div className="text-zinc-600 font-black text-xl italic">#{String(post.number).padStart(2, '0')}</div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-white font-black uppercase text-sm truncate">{post.headline || 'Sem título'}</p>
+                    <p className="text-zinc-500 text-[10px] truncate uppercase tracking-widest">{post.caption?.slice(0, 80)}...</p>
                   </div>
                 </div>
               )
@@ -416,7 +413,7 @@ export default function PlanejamentoTarefas() {
               header: 'TIPO',
               accessor: (post) => (
                 <span className={cn(
-                  \"px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-widest border\",
+                  "px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-widest border",
                   post.type === 'FEED' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
                   post.type === 'REEL' ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' :
                   post.type === 'STORIES' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
@@ -433,11 +430,11 @@ export default function PlanejamentoTarefas() {
               accessor: (post) => {
                 const dateInfo = formatDate(post.publishDate);
                 return (
-                  <div className=\"flex flex-col items-center\">
-                    <span className=\"text-zinc-400 font-bold text-xs\">{dateInfo.data}</span>
-                    <span className=\"text-zinc-600 text-[9px] uppercase font-black\">{dateInfo.diaSemana}</span>
+                  <div className="flex flex-col items-center">
+                    <span className="text-zinc-400 font-bold text-xs">{dateInfo.data}</span>
+                    <span className="text-zinc-600 text-[9px] uppercase font-black">{dateInfo.diaSemana}</span>
                     {dateInfo.isUrgente && (
-                      <span className=\"mt-1 px-1.5 py-0.5 bg-red-500/10 text-red-400 text-[7px] font-black uppercase rounded border border-red-500/20\">URGENTE</span>
+                      <span className="mt-1 px-1.5 py-0.5 bg-red-500/10 text-red-400 text-[7px] font-black uppercase rounded border border-red-500/20">URGENTE</span>
                     )}
                   </div>
                 );
@@ -447,9 +444,9 @@ export default function PlanejamentoTarefas() {
             {
               header: 'FASE ATUAL',
               accessor: (post) => {
-                const fase = calcularFasePost(post, plan, workflowModel);
+                const fase = calcularFasePost(post, plan!, workflowModel);
                 return (
-                  <div className={cn(\"px-3 py-1 rounded-full border text-[9px] font-black uppercase tracking-widest\", fase.bg, fase.color, fase.border)}>
+                  <div className={cn("px-3 py-1 rounded-full border text-[9px] font-black uppercase tracking-widest", fase.bg, fase.color, fase.border)}>
                     {fase.label}
                   </div>
                 );
@@ -459,13 +456,13 @@ export default function PlanejamentoTarefas() {
             {
               header: 'PROGRESSO',
               accessor: (post) => {
-                const fase = calcularFasePost(post, plan, workflowModel);
+                const fase = calcularFasePost(post, plan!, workflowModel);
                 return (
-                  <div className=\"flex items-center gap-2\">
-                    <div className=\"w-16 h-1 bg-zinc-800 rounded-full overflow-hidden\">
-                      <div className={cn(\"h-full rounded-full transition-all duration-500\", fase.barColor)} style={{ width: `${fase.percent}%` }} />
+                  <div className="flex items-center gap-2">
+                    <div className="w-16 h-1 bg-zinc-800 rounded-full overflow-hidden">
+                      <div className={cn("h-full rounded-full transition-all duration-500", fase.barColor)} style={{ width: `${fase.percent}%` }} />
                     </div>
-                    <span className=\"text-[9px] font-black text-zinc-500\">{fase.percent}%</span>
+                    <span className="text-[9px] font-black text-zinc-500">{fase.percent}%</span>
                   </div>
                 );
               },
@@ -476,25 +473,25 @@ export default function PlanejamentoTarefas() {
               accessor: (post) => {
                 const hasTasks = (post as any).tasks && (post as any).tasks.length > 0;
                 return !roleLoaded ? (
-                  <div className=\"w-4 h-4 rounded-full border border-zinc-800 animate-spin border-t-zinc-600\" />
+                  <div className="w-4 h-4 rounded-full border border-zinc-800 animate-spin border-t-zinc-600" />
                 ) : isInternal ? (
                   hasTasks ? (
                     <button
                       onClick={() => toast.success('Em breve: visualização de tarefas!')}
-                      className=\"inline-flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 border border-zinc-800 rounded-xl text-[9px] font-black uppercase tracking-widest text-zinc-400 hover:text-white hover:border-[#ff5351] transition-all\"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 border border-zinc-800 rounded-xl text-[9px] font-black uppercase tracking-widest text-zinc-400 hover:text-white hover:border-[#ff5351] transition-all"
                     >
-                      <Eye className=\"w-3 h-3\" /> Ver
+                      <Eye className="w-3 h-3" /> Ver
                     </button>
                   ) : (
                     <button
                       onClick={() => openDelegModal(post)}
-                      className=\"inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#ff5351] text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:brightness-110 transition-all\"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#ff5351] text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:brightness-110 transition-all"
                     >
-                      <Zap className=\"w-3 h-3\" /> Delegar
+                      <Zap className="w-3 h-3" /> Delegar
                     </button>
                   )
                 ) : (
-                  <span className=\"text-[9px] font-black uppercase text-zinc-600\">—</span>
+                  <span className="text-[9px] font-black uppercase text-zinc-600">—</span>
                 );
               },
               align: 'right'
@@ -503,25 +500,23 @@ export default function PlanejamentoTarefas() {
         />
       </div>
 
-      {/* MODAL DE DELEGAÇÃO */}
       {showDelegModal && selectedPost && (
-        <div className=\"fixed inset-0 bg-black/80 backdrop-blur-sm z-[300] flex items-center justify-center p-4\">
-          <div className=\"bg-[#141414] border border-zinc-800 rounded-[40px] w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl\">
-            <header className=\"p-8 border-b border-zinc-800 flex items-center justify-between bg-zinc-900/30\">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[300] flex items-center justify-center p-4">
+          <div className="bg-[#141414] border border-zinc-800 rounded-[40px] w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl">
+            <header className="p-8 border-b border-zinc-800 flex items-center justify-between bg-zinc-900/30">
               <div>
-                <p className=\"text-[9px] font-black uppercase tracking-[0.3em] text-[#ff5351] mb-1\">POST {String(selectedPost.number).padStart(2, '0')} · {selectedPost.type}</p>
-                <h3 className=\"text-2xl font-black text-white uppercase italic tracking-tight\">Delegar Tarefas</h3>
+                <p className="text-[9px] font-black uppercase tracking-[0.3em] text-[#ff5351] mb-1">POST {String(selectedPost.number).padStart(2, '0')} · {selectedPost.type}</p>
+                <h3 className="text-2xl font-black text-white uppercase italic tracking-tight">Delegar Tarefas</h3>
               </div>
-              <button onClick={() => setShowDelegModal(false)} className=\"p-2 hover:bg-zinc-800 rounded-lg text-zinc-500 transition-all\"><X className=\"w-6 h-6\" /></button>
+              <button onClick={() => setShowDelegModal(false)} className="p-2 hover:bg-zinc-800 rounded-lg text-zinc-500 transition-all"><X className="w-6 h-6" /></button>
             </header>
 
-            <div className=\"flex-1 overflow-y-auto p-8 space-y-10\">
-              {/* Departamentos */}
-              <div className=\"space-y-4\">
-                <label className=\"text-[10px] font-black uppercase tracking-widest text-zinc-500 flex items-center gap-2\">
-                  <div className=\"w-1 h-1 bg-[#ff5351] rounded-full\" /> Departamentos
+            <div className="flex-1 overflow-y-auto p-8 space-y-10">
+              <div className="space-y-4">
+                <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 flex items-center gap-2">
+                  <div className="w-1 h-1 bg-[#ff5351] rounded-full" /> Departamentos
                 </label>
-                <div className=\"grid grid-cols-2 md:grid-cols-4 gap-4\">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   {DEPTS.map(dept => {
                     const isSelected = selectedDepts.includes(dept.id);
                     return (
@@ -533,12 +528,12 @@ export default function PlanejamentoTarefas() {
                           isSelected ? 'border-[#ff5351] bg-[#ff5351]/5' : 'border-zinc-800 bg-zinc-900/30 hover:border-zinc-700'
                         )}
                       >
-                        <div className=\"flex items-center justify-between mb-2\">
-                          <span className=\"text-2xl\">{dept.icon}</span>
-                          {isSelected && <div className=\"w-4 h-4 bg-[#ff5351] rounded-full flex items-center justify-center animate-in zoom-in\"><Check className=\"w-2.5 h-2.5 text-white\" strokeWidth={4} /></div>}
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-2xl">{dept.icon}</span>
+                          {isSelected && <div className="w-4 h-4 bg-[#ff5351] rounded-full flex items-center justify-center animate-in zoom-in"><Check className="w-2.5 h-2.5 text-white" strokeWidth={4} /></div>}
                         </div>
-                        <p className={cn(\"font-black uppercase text-[10px] tracking-widest\", isSelected ? \"text-white\" : \"text-zinc-400\")}>{dept.name}</p>
-                        <p className=\"text-[8px] text-zinc-600 font-bold uppercase tracking-tighter mt-0.5\">{dept.sub}</p>
+                        <p className={cn("font-black uppercase text-[10px] tracking-widest", isSelected ? "text-white" : "text-zinc-400")}>{dept.name}</p>
+                        <p className="text-[8px] text-zinc-600 font-bold uppercase tracking-tighter mt-0.5">{dept.sub}</p>
                       </button>
                     );
                   })}
@@ -546,24 +541,23 @@ export default function PlanejamentoTarefas() {
               </div>
 
               {selectedDepts.length > 0 && (
-                <div className=\"space-y-8 animate-in slide-in-from-bottom-2\">
-                  <h4 className=\"text-sm font-black uppercase tracking-widest text-white border-b border-zinc-800 pb-2 flex items-center gap-2\">
+                <div className="space-y-8 animate-in slide-in-from-bottom-2">
+                  <h4 className="text-sm font-black uppercase tracking-widest text-white border-b border-zinc-800 pb-2 flex items-center gap-2">
                     Configuração por Departamento
                   </h4>
                   {selectedDepts.map(deptId => {
                     const deptInfo = DEPTS.find(d => d.id === deptId)!;
                     return (
-                      <div key={deptId} className=\"bg-zinc-900/40 border border-zinc-800 rounded-[24px] p-6 space-y-6\">
-                        <div className=\"flex items-center gap-3\">
-                          <span className=\"text-xl\">{deptInfo.icon}</span>
-                          <span className=\"text-xs font-black uppercase text-white tracking-widest\">{deptInfo.name}</span>
+                      <div key={deptId} className="bg-zinc-900/40 border border-zinc-800 rounded-[24px] p-6 space-y-6">
+                        <div className="flex items-center gap-3">
+                          <span className="text-xl">{deptInfo.icon}</span>
+                          <span className="text-xs font-black uppercase text-white tracking-widest">{deptInfo.name}</span>
                         </div>
 
-                        <div className=\"grid grid-cols-1 md:grid-cols-2 gap-6\">
-                          {/* No longer selecting specific member - delegation is department-wide */}
-                          <div className=\"space-y-3\">
-                            <label className=\"text-[9px] font-black uppercase tracking-widest text-zinc-500\">Tags</label>
-                            <div className=\"flex flex-wrap gap-2\">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <div className="space-y-3">
+                            <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500">Tags</label>
+                            <div className="flex flex-wrap gap-2">
                               {deptInfo.tags.map(tag => {
                                 const isActive = (deptTags[deptId] || []).includes(tag);
                                 return (
@@ -582,9 +576,9 @@ export default function PlanejamentoTarefas() {
                             </div>
                           </div>
                           
-                          <div className=\"space-y-3\">
-                            <label className=\"text-[9px] font-black uppercase tracking-widest text-zinc-500\">Dependências</label>
-                            <div className=\"flex flex-col gap-2\">
+                          <div className="space-y-3">
+                            <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500">Dependências</label>
+                            <div className="flex flex-col gap-2">
                               {deptId === 'design' && (
                                 <button
                                   onClick={() => setDepArteDependeVideo(!depArteDependeVideo)}
@@ -593,8 +587,8 @@ export default function PlanejamentoTarefas() {
                                     depArteDependeVideo ? 'border-[#ff5351] bg-[#ff5351]/5 text-[#ff5351]' : 'border-zinc-800 bg-zinc-900/30 text-zinc-500'
                                   )}
                                 >
-                                  <span className=\"text-[9px] font-black uppercase tracking-widest\">Depende do Vídeo</span>
-                                  {depArteDependeVideo && <Check className=\"w-3 h-3\" />}
+                                  <span className="text-[9px] font-black uppercase tracking-widest">Depende do Vídeo</span>
+                                  {depArteDependeVideo && <Check className="w-3 h-3" />}
                                 </button>
                               )}
                               {deptId === 'video' && (
@@ -605,21 +599,21 @@ export default function PlanejamentoTarefas() {
                                     depVideoDependeArte ? 'border-[#ff5351] bg-[#ff5351]/5 text-[#ff5351]' : 'border-zinc-800 bg-zinc-900/30 text-zinc-500'
                                   )}
                                 >
-                                  <span className=\"text-[9px] font-black uppercase tracking-widest\">Depende da Arte</span>
-                                  {depVideoDependeArte && <Check className=\"w-3 h-3\" />}
+                                  <span className="text-[9px] font-black uppercase tracking-widest">Depende da Arte</span>
+                                  {depVideoDependeArte && <Check className="w-3 h-3" />}
                                 </button>
                               )}
                             </div>
                           </div>
                         </div>
 
-                        <div className=\"space-y-3\">
-                          <label className=\"text-[9px] font-black uppercase tracking-widest text-zinc-500\">Descrição / Briefing</label>
+                        <div className="space-y-3">
+                          <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500">Descrição / Briefing</label>
                           <textarea
                             value={deptDescriptions[deptId] || ''}
                             onChange={(e) => setDeptDescriptions(prev => ({ ...prev, [deptId]: e.target.value }))}
                             rows={3}
-                            className=\"w-full bg-zinc-950 border border-zinc-800 rounded-2xl p-4 text-xs text-white focus:border-[#ff5351] outline-none resize-none\"
+                            className="w-full bg-zinc-950 border border-zinc-800 rounded-2xl p-4 text-xs text-white focus:border-[#ff5351] outline-none resize-none"
                             placeholder={`Instruções para o departamento de ${deptInfo.name}...`}
                           />
                         </div>
@@ -630,19 +624,19 @@ export default function PlanejamentoTarefas() {
               )}
             </div>
 
-            <footer className=\"p-8 bg-zinc-900/50 border-t border-zinc-800 flex justify-end gap-4\">
+            <footer className="p-8 bg-zinc-900/50 border-t border-zinc-800 flex justify-end gap-4">
               <button
                 onClick={() => setShowDelegModal(false)}
-                className=\"px-8 py-3 bg-zinc-800 text-zinc-400 rounded-2xl font-black uppercase tracking-widest text-[10px] hover:text-white transition-all\"
+                className="px-8 py-3 bg-zinc-800 text-zinc-400 rounded-2xl font-black uppercase tracking-widest text-[10px] hover:text-white transition-all"
               >
                 Cancelar
               </button>
               <button
                 onClick={handleSaveDeleg}
                 disabled={saving || selectedDepts.length === 0}
-                className=\"px-8 py-3 bg-white text-black rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-[#ff5351] hover:text-white transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed\"
+                className="px-8 py-3 bg-white text-black rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-[#ff5351] hover:text-white transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {saving ? <Loader2 className=\"w-4 h-4 animate-spin\" /> : <Save className=\"w-4 h-4\" />}
+                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                 Confirmar Delegação
               </button>
             </footer>
