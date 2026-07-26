@@ -295,6 +295,10 @@ export default function MinhaDemandaDetalhe() {
     if (!planId || !plan || !post) return;
     setSaving(true);
     try {
+      console.log('Aprovando task:', taskId);
+console.log('Post ID:', post.id);
+console.log('Plan ID:', planId);
+console.log('Tasks do post:', post.tasks);
       const updatedPosts = plan.posts.map((p: any) => {
         if (p.id !== post.id) return p;
         return {
