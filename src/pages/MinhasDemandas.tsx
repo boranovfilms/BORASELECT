@@ -239,21 +239,24 @@ export default function MinhasDemandas() {
     });
 
     const postsSnap = await getDocs(query(collection(db, 'posts'), where('clientId', '==', clientId)));
-    postsSnap.docs.forEach(d => {
-      const data = d.data();
-      if (data.status === 'concluido') return;
-      itens.push({
-        tipo: 'post',
-        postId: d.id,
-        demandaId: data.planId,
-        demandaNome: data.planNome,
-        numero: data.number,
-        headline: data.headline,
-        postTipo: data.type,
-        publishDate: data.publishDate,
-        status: data.status,
-      });
-    });
+postsSnap.docs.forEach(d => {
+  const data = d.data();
+  if (data.status === 'concluido') return;
+  // Só mostra posts que já foram delegados (tem tasks)
+  const tasks = data.tasks || [];
+  if (tasks.length === 0) return;
+  itens.push({
+    tipo: 'post',
+    postId: d.id,
+    demandaId: data.planId,
+    demandaNome: data.planNome,
+    numero: data.number,
+    headline: data.headline,
+    postTipo: data.type,
+    publishDate: data.publishDate,
+    status: data.status,
+  });
+});
 
     setDemandas(itens);
   };
