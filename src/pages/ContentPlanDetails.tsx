@@ -313,13 +313,13 @@ export default function ContentPlanDetails() {
               <span className="text-[10px] font-black text-[#ff5351]">{progresso}%</span>
             </div>
 
-            {/* Botão Delegar */}
+            {/* Botão Processar Planejamento */}
             {isMasterOrRedator && plan.status === 'aprovado_equipe' && (
               <button
-                onClick={() => navigate(`/planejamento/${planId}/tarefas`)}
+                onClick={() => navigate(`/processar-planejamento/${planId}`)}
                 className="h-10 px-6 bg-[#ff5351] text-white rounded-xl font-black uppercase tracking-widest text-[10px] hover:brightness-110 transition-all flex items-center gap-2 shadow-xl shadow-[#ff5351]/20"
               >
-                <Zap className="w-4 h-4" /> Delegar Tarefas
+                <Zap className="w-4 h-4" /> Processar Planejamento
               </button>
             )}
           </div>
