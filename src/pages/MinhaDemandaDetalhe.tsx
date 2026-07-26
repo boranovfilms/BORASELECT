@@ -409,9 +409,9 @@ export default function MinhaDemandaDetalhe() {
   const isRedatorMaster = ['redator', 'admin', 'master'].includes(userRole);
   const isClienteEquipe = ['cliente', 'equipe'].includes(userRole);
 
-  // Filtra as tasks do post para mostrar na lista
-  const allTasks = post.tasks || [];
-  const historicoAcoes = post.historico || [];
+  const postAtual = plan?.posts?.find((p: any) => p.id === post?.id);
+  const allTasks = postAtual?.tasks || post?.tasks || [];
+  const historico = postAtual?.historico || post?.historico || [];
 
   return (
     <div className="space-y-6 pb-8 text-left">
@@ -509,13 +509,13 @@ export default function MinhaDemandaDetalhe() {
           </div>
 
           {/* HISTÓRICO DE AÇÕES */}
-          {historicoAcoes.length > 0 && (
+          {historico.length > 0 && (
             <div className="bg-[#1f1f1f] border border-zinc-800 rounded-[24px] overflow-hidden">
               <div className="p-5 border-b border-zinc-800">
                 <h2 className="text-xs font-black uppercase tracking-widest text-white italic">Histórico da Demanda</h2>
               </div>
               <div className="p-6 space-y-4">
-                {historicoAcoes.map((h: any, i: number) => (
+                {historico.map((h: any, i: number) => (
                   <div key={i} className="flex gap-4">
                     <div className="w-8 h-8 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center shrink-0">
                       <Clock className="w-4 h-4 text-zinc-600" />
