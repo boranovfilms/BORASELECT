@@ -35,6 +35,7 @@ import DebugTable from './pages/DebugTable';
 import Teleprompter from './pages/Teleprompter';
 import MinhasDemandas from './pages/MinhasDemandas';
 import MinhaDemandaDetalhe from './pages/MinhaDemandaDetalhe';
+import ProcessarPlanejamento from './pages/ProcessarPlanejamento';
 
 export default function App() {
   const [loading, setLoading] = useState(true);
@@ -145,8 +146,8 @@ export default function App() {
         <Route path="/minha-demanda/:planId/:postId" element={user ? wrapLayout(<MinhaDemandaDetalhe />) : <Navigate to="/login" />} />
         <Route path="/teleprompter" element={user ? wrapLayout(<Teleprompter />) : <Navigate to="/login" />} />
         <Route path="/diagnostico" element={user && isAdmin ? wrapLayout(<DebugTable />) : <Navigate to="/" />} />
-
         <Route path="*" element={<Navigate to="/" />} />
+        <Route path="/processar-planejamento/:planId" element={user ? wrapLayout(<ProcessarPlanejamento />) : <Navigate to="/login" />} />
       </Routes>
     </BrowserRouter>
   );
