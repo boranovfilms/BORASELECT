@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
-import { Loader2, ChevronRight, AlertCircle, CheckCircle2, Clock, FileText } from 'lucide-react';
+import { Loader2, ChevronRight, AlertCircle, CheckCircle2, Clock, FileText, Zap } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { DataTable } from '../components/ui/DataTable';
 
@@ -460,6 +460,25 @@ export default function MinhasDemandas() {
                       <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${pct}%` }} />
                     </div>
                   </div>
+                );
+              },
+              align: 'center'
+            },
+            {
+              header: 'Ação',
+              accessor: (d) => {
+                if (!d.isPlanejamento) return null;
+                if (!['aprovado_equipe', 'em_producao'].includes(d.status)) return null;
+                return (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      navigate(`/planejamento/${d.id}/tarefas`);
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-2 bg-[#ff5351] text-white rounded-xl font-black uppercase text-[9px] tracking-widest hover:brightness-110 transition-all"
+                  >
+                    <Zap className="w-3 h-3" /> Delegar
+                  </button>
                 );
               },
               align: 'center'
