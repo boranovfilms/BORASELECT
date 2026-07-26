@@ -135,10 +135,11 @@ export default function MinhasDemandas() {
       });
     }
 
-    for (const post of todosPosts) {
-      if (post.status === 'concluido') continue;
-      const tasks = post.tasks || [];
-      itens.push({
+   for (const post of todosPosts) {
+  if (post.status === 'concluido') continue;
+  if (post.status === 'aguardando_delegacao') continue; // Não mostra posts não delegados
+  const tasks = post.tasks || [];
+  itens.push({
         id: post.id,
         planId: post.planId,
         postId: post.id,
