@@ -663,9 +663,6 @@ export default function MinhaDemandaDetalhe() {
     ⚡ Delegar Tarefa
   </button>
 )}
-
-{/* REDATOR/MASTER — Revisar */}
-{isRedatorMaster && allTasks.some((t: any) => t.status === 'arquivo_anexado') && (
               {/* REDATOR/MASTER — Revisar */}
               {isRedatorMaster && allTasks.some((t: any) => t.status === 'arquivo_anexado') && (
                 <>
