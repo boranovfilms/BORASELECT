@@ -103,8 +103,8 @@ export default function MinhasDemandas() {
     const demandasSnap = await getDocs(query(collection(db, 'demandas'), where('clientId', '==', cliente.id)));
     demandasSnap.docs.forEach(d => {
       const data = d.data();
-      const statusEmAndamento = ['aprovado_equipe', 'em_producao', 'concluido'];
-      if (!statusEmAndamento.includes(data.status)) {
+      const statusOcultos = ['em_producao', 'concluido'];
+      if (!statusOcultos.includes(data.status)) {
         itens.push({
           id: d.id,
           name: data.name,
@@ -194,7 +194,7 @@ export default function MinhasDemandas() {
     const demandasSnap = await getDocs(query(collection(db, 'demandas'), where('clientId', '==', clientId)));
     demandasSnap.docs.forEach(d => {
       const data = d.data();
-      const statusAprovado = ['aprovado_equipe', 'em_producao', 'concluido'];
+      const statusAprovado = ['approuvado_equipe', 'em_producao', 'concluido'];
       if (!statusAprovado.includes(data.status)) {
         itens.push({
           tipo: 'planejamento',
@@ -260,7 +260,7 @@ export default function MinhasDemandas() {
     const map: any = {
       rascunho: 10, aguardando_cliente: 30,
       aguardando_validacao_equipe: 50, aprovado_equipe: 100,
-      em_producao: 70, concluido: 100, devolvido: 20,
+      em_producao: 100, concluido: 100, devolvido: 20,
       pendente: 10, em_andamento: 40,
       arquivo_anexado: 60, fazer_correcao: 50,
       aguardando_delegacao: 15,
