@@ -352,5 +352,39 @@ export const contentPlanService = {
     });
 
     await updateDoc(planRef, { posts: updatedPosts, updatedAt: serverTimestamp() });
-  }
+  },
+
+  async criarDocumentosPostsIndividuais(planId: string, clientId: string, planNome: string, posts: ContentPost[]): Promise<string[]> {
+    const postIds: string[] = [];
+    for (const post of posts) {
+      const postDoc = {
+        planId,
+        clientId,
+        planNome,
+        number: post.number,
+        type: post.type,
+        headline: post.headline,
+        caption: post.caption || '',
+        cta: post.cta || '',
+        hashtags: post.hashtags || '',
+        slides: post.slides || [],
+        publishDate: post.publishDate || '',
+        status: 'aguardando_delegacao',
+        tasks: [],
+        historico: [{
+          acao: 'Post criado a partir do planejamento',
+          quem: 'Sistema',
+          email: 'sistema',
+          role: 'sistema',
+          obs: `Origem: ${planNome}`,
+          data: new Date().toISOString()
+        }],
+        criadoEm: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      };
+      const ref = await addDoc(collection(db, 'posts'), postDoc);
+      postIds.push(ref.id);
+    }
+    return postIds;
+  },
 };
