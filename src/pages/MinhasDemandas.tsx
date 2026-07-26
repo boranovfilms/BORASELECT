@@ -68,81 +68,115 @@ export default function MinhasDemandas() {
     const snap = await getDocs(query(collection(db, 'clientes'), where('role', '==', 'cliente')));
     const clientesData = await Promise.all(snap.docs.map(async d => {
       const clientId = d.id;
+
+      // Busca planejamentos pendentes (coleção demandas)
       const demandasSnap = await getDocs(query(collection(db, 'demandas'), where('clientId', '==', clientId)));
-      const demandas = demandasSnap.docs.map(dd => dd.data());
-      const pendentes = demandas.filter(dem =>
-        ['rascunho', 'aguardando_cliente', 'devolvido', 'aguardando_validacao_equipe'].includes(dem.status)
+      const demandasPendentes = demandasSnap.docs.filter(dd =>
+        ['rascunho', 'aguardando_cliente', 'devolvido', 'aguardando_validacao_equipe', 'aprovado_equipe'].includes(dd.data().status)
       ).length;
-      return { id: clientId, ...d.data(), totalDemandas: demandas.length, pendentes };
+
+      // Busca posts pendentes (coleção posts)
+      const postsSnap = await getDocs(query(collection(db, 'posts'), where('clientId', '==', clientId)));
+      const postsPendentes = postsSnap.docs.filter(pd => {
+        const tasks = pd.data().tasks || [];
+        return tasks.some((t: any) => ['pendente', 'em_andamento', 'arquivo_anexado'].includes(t.status));
+      }).length;
+
+      const total = demandasSnap.docs.length + postsSnap.docs.length;
+      const pendentes = demandasPendentes + postsPendentes;
+
+      return {
+        id: clientId,
+        ...d.data(),
+        totalDemandas: total,
+        pendentes
+      };
     }));
     setClientes(clientesData);
   };
 
   const loadDemandasDoCliente = async (cliente: any) => {
     setClienteSelecionado(cliente);
-    const snap = await getDocs(query(collection(db, 'demandas'), where('clientId', '==', cliente.id)));
-    const demandas = snap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
-
     const itens: any[] = [];
-    demandas.forEach(demanda => {
-      const statusComPosts = ['aprovado_equipe', 'em_producao', 'concluido'];
-      if (statusComPosts.includes(demanda.status) && demanda.posts?.length > 0) {
-        demanda.posts.forEach((post: any) => {
-          const tasks = post.tasks || [];
-          const taskStatus = tasks.length > 0 ? tasks[0].status : post.status;
-          itens.push({
-            id: `${demanda.id}_${post.id}`,
-            planId: demanda.id,
-            postId: post.id,
-            name: `#${String(post.number).padStart(2, '0')} ${post.headline}`,
-            type: post.type,
-            status: taskStatus,
-            updatedAt: demanda.updatedAt,
-            isPost: true,
-            demandaNome: demanda.name,
-          });
-        });
-      } else {
+
+    // Busca planejamentos da coleção demandas
+    const demandasSnap = await getDocs(query(collection(db, 'demandas'), where('clientId', '==', cliente.id)));
+    demandasSnap.docs.forEach(d => {
+      const data = d.data();
+      const statusEmAndamento = ['aprovado_equipe', 'em_producao', 'concluido'];
+      if (!statusEmAndamento.includes(data.status)) {
         itens.push({
-          ...demanda,
+          id: d.id,
+          name: data.name,
+          type: 'Planejamento',
+          status: data.status,
+          updatedAt: data.updatedAt,
           isPost: false,
-          type: demanda.type || 'Planejamento',
+          isPlanejamento: true,
         });
       }
+    });
+
+    // Busca posts da coleção posts
+    const postsSnap = await getDocs(query(collection(db, 'posts'), where('clientId', '==', cliente.id)));
+    postsSnap.docs.forEach(d => {
+      const data = d.data();
+      const tasks = data.tasks || [];
+      const taskStatus = tasks.length > 0 ? tasks[0].status : data.status;
+      itens.push({
+        id: d.id,
+        planId: data.planId,
+        postId: d.id,
+        name: `#${String(data.number).padStart(2, '0')} ${data.headline}`,
+        type: data.type,
+        status: taskStatus || data.status,
+        updatedAt: data.updatedAt,
+        isPost: true,
+        isPlanejamento: false,
+        demandaNome: data.planNome,
+      });
+    });
+
+    // Ordena por data
+    itens.sort((a, b) => {
+      const dateA = a.updatedAt?.toDate ? a.updatedAt.toDate() : new Date(a.updatedAt || 0);
+      const dateB = b.updatedAt?.toDate ? b.updatedAt.toDate() : new Date(b.updatedAt || 0);
+      return dateB.getTime() - dateA.getTime();
     });
 
     setDemandasCliente(itens);
   };
 
   const loadDemandasEditor = async (email: string) => {
-    const snap = await getDocs(collection(db, 'demandas'));
+    // Busca posts delegados para o editor na coleção posts
+    const snap = await getDocs(collection(db, 'posts'));
     const itens: any[] = [];
+
     snap.docs.forEach(d => {
-      const demanda = { id: d.id, ...d.data() } as any;
-      const posts = demanda.posts || [];
-      posts.forEach((post: any) => {
-        const tasks = post.tasks || [];
-        tasks.forEach((task: any) => {
-          if (task.responsibleEmail?.toLowerCase() === email) {
-            itens.push({
-              postId: post.id,
-              demandaId: demanda.id,
-              demandaNome: demanda.name,
-              clienteId: demanda.clientId,
-              numero: post.number,
-              headline: post.headline,
-              tipo: post.type,
-              taskTipo: task.dept,
-              taskLabel: task.deptLabel,
-              taskStatus: task.status,
-              publishDate: post.publishDate,
-              status: task.status,
-            });
-          }
-        });
+      const data = d.data();
+      const tasks = data.tasks || [];
+      tasks.forEach((task: any) => {
+        if (task.responsibleEmail?.toLowerCase() === email) {
+          itens.push({
+            postId: d.id,
+            demandaId: data.planId,
+            demandaNome: data.planNome,
+            clienteId: data.clientId,
+            numero: data.number,
+            headline: data.headline,
+            tipo: data.type,
+            taskTipo: task.dept,
+            taskLabel: task.deptLabel,
+            taskStatus: task.status,
+            publishDate: data.publishDate,
+            status: task.status,
+            taskId: task.id,
+          });
+        }
       });
     });
 
+    // Busca nomes dos clientes
     const clienteIds = [...new Set(itens.map(i => i.clienteId))];
     const clienteNomes: Record<string, string> = {};
     await Promise.all(clienteIds.map(async id => {
@@ -154,37 +188,42 @@ export default function MinhasDemandas() {
   };
 
   const loadDemandasCliente = async (clientId: string) => {
-    const snap = await getDocs(query(collection(db, 'demandas'), where('clientId', '==', clientId)));
-    const todasDemandas = snap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
-    const statusAprovado = ['aprovado_equipe', 'em_producao', 'concluido'];
     const itens: any[] = [];
-    todasDemandas.forEach(demanda => {
-      if (statusAprovado.includes(demanda.status)) {
-        const posts = demanda.posts || [];
-        posts.forEach((post: any) => {
-          itens.push({
-            tipo: 'post',
-            postId: post.id,
-            demandaId: demanda.id,
-            demandaNome: demanda.name,
-            numero: post.number,
-            headline: post.headline,
-            postTipo: post.type,
-            publishDate: post.publishDate,
-            status: post.status,
-          });
-        });
-      } else {
+
+    // Busca planejamentos pendentes (ainda não processados)
+    const demandasSnap = await getDocs(query(collection(db, 'demandas'), where('clientId', '==', clientId)));
+    demandasSnap.docs.forEach(d => {
+      const data = d.data();
+      const statusAprovado = ['aprovado_equipe', 'em_producao', 'concluido'];
+      if (!statusAprovado.includes(data.status)) {
         itens.push({
           tipo: 'planejamento',
-          demandaId: demanda.id,
-          demandaNome: demanda.name,
-          postTipo: demanda.type || 'Planejamento',
-          status: demanda.status,
-          publishDate: demanda.updatedAt,
+          demandaId: d.id,
+          demandaNome: data.name,
+          postTipo: 'Planejamento',
+          status: data.status,
+          publishDate: data.updatedAt,
         });
       }
     });
+
+    // Busca posts da coleção posts
+    const postsSnap = await getDocs(query(collection(db, 'posts'), where('clientId', '==', clientId)));
+    postsSnap.docs.forEach(d => {
+      const data = d.data();
+      itens.push({
+        tipo: 'post',
+        postId: d.id,
+        demandaId: data.planId,
+        demandaNome: data.planNome,
+        numero: data.number,
+        headline: data.headline,
+        postTipo: data.type,
+        publishDate: data.publishDate,
+        status: data.status,
+      });
+    });
+
     setDemandas(itens);
   };
 
@@ -204,6 +243,7 @@ export default function MinhasDemandas() {
       arquivo_anexado: { label: 'Arquivo Enviado', class: 'bg-purple-500/10 text-purple-400 border-purple-500/20' },
       aguardando_cliente: { label: 'Aguard. Aprovação', class: 'bg-amber-500/10 text-amber-400 border-amber-500/20' },
       aguardando_validacao_equipe: { label: 'Aguard. Validação', class: 'bg-blue-500/10 text-blue-400 border-blue-500/20' },
+      aguardando_delegacao: { label: 'Aguard. Delegação', class: 'bg-amber-500/10 text-amber-400 border-amber-500/20' },
       rascunho: { label: 'Rascunho', class: 'bg-zinc-800 text-zinc-400 border-zinc-700' },
       devolvido: { label: 'Devolvido', class: 'bg-red-500/10 text-red-400 border-red-500/20' },
     };
@@ -223,6 +263,7 @@ export default function MinhasDemandas() {
       em_producao: 70, concluido: 100, devolvido: 20,
       pendente: 10, em_andamento: 40,
       arquivo_anexado: 60, fazer_correcao: 50,
+      aguardando_delegacao: 15,
     };
     return map[status] || 0;
   };
@@ -310,7 +351,7 @@ export default function MinhasDemandas() {
         />
       )}
 
-      {/* MASTER / REDATOR — Posts/Demandas do cliente selecionado */}
+      {/* MASTER / REDATOR — Demandas do cliente selecionado */}
       {isMasterOrRedator && clienteSelecionado && (
         <DataTable
           data={demandasCliente}
@@ -434,7 +475,13 @@ export default function MinhasDemandas() {
       {isClienteOrEquipe && (
         <DataTable
           data={demandas}
-          onRowClick={(item) => navigate(`/planejamento/${item.demandaId}`)}
+          onRowClick={(item) => {
+            if (item.tipo === 'post') {
+              navigate(`/minha-demanda/${item.demandaId}/${item.postId}`);
+            } else {
+              navigate(`/planejamento/${item.demandaId}`);
+            }
+          }}
           emptyMessage="Nenhum conteúdo disponível."
           columns={[
             {
