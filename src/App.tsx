@@ -133,6 +133,7 @@ export default function App() {
         
         <Route path="/planejamento/:id" element={user ? wrapLayout(<ContentPlanDetails />) : <Navigate to="/login" />} />
         <Route path="/planejamento/:id/tarefas" element={user ? wrapLayout(<PlanejamentoTarefas />) : <Navigate to="/login" />} />
+        <Route path="/processar-planejamento/:planId" element={user ? wrapLayout(<ProcessarPlanejamento />) : <Navigate to="/login" />} />
         <Route path="/packages" element={user && isAdmin ? wrapLayout(<Packages />) : <Navigate to="/" />} />
         <Route path="/credits" element={user && isAdmin ? wrapLayout(<Credits />) : <Navigate to="/" />} />
         <Route path="/modelos" element={user && isAdmin ? wrapLayout(<ModelosFluxo />) : <Navigate to="/" />} />
@@ -147,7 +148,7 @@ export default function App() {
         <Route path="/teleprompter" element={user ? wrapLayout(<Teleprompter />) : <Navigate to="/login" />} />
         <Route path="/diagnostico" element={user && isAdmin ? wrapLayout(<DebugTable />) : <Navigate to="/" />} />
         <Route path="*" element={<Navigate to="/" />} />
-        <Route path="/processar-planejamento/:planId" element={user ? wrapLayout(<ProcessarPlanejamento />) : <Navigate to="/login" />} />
+        
       </Routes>
     </BrowserRouter>
   );
