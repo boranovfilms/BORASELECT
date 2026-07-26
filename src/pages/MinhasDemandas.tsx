@@ -273,7 +273,13 @@ export default function MinhasDemandas() {
       {isMasterOrRedator && clienteSelecionado && (
         <DataTable
           data={demandasCliente}
-          onRowClick={(d) => navigate(`/planejamento/${d.id}`)}
+          onRowClick={(d) => {
+  if (d.status === 'aprovado_equipe' || d.status === 'em_producao') {
+    navigate(`/demanda-posts/${d.id}`);
+  } else {
+    navigate(`/planejamento/${d.id}`);
+  }
+}}
           emptyMessage="Nenhuma demanda encontrada para este cliente."
           columns={[
             {
