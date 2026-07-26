@@ -81,8 +81,37 @@ export default function MinhasDemandas() {
   const loadDemandasDoCliente = async (cliente: any) => {
     setClienteSelecionado(cliente);
     const snap = await getDocs(query(collection(db, 'demandas'), where('clientId', '==', cliente.id)));
-    const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    setDemandasCliente(data);
+    const demandas = snap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
+
+    const itens: any[] = [];
+    demandas.forEach(demanda => {
+      const statusComPosts = ['aprovado_equipe', 'em_producao', 'concluido'];
+      if (statusComPosts.includes(demanda.status) && demanda.posts?.length > 0) {
+        demanda.posts.forEach((post: any) => {
+          const tasks = post.tasks || [];
+          const taskStatus = tasks.length > 0 ? tasks[0].status : post.status;
+          itens.push({
+            id: `${demanda.id}_${post.id}`,
+            planId: demanda.id,
+            postId: post.id,
+            name: `#${String(post.number).padStart(2, '0')} ${post.headline}`,
+            type: post.type,
+            status: taskStatus,
+            updatedAt: demanda.updatedAt,
+            isPost: true,
+            demandaNome: demanda.name,
+          });
+        });
+      } else {
+        itens.push({
+          ...demanda,
+          isPost: false,
+          type: demanda.type || 'Planejamento',
+        });
+      }
+    });
+
+    setDemandasCliente(itens);
   };
 
   const loadDemandasEditor = async (email: string) => {
@@ -168,22 +197,34 @@ export default function MinhasDemandas() {
       aprovado: { label: 'Aprovado', class: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' },
       aprovado_equipe: { label: 'Aprovado ✓', class: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' },
       reprovado: { label: 'Reprovado', class: 'bg-red-500/10 text-red-400 border-red-500/20' },
-      em_revisao: { 
-        label: isCliente ? 'Em Produção' : 'Em Revisão', 
-        class: 'bg-purple-500/10 text-purple-400 border-purple-500/20' 
+      em_revisao: {
+        label: isCliente ? 'Em Produção' : 'Em Revisão',
+        class: 'bg-purple-500/10 text-purple-400 border-purple-500/20'
       },
+      arquivo_anexado: { label: 'Arquivo Enviado', class: 'bg-purple-500/10 text-purple-400 border-purple-500/20' },
       aguardando_cliente: { label: 'Aguard. Aprovação', class: 'bg-amber-500/10 text-amber-400 border-amber-500/20' },
       aguardando_validacao_equipe: { label: 'Aguard. Validação', class: 'bg-blue-500/10 text-blue-400 border-blue-500/20' },
       rascunho: { label: 'Rascunho', class: 'bg-zinc-800 text-zinc-400 border-zinc-700' },
       devolvido: { label: 'Devolvido', class: 'bg-red-500/10 text-red-400 border-red-500/20' },
     };
     const config = configs[status] || configs.rascunho;
-    return <span className={cn("px-2 py-1 rounded-full border text-[9px] font-black uppercase tracking-widest", config.class)}>{config.label}</span>;
+    return <span className={cn("px-2 py-1 rounded-full border text-[9px] font-black uppercase tracking-widest whitespace-nowrap", config.class)}>{config.label}</span>;
   };
 
   const getDeptIcon = (dept: string) => {
     const icons: any = { video: '🎬', design: '🎨', redacao: '✍️', midia_social: '📱' };
     return icons[dept] || '•';
+  };
+
+  const calcProgresso = (status: string) => {
+    const map: any = {
+      rascunho: 10, aguardando_cliente: 30,
+      aguardando_validacao_equipe: 50, aprovado_equipe: 100,
+      em_producao: 70, concluido: 100, devolvido: 20,
+      pendente: 10, em_andamento: 40,
+      arquivo_anexado: 60, fazer_correcao: 50,
+    };
+    return map[status] || 0;
   };
 
   if (loading) return (
@@ -269,34 +310,40 @@ export default function MinhasDemandas() {
         />
       )}
 
-      {/* MASTER / REDATOR — Demandas do cliente selecionado */}
+      {/* MASTER / REDATOR — Posts/Demandas do cliente selecionado */}
       {isMasterOrRedator && clienteSelecionado && (
         <DataTable
           data={demandasCliente}
           onRowClick={(d) => {
-  if (d.status === 'aprovado_equipe' || d.status === 'em_producao') {
-    navigate(`/demanda-posts/${d.id}`);
-  } else {
-    navigate(`/planejamento/${d.id}`);
-  }
-}}
+            if (d.isPost) {
+              navigate(`/minha-demanda/${d.planId}/${d.postId}`);
+            } else {
+              navigate(`/planejamento/${d.id}`);
+            }
+          }}
           emptyMessage="Nenhuma demanda encontrada para este cliente."
           columns={[
             {
               header: 'Demanda',
+              className: 'w-96',
               accessor: (d) => (
                 <div className="flex items-center gap-3">
-                  <div className="p-2 bg-zinc-900 border border-zinc-800 rounded-xl">
+                  <div className="p-2 bg-zinc-900 border border-zinc-800 rounded-xl shrink-0">
                     <FileText className="w-4 h-4 text-[#ff5351]" />
                   </div>
-                  <span className="text-white font-black uppercase text-sm">{d.name}</span>
+                  <div>
+                    <p className="text-white font-black uppercase text-sm line-clamp-2 leading-tight">{d.name}</p>
+                    {d.isPost && (
+                      <p className="text-zinc-500 text-[10px] uppercase mt-0.5">📋 {d.demandaNome}</p>
+                    )}
+                  </div>
                 </div>
               )
             },
             {
               header: 'Tipo',
               accessor: (d) => (
-                <span className="px-2 py-0.5 rounded bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[9px] font-black uppercase tracking-widest">
+                <span className="px-2 py-0.5 rounded bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[9px] font-black uppercase tracking-widest whitespace-nowrap">
                   {d.type || 'Planejamento'}
                 </span>
               ),
@@ -306,14 +353,6 @@ export default function MinhasDemandas() {
             {
               header: 'Progresso',
               accessor: (d) => {
-                const calcProgresso = (status: string) => {
-                  const map: any = {
-                    rascunho: 10, aguardando_cliente: 30,
-                    aguardando_validacao_equipe: 50, aprovado_equipe: 100,
-                    em_producao: 70, concluido: 100, devolvido: 20,
-                  };
-                  return map[status] || 0;
-                };
                 const pct = calcProgresso(d.status);
                 return (
                   <div className="flex items-center gap-2">
@@ -349,12 +388,12 @@ export default function MinhasDemandas() {
           columns={[
             {
               header: 'Item',
-              className: 'w-100',
+              className: 'w-96',
               accessor: (item) => (
                 <div>
                   <p className="text-white font-black uppercase text-sm line-clamp-2 leading-tight">
-  #{String(item.numero).padStart(2, '0')} {item.headline}
-</p>
+                    #{String(item.numero).padStart(2, '0')} {item.headline}
+                  </p>
                   <p className="text-zinc-500 text-[10px] uppercase mt-1">📋 {item.demandaNome}</p>
                 </div>
               )
@@ -371,15 +410,15 @@ export default function MinhasDemandas() {
               header: 'Tipo',
               accessor: (item) => (
                 <span className="px-2 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-zinc-300 text-[9px] font-black uppercase tracking-widest whitespace-nowrap">
-  {getDeptIcon(item.taskTipo)} {item.taskLabel}
-</span>
+                  {getDeptIcon(item.taskTipo)} {item.taskLabel}
+                </span>
               ),
               align: 'center'
             },
-            { 
-              header: 'Status', 
-              accessor: (item) => getStatusBadge(item.taskStatus), 
-              align: 'center' 
+            {
+              header: 'Status',
+              accessor: (item) => getStatusBadge(item.taskStatus),
+              align: 'center'
             },
             {
               header: 'Data',
@@ -391,7 +430,7 @@ export default function MinhasDemandas() {
         />
       )}
 
-      {/* CLIENTE / EQUIPE — Planejamentos e Posts */}
+      {/* CLIENTE / EQUIPE */}
       {isClienteOrEquipe && (
         <DataTable
           data={demandas}
@@ -400,7 +439,7 @@ export default function MinhasDemandas() {
           columns={[
             {
               header: 'Item',
-              className: 'w-100',
+              className: 'w-96',
               accessor: (item) => (
                 <div className="flex items-center gap-3">
                   <div className="p-2 bg-zinc-900 border border-zinc-800 rounded-xl shrink-0">
@@ -423,7 +462,7 @@ export default function MinhasDemandas() {
             {
               header: 'Tipo',
               accessor: (item) => (
-                <span className="px-2 py-0.5 rounded bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[9px] font-black uppercase tracking-widest">
+                <span className="px-2 py-0.5 rounded bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[9px] font-black uppercase tracking-widest whitespace-nowrap">
                   {item.postTipo || 'Planejamento'}
                 </span>
               ),
