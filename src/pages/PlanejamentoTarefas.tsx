@@ -2,9 +2,9 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Calendar, Loader2, Zap, Eye, X, Save, ChevronDown } from 'lucide-react';
 import { toast } from 'react-hot-toast';
-import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, getDocs, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
-import { contentPlanService, ContentPlan, ContentPost, MicroTask, TaskDept } from '../services/contentPlanService';
+import { TaskDept } from '../services/contentPlanService';
 import { notificacaoService } from '../services/notificacaoService';
 import { cn } from '../lib/utils';
 
@@ -19,14 +19,15 @@ export default function PlanejamentoTarefas() {
   const { id: planId } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
-  const [plan, setPlan] = useState<ContentPlan | null>(null);
+  const [posts, setPosts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [clientName, setClientName] = useState('');
+  const [planNome, setPlanNome] = useState('');
   const [teamMembers, setTeamMembers] = useState<any[]>([]);
 
   const [showDelegModal, setShowDelegModal] = useState(false);
-  const [selectedPost, setSelectedPost] = useState<ContentPost | null>(null);
+  const [selectedPost, setSelectedPost] = useState<any | null>(null);
   const [selectedDepts, setSelectedDepts] = useState<string[]>([]);
   const [deptResponsibles, setDeptResponsibles] = useState<Record<string, string>>({});
   const [deptTags, setDeptTags] = useState<Record<string, string[]>>({});
@@ -40,15 +41,24 @@ export default function PlanejamentoTarefas() {
     if (!planId) return;
     setLoading(true);
     try {
+      // Busca o planejamento para pegar clientId e nome
       const planDoc = await getDoc(doc(db, 'demandas', planId));
       if (!planDoc.exists()) { toast.error('Planejamento não encontrado'); navigate(-1); return; }
-      const planData = { id: planDoc.id, ...planDoc.data() } as ContentPlan;
-      setPlan(planData);
+      const planData = planDoc.data();
+      setPlanNome(planData.name || '');
 
       const clientDoc = await getDoc(doc(db, 'clientes', planData.clientId));
       if (clientDoc.exists()) setClientName(clientDoc.data().name || '');
 
-      const teamSnap = await getDocs(query(collection(db, 'boraselect')));
+      // Busca posts da coleção posts/ vinculados a esse planejamento
+      const postsSnap = await getDocs(query(collection(db, 'posts'), where('planId', '==', planId)));
+      const postsData = postsSnap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .sort((a: any, b: any) => a.number - b.number);
+      setPosts(postsData);
+
+      // Busca membros da equipe
+      const teamSnap = await getDocs(collection(db, 'boraselect'));
       setTeamMembers(teamSnap.docs.map(d => ({ id: d.id, ...d.data() })));
 
     } catch (error) {
@@ -58,12 +68,12 @@ export default function PlanejamentoTarefas() {
     }
   };
 
-  const calcularFasePost = (post: ContentPost): { fase: string; progresso: number } => {
+  const calcularFasePost = (post: any): { fase: string; progresso: number } => {
     const tasks = post.tasks || [];
     if (tasks.length === 0) return { fase: 'Aguardando Delegação', progresso: 17 };
-    const allDone = tasks.every(t => t.status === 'concluido');
+    const allDone = tasks.every((t: any) => t.status === 'concluido');
     if (allDone) return { fase: 'Concluído', progresso: 100 };
-    const anyInProgress = tasks.some(t => ['em_andamento', 'arquivo_anexado'].includes(t.status));
+    const anyInProgress = tasks.some((t: any) => ['em_andamento', 'arquivo_anexado'].includes(t.status));
     if (anyInProgress) return { fase: 'Em Produção', progresso: 60 };
     return { fase: 'Delegado', progresso: 30 };
   };
@@ -81,14 +91,14 @@ export default function PlanejamentoTarefas() {
     }
     setSaving(true);
     try {
-      const tasks: MicroTask[] = selectedDepts.map(deptId => {
+      const tasks = selectedDepts.map(deptId => {
         const dept = DEPARTMENTS.find(d => d.id === deptId)!;
         return {
           id: `task_${deptId}_${Date.now()}`,
           dept: deptId,
           deptLabel: dept.label,
           responsibleEmail: deptResponsibles[deptId] || '',
-          responsibleName: teamMembers.find(m => m.email === deptResponsibles[deptId])?.name || '',
+          responsibleName: teamMembers.find((m: any) => m.email === deptResponsibles[deptId])?.name || '',
           status: 'pendente',
           tags: deptTags[deptId] || [],
           description: deptDescriptions[deptId] || '',
@@ -97,8 +107,14 @@ export default function PlanejamentoTarefas() {
         };
       });
 
-      await contentPlanService.delegatePost(plan!.id!, selectedPost.id, tasks);
+      // Atualiza o post na coleção posts/
+      await updateDoc(doc(db, 'posts', selectedPost.id), {
+        tasks,
+        status: 'delegado',
+        updatedAt: serverTimestamp()
+      });
 
+      // Notifica responsáveis
       const emailsNotificados = new Set<string>();
       for (const task of tasks) {
         if (task.responsibleEmail && !emailsNotificados.has(task.responsibleEmail)) {
@@ -108,7 +124,8 @@ export default function PlanejamentoTarefas() {
             tipo: 'tarefa_delegada',
             titulo: 'Nova Tarefa Delegada',
             descricao: `Post #${String(selectedPost.number).padStart(2, '0')} — ${selectedPost.headline?.slice(0, 50)}`,
-            planId: plan!.id!,
+            planId: planId!,
+            postId: selectedPost.id,
             visto: false,
             criadoEm: new Date().toISOString()
           });
@@ -118,9 +135,9 @@ export default function PlanejamentoTarefas() {
       toast.success('Tarefas delegadas com sucesso!');
       setShowDelegModal(false);
       setSelectedDepts([]);
-      setDeptResponsibles({} as any);
-      setDeptTags({} as any);
-      setDeptDescriptions({} as any);
+      setDeptResponsibles({});
+      setDeptTags({});
+      setDeptDescriptions({});
       setDepArteDependeVideo(false);
       setDepVideoDependeArte(false);
       loadData();
@@ -137,9 +154,6 @@ export default function PlanejamentoTarefas() {
     </div>
   );
 
-  if (!plan) return null;
-
-  const posts = plan.posts || [];
   const delegatedCount = posts.filter(p => (p.tasks || []).length > 0).length;
   const totalProgress = posts.length > 0
     ? Math.round(posts.reduce((sum, p) => sum + calcularFasePost(p).progresso, 0) / posts.length)
@@ -159,9 +173,8 @@ export default function PlanejamentoTarefas() {
             {clientName} • Planejamento de Conteúdo
           </p>
           <h1 className="text-5xl font-black text-white uppercase italic tracking-tight mt-1">
-            {plan.name}
+            {planNome}
           </h1>
-          <p className="text-zinc-500 text-sm mt-1">{plan.monthReference}</p>
         </div>
 
         <div className="bg-[#1f1f1f] border border-zinc-800 rounded-3xl p-6">
@@ -176,18 +189,15 @@ export default function PlanejamentoTarefas() {
             />
           </div>
           <div className="flex gap-2 mt-4 flex-wrap">
-            {[0, 17, 30, 60, 100].map((val, i) => (
-              <div key={i} className="flex items-center gap-1.5">
-                <div className={cn(
-                  "w-2 h-2 rounded-full",
-                  val === 0 ? "bg-zinc-700" :
-                    val === 17 ? "bg-amber-500" :
-                      val === 30 ? "bg-blue-500" :
-                        val === 60 ? "bg-purple-500" : "bg-emerald-500"
-                )} />
-                <span className="text-[9px] text-zinc-500 font-bold uppercase">
-                  {val === 0 ? 'Não delegado' : val === 17 ? 'Aguardando' : val === 30 ? 'Delegado' : val === 60 ? 'Em Produção' : 'Concluído'}
-                </span>
+            {[
+              { val: 17, label: 'Aguardando', color: 'bg-amber-500' },
+              { val: 30, label: 'Delegado', color: 'bg-blue-500' },
+              { val: 60, label: 'Em Produção', color: 'bg-purple-500' },
+              { val: 100, label: 'Concluído', color: 'bg-emerald-500' },
+            ].map((item) => (
+              <div key={item.val} className="flex items-center gap-1.5">
+                <div className={cn("w-2 h-2 rounded-full", item.color)} />
+                <span className="text-[9px] text-zinc-500 font-bold uppercase">{item.label}</span>
               </div>
             ))}
           </div>
@@ -197,7 +207,7 @@ export default function PlanejamentoTarefas() {
       <div className="bg-[#1f1f1f] border border-zinc-800 rounded-3xl overflow-hidden">
         <div className="px-6 py-4 border-b border-zinc-800 flex items-center justify-between">
           <h2 className="text-xs font-black uppercase tracking-widest text-white">
-            {posts.length} Posts Aguardando Delegação
+            {posts.length} Posts
           </h2>
           <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">
             {delegatedCount}/{posts.length} delegados
@@ -209,8 +219,8 @@ export default function PlanejamentoTarefas() {
             <tr className="border-b border-zinc-800 bg-zinc-900/50">
               <th className="px-6 py-3 text-[10px] font-black uppercase tracking-widest text-zinc-500">Post</th>
               <th className="px-6 py-3 text-[10px] font-black uppercase tracking-widest text-zinc-500">Tipo</th>
-              <th className="px-6 py-3 text-[10px] font-black uppercase tracking-widest text-zinc-500 text-center">Data Postagem</th>
-              <th className="px-6 py-3 text-[10px] font-black uppercase tracking-widest text-zinc-500 text-center">Fase Atual</th>
+              <th className="px-6 py-3 text-[10px] font-black uppercase tracking-widest text-zinc-500 text-center">Data</th>
+              <th className="px-6 py-3 text-[10px] font-black uppercase tracking-widest text-zinc-500 text-center">Fase</th>
               <th className="px-6 py-3 text-[10px] font-black uppercase tracking-widest text-zinc-500 text-center">Progresso</th>
               <th className="px-6 py-3 text-[10px] font-black uppercase tracking-widest text-zinc-500 text-right">Ação</th>
             </tr>
@@ -224,7 +234,7 @@ export default function PlanejamentoTarefas() {
                   <td className="px-6 py-4 max-w-xs">
                     <p className="text-white font-bold text-sm line-clamp-2 uppercase">{post.headline}</p>
                     {post.caption && (
-                      <p className="text-zinc-500 text-xs line-clamp-2 mt-0.5">{post.caption}</p>
+                      <p className="text-zinc-500 text-xs line-clamp-1 mt-0.5">{post.caption}</p>
                     )}
                   </td>
                   <td className="px-6 py-4">
@@ -240,12 +250,7 @@ export default function PlanejamentoTarefas() {
                     </span>
                   </td>
                   <td className="px-6 py-4 text-center">
-                    <div className="flex flex-col items-center gap-0.5">
-                      <span className="text-white text-xs font-bold">{post.publishDate}</span>
-                      <span className="text-zinc-600 text-[9px]">
-                        {post.publishDate ? new Date(post.publishDate.split('/').reverse().join('-')).toLocaleDateString('pt-BR', { weekday: 'short' }) : ''}
-                      </span>
-                    </div>
+                    <span className="text-white text-xs font-bold">{post.publishDate}</span>
                   </td>
                   <td className="px-6 py-4 text-center">
                     <span className={cn(
@@ -361,11 +366,9 @@ export default function PlanejamentoTarefas() {
                           className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3 text-white text-xs appearance-none focus:border-[#ff5351] outline-none"
                         >
                           <option value="">Selecionar...</option>
-                          {teamMembers
-                            .filter(m => !m.role || m.role === deptId || ['editor', 'designer', 'redator', 'midia_social'].includes(m.role))
-                            .map(m => (
-                              <option key={m.id} value={m.email}>{m.name} — {m.role}</option>
-                            ))}
+                          {teamMembers.map((m: any) => (
+                            <option key={m.id} value={m.email}>{m.name} — {m.role}</option>
+                          ))}
                         </select>
                         <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 pointer-events-none" />
                       </div>
