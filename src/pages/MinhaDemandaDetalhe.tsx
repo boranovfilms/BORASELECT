@@ -295,17 +295,12 @@ export default function MinhaDemandaDetalhe() {
     if (!planId || !plan || !post) return;
     setSaving(true);
     try {
-      console.log('Aprovando task:', taskId);
-console.log('Post ID:', post.id);
-console.log('Plan ID:', planId);
-console.log('Tasks do post:', post.tasks);
-      console.log('Plan posts:', plan.posts);
-console.log('Post completo:', JSON.stringify(post));
+      const postAtualizado = plan.posts.find((p: any) => p.id === post.id);
       const updatedPosts = plan.posts.map((p: any) => {
         if (p.id !== post.id) return p;
         return {
           ...p,
-          tasks: p.tasks.map((t: any) =>
+          tasks: (p.tasks || []).map((t: any) =>
             t.id === taskId ? { ...t, status: 'concluido' } : t
           )
         };
@@ -395,18 +390,12 @@ console.log('Post completo:', JSON.stringify(post));
       pendente: { label: '⏳ Pendente', class: 'bg-amber-500/10 text-amber-400 border-amber-500/20' },
       em_andamento: { label: '⚡ Em Andamento', class: 'bg-blue-500/10 text-blue-400 border-blue-500/20' },
       arquivo_anexado: { label: '📎 Arquivo Enviado', class: 'bg-purple-500/10 text-purple-400 border-purple-500/20' },
-      concluido: { label: '✅ Aprovado', class: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' },
+      concluido: { label: '✅ Concluído', class: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' },
       fazer_correcao: { label: '🔄 Correção', class: 'bg-red-500/10 text-red-400 border-red-500/20' },
     };
     const config = configs[status] || configs.pendente;
     return <span className={cn('px-3 py-1 rounded-full border text-[9px] font-black uppercase tracking-widest', config.class)}>{config.label}</span>;
   };
-
-  const isEditorDesigner = ['editor', 'designer', 'midia_social'].includes(userRole);
-  const isRedatorMaster = ['master', 'admin', 'redator'].includes(userRole);
-  const isClienteEquipe = ['cliente', 'equipe'].includes(userRole);
-  const allTasks = post?.tasks || [];
-  const historico = post?.historico || [];
 
   if (loading) return (
     <div className="min-h-[60vh] flex items-center justify-center">
@@ -416,6 +405,14 @@ console.log('Post completo:', JSON.stringify(post));
 
   if (!post || !plan) return null;
 
+  const isEditorDesigner = ['editor', 'designer'].includes(userRole);
+  const isRedatorMaster = ['redator', 'admin', 'master'].includes(userRole);
+  const isClienteEquipe = ['cliente', 'equipe'].includes(userRole);
+
+  // Filtra as tasks do post para mostrar na lista
+  const allTasks = post.tasks || [];
+  const historicoAcoes = post.historico || [];
+
   return (
     <div className="space-y-6 pb-8 text-left">
       <header className="space-y-3">
@@ -424,13 +421,13 @@ console.log('Post completo:', JSON.stringify(post));
         </button>
         <div>
           <p className="text-[#ff5351] text-xs font-black uppercase tracking-[0.2em] mb-2">
-            {isEditorDesigner ? 'Sua Tarefa' : isRedatorMaster ? 'Revisão de Arquivo' : 'Aprovação de Conteúdo'} • {clientName}
+            DETALHES DA TAREFA • {clientName}
           </p>
-          <h1 className="text-3xl font-black text-white uppercase italic tracking-tight">
+          <h1 className="text-3xl font-black text-white uppercase italic tracking-tight leading-none">
             Post #{String(post.number).padStart(2, '0')} — {post.type}
           </h1>
-          <p className="text-zinc-500 text-sm mt-1">{plan.name}</p>
-          <div className="flex items-center gap-2 mt-3">
+          <p className="text-zinc-500 text-sm mt-1">{plan.name} / {post.headline}</p>
+          <div className="flex items-center gap-2 mt-4">
             {userTask && (
               <span className="px-3 py-1 rounded-full border text-[9px] font-black uppercase tracking-widest bg-[#ff5351]/10 text-[#ff5351] border-[#ff5351]/20">
                 {getDeptIcon(userTask.dept)} {userTask.deptLabel}
@@ -447,7 +444,7 @@ console.log('Post completo:', JSON.stringify(post));
         <div className="space-y-6">
           <div className="bg-[#1f1f1f] border border-zinc-800 rounded-[24px] overflow-hidden">
             <div className="p-5 border-b border-zinc-800 flex items-center justify-between">
-              <h2 className="text-xs font-black uppercase tracking-widest text-white">Conteúdo do Post</h2>
+              <h2 className="text-xs font-black uppercase tracking-widest text-white italic">Conteúdo do Post</h2>
               <div className="flex items-center gap-3">
                 <span className={cn('px-2 py-1 rounded-lg border text-[8px] font-black uppercase tracking-widest', getTypeStyle(post.type))}>
                   {post.type}
@@ -455,16 +452,16 @@ console.log('Post completo:', JSON.stringify(post));
                 <span className="text-zinc-500 text-[10px] font-black uppercase">{post.publishDate}</span>
               </div>
             </div>
-            <div className="p-6 space-y-5">
+            <div className="p-6 space-y-6">
               <div>
-                <span className="text-[9px] font-black uppercase tracking-[0.3em] text-[#ff5351] block mb-2">Headline</span>
+                <span className="text-[9px] font-black uppercase tracking-[0.3em] text-[#ff5351] block mb-2">Headline / Título</span>
                 <p className="text-white font-black uppercase text-base leading-tight">{post.headline}</p>
               </div>
               {post.caption && (
                 <>
                   <div className="h-px bg-zinc-800" />
                   <div>
-                    <span className="text-[9px] font-black uppercase tracking-[0.3em] text-[#ff5351] block mb-2">Legenda</span>
+                    <span className="text-[9px] font-black uppercase tracking-[0.3em] text-[#ff5351] block mb-2">Legenda Final</span>
                     <p className="text-zinc-300 text-sm leading-relaxed whitespace-pre-wrap">{post.caption}</p>
                   </div>
                 </>
@@ -473,7 +470,7 @@ console.log('Post completo:', JSON.stringify(post));
                 <>
                   <div className="h-px bg-zinc-800" />
                   <div>
-                    <span className="text-[9px] font-black uppercase tracking-[0.3em] text-[#ff5351] block mb-2">CTA</span>
+                    <span className="text-[9px] font-black uppercase tracking-[0.3em] text-[#ff5351] block mb-2">Call to Action (Botão/Link)</span>
                     <div className="bg-[#ff5351]/5 border border-[#ff5351]/15 rounded-xl p-3">
                       <p className="text-[#ff5351] text-sm font-bold">🎯 {post.cta}</p>
                     </div>
@@ -484,7 +481,7 @@ console.log('Post completo:', JSON.stringify(post));
                 <>
                   <div className="h-px bg-zinc-800" />
                   <div>
-                    <span className="text-[9px] font-black uppercase tracking-[0.3em] text-[#ff5351] block mb-2">Hashtags</span>
+                    <span className="text-[9px] font-black uppercase tracking-[0.3em] text-[#ff5351] block mb-2">Hashtags Recomendadas</span>
                     <p className="text-zinc-500 text-xs italic">{post.hashtags}</p>
                   </div>
                 </>
@@ -493,12 +490,15 @@ console.log('Post completo:', JSON.stringify(post));
                 <>
                   <div className="h-px bg-zinc-800" />
                   <div>
-                    <span className="text-[9px] font-black uppercase tracking-[0.3em] text-[#ff5351] block mb-3">Slides</span>
-                    <div className="space-y-2">
+                    <span className="text-[9px] font-black uppercase tracking-[0.3em] text-[#ff5351] block mb-4">Estrutura de Slides ({post.slides.length})</span>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       {post.slides.map((slide: any, i: number) => (
-                        <div key={i} className="bg-zinc-900 border border-zinc-800 rounded-xl p-3">
-                          <p className="text-white text-xs font-black uppercase mb-1">Slide {i + 1} — {slide.title}</p>
-                          {slide.description && <p className="text-zinc-400 text-xs">{slide.description}</p>}
+                        <div key={i} className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
+                          <p className="text-white text-[10px] font-black uppercase mb-1.5 flex items-center gap-2">
+                            <span className="w-5 h-5 bg-zinc-800 rounded flex items-center justify-center text-zinc-500">{i + 1}</span>
+                            {slide.title}
+                          </p>
+                          {slide.description && <p className="text-zinc-500 text-[11px] leading-relaxed">{slide.description}</p>}
                         </div>
                       ))}
                     </div>
@@ -508,26 +508,22 @@ console.log('Post completo:', JSON.stringify(post));
             </div>
           </div>
 
-          {/* Histórico */}
-          {historico.length > 0 && (
+          {/* HISTÓRICO DE AÇÕES */}
+          {historicoAcoes.length > 0 && (
             <div className="bg-[#1f1f1f] border border-zinc-800 rounded-[24px] overflow-hidden">
               <div className="p-5 border-b border-zinc-800">
-                <h2 className="text-xs font-black uppercase tracking-widest text-white">Histórico</h2>
+                <h2 className="text-xs font-black uppercase tracking-widest text-white italic">Histórico da Demanda</h2>
               </div>
-              <div className="p-6 space-y-3">
-                {historico.map((h: any, i: number) => (
-                  <div key={i} className="flex gap-3 p-3 bg-zinc-900 border border-zinc-800 rounded-xl">
-                    <div className="w-8 h-8 rounded-full bg-[#ff5351]/10 border border-[#ff5351]/20 flex items-center justify-center shrink-0">
-                      <User className="w-3.5 h-3.5 text-[#ff5351]" />
+              <div className="p-6 space-y-4">
+                {historicoAcoes.map((h: any, i: number) => (
+                  <div key={i} className="flex gap-4">
+                    <div className="w-8 h-8 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center shrink-0">
+                      <Clock className="w-4 h-4 text-zinc-600" />
                     </div>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-white text-xs font-black uppercase">{h.quem}</span>
-                        <span className="text-zinc-600 text-[9px]">•</span>
-                        <span className="text-zinc-500 text-[9px] flex items-center gap-1">
-                          <Clock className="w-2.5 h-2.5" />
-                          {new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(h.data))}
-                        </span>
+                    <div>
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <span className="text-white text-[10px] font-black uppercase">{h.quem}</span>
+                        <span className="text-zinc-600 text-[9px] font-bold tracking-tighter">{new Date(h.data).toLocaleString('pt-BR')}</span>
                       </div>
                       <p className="text-zinc-400 text-xs font-bold uppercase">{h.acao}</p>
                       {h.obs && <p className="text-zinc-500 text-xs mt-1 italic">"{h.obs}"</p>}
