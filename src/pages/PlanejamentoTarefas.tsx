@@ -2,317 +2,115 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Calendar, Loader2, Zap, Eye, X, Save, ChevronDown } from 'lucide-react';
 import { toast } from 'react-hot-toast';
-import { doc, getDoc, collection, query, where, getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
 import { contentPlanService, ContentPlan, ContentPost, MicroTask, TaskDept } from '../services/contentPlanService';
 import { notificacaoService } from '../services/notificacaoService';
 import { cn } from '../lib/utils';
 
-interface WorkflowStage {
-  id: string;
-  name: string;
-  order: number;
-  type: string;
-  requiresApproval: boolean;
-}
-
-interface WorkflowModel {
-  id: string;
-  name: string;
-  stages: WorkflowStage[];
-}
-
-const DEPTS = [
-  { id: 'video' as TaskDept, icon: '🎬', name: 'Edição de Vídeo', sub: 'Gravação e edição',
-    tags: ['Gravação', 'Edição', 'Color Grade', 'Motion', 'Corte', 'Vinheta'] },
-  { id: 'design' as TaskDept, icon: '🎨', name: 'Design / Arte', sub: 'Arte estática e capa',
-    tags: ['Arte Estática', 'Capa de Vídeo', 'Logo', 'Identidade Visual', 'Carrossel', 'Story'] },
-  { id: 'redacao' as TaskDept, icon: '✍️', name: 'Redação', sub: 'Revisão de texto',
-    tags: ['Revisão', 'Reescrita', 'Legenda', 'Roteiro', 'Hashtags'] },
-  { id: 'midia_social' as TaskDept, icon: '📱', name: 'Mídia Social', sub: 'Programação',
-    tags: ['Programar Post', 'Programar Story', 'Programar Reel', 'Impulsionar'] },
+const DEPARTMENTS: TaskDept[] = [
+  { id: 'video', label: 'Edição de Vídeo', icon: '🎬', description: 'Gravação e edição', tags: ['Gravação', 'Edição', 'Color Grade', 'Motion', 'Corte', 'Vinheta'] },
+  { id: 'design', label: 'Design / Arte', icon: '🎨', description: 'Arte estática e capa', tags: ['Thumbnail', 'Arte', 'Identidade', 'Capa', 'Banner'] },
+  { id: 'redacao', label: 'Redação', icon: '✍️', description: 'Revisão de texto', tags: ['Copywriting', 'Revisão', 'Legenda', 'Roteiro'] },
+  { id: 'midia_social', label: 'Mídia Social', icon: '📱', description: 'Programação', tags: ['Agendamento', 'Publicação', 'Stories', 'Feed'] },
 ];
-
-function calcularFasePost(
-  post: ContentPost,
-  plan: ContentPlan,
-  workflowModel: WorkflowModel | null
-): { faseId: string; label: string; color: string; bg: string; border: string; barColor: string; percent: number } {
-  if (!workflowModel || !workflowModel.stages || workflowModel.stages.length === 0) {
-    const tasks = (post as any).tasks || [];
-    if (tasks.length === 0) {
-      return {
-        faseId: 'aguardando',
-        label: 'Aguardando Delegação',
-        color: 'text-zinc-500',
-        bg: 'bg-zinc-800',
-        border: 'border-zinc-700',
-        barColor: 'bg-zinc-600',
-        percent: 0
-      };
-    }
-    const total = tasks.length;
-    const concluidas = tasks.filter((t: any) => t.status === 'concluido').length;
-    const percent = Math.round((concluidas / total) * 100);
-    return {
-      faseId: 'producao',
-      label: 'Em Produção',
-      color: 'text-amber-400',
-      bg: 'bg-amber-500/10',
-      border: 'border-amber-500/20',
-      barColor: 'bg-amber-500',
-      percent
-    };
-  }
-
-  let etapasCumpridas = 0;
-  const totalEtapas = workflowModel.stages.length;
-
-  if (post.id) etapasCumpridas = 1;
-  if (plan.status && plan.status !== 'rascunho') etapasCumpridas = Math.max(etapasCumpridas, 2);
-  
-  const hasClientApproval = (post as any).approvals?.some((a: any) => a.role === 'cliente' && a.status === 'aprovado');
-  if (hasClientApproval) etapasCumpridas = Math.max(etapasCumpridas, 3);
-
-  const hasTeamValidation = (post as any).approvals?.some((a: any) => a.role === 'equipe' && a.status === 'validado_equipe');
-  if (hasTeamValidation) etapasCumpridas = Math.max(etapasCumpridas, 4);
-
-  const tasks = (post as any).tasks || [];
-  if (tasks.length > 0) etapasCumpridas = Math.max(etapasCumpridas, 5);
-
-  if (tasks.length > 0) {
-    const concluidas = tasks.filter((t: any) => t.status === 'concluido').length;
-    if (concluidas === tasks.length && tasks.length > 0) {
-      etapasCumpridas = totalEtapas;
-    }
-  }
-
-  const percent = totalEtapas > 0 ? Math.round((etapasCumpridas / totalEtapas) * 100) : 0;
-
-  if (percent === 100) {
-    return {
-      faseId: 'concluido',
-      label: 'Concluído',
-      color: 'text-emerald-400',
-      bg: 'bg-emerald-500/10',
-      border: 'border-emerald-500/20',
-      barColor: 'bg-emerald-500',
-      percent: 100
-    };
-  }
-
-  if (tasks.length > 0) {
-    const concluidas = tasks.filter((t: any) => t.status === 'concluido').length;
-    const emAndamento = tasks.find((t: any) => t.status === 'em_andamento');
-    return {
-      faseId: 'producao',
-      label: emAndamento?.deptLabel || 'Em Produção',
-      color: 'text-amber-400',
-      bg: 'bg-amber-500/10',
-      border: 'border-amber-500/20',
-      barColor: 'bg-amber-500',
-      percent
-    };
-  }
-
-  return {
-    faseId: 'aguardando',
-    label: 'Aguardando Delegação',
-    color: 'text-zinc-500',
-    bg: 'bg-zinc-800',
-    border: 'border-zinc-700',
-    barColor: 'bg-zinc-600',
-    percent
-  };
-}
-
-function formatDate(dateStr: string): { data: string; diaSemana: string; isUrgente: boolean } {
-  try {
-    const [dia, mes, ano] = dateStr.split('/').map(Number);
-    const date = new Date(ano, mes - 1, dia);
-    const hoje = new Date();
-    const diffMs = date.getTime() - hoje.getTime();
-    const diffDias = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
-    const diasSemana = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
-    return {
-      data: dateStr,
-      diaSemana: diasSemana[date.getDay()],
-      isUrgente: diffDias <= 2 && diffDias >= 0
-    };
-  } catch {
-    return { data: dateStr, diaSemana: '', isUrgente: false };
-  }
-}
 
 export default function PlanejamentoTarefas() {
   const { id: planId } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
   const [plan, setPlan] = useState<ContentPlan | null>(null);
-  const [workflowModel, setWorkflowModel] = useState<WorkflowModel | null>(null);
-  const [clientName, setClientName] = useState('');
   const [loading, setLoading] = useState(true);
-  const [userRole, setUserRole] = useState('cliente');
-  const [roleLoaded, setRoleLoaded] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [clientName, setClientName] = useState('');
+  const [teamMembers, setTeamMembers] = useState<any[]>([]);
+
   const [showDelegModal, setShowDelegModal] = useState(false);
   const [selectedPost, setSelectedPost] = useState<ContentPost | null>(null);
-  const [selectedDepts, setSelectedDepts] = useState<TaskDept[]>([]);
+  const [selectedDepts, setSelectedDepts] = useState<string[]>([]);
+  const [deptResponsibles, setDeptResponsibles] = useState<Record<string, string>>({});
   const [deptTags, setDeptTags] = useState<Record<string, string[]>>({});
   const [deptDescriptions, setDeptDescriptions] = useState<Record<string, string>>({});
   const [depArteDependeVideo, setDepArteDependeVideo] = useState(false);
   const [depVideoDependeArte, setDepVideoDependeArte] = useState(false);
-  const [saving, setSaving] = useState(false);
 
-  const internalRoles = ['master', 'admin', 'redator', 'editor', 'designer', 'midia_social'];
-  const isInternal = internalRoles.includes(userRole);
-
-  useEffect(() => {
-    loadData();
-    loadUserRole();
-  }, [planId]);
-
-  const loadUserRole = async () => {
-    const currentEmail = auth.currentUser?.email?.toLowerCase();
-    if (!currentEmail) { setRoleLoaded(true); return; }
-    try {
-      if (currentEmail === 'admin@boraselect.com.br') { setUserRole('master'); setRoleLoaded(true); return; }
-      const qBora = query(collection(db, 'boraselect'), where('email', '==', currentEmail));
-      const snapBora = await getDocs(qBora);
-      if (!snapBora.empty) { setUserRole(snapBora.docs[0].data().role || 'redator'); setRoleLoaded(true); return; }
-      const q = query(collection(db, 'clientes'), where('email', '==', currentEmail));
-      const snap = await getDocs(q);
-      if (!snap.empty) { setUserRole(snap.docs[0].data().role || 'cliente'); }
-    } catch (e) { console.warn('Erro ao carregar role:', e); } finally { setRoleLoaded(true); }
-  };
+  useEffect(() => { loadData(); }, [planId]);
 
   const loadData = async () => {
     if (!planId) return;
     setLoading(true);
     try {
-      const planData = await contentPlanService.getPlanById(planId);
-      if (!planData) {
-        toast.error('Planejamento não encontrado');
-        navigate('/projetos');
-        return;
-      }
+      const planDoc = await getDoc(doc(db, 'demandas', planId));
+      if (!planDoc.exists()) { toast.error('Planejamento não encontrado'); navigate(-1); return; }
+      const planData = { id: planDoc.id, ...planDoc.data() } as ContentPlan;
       setPlan(planData);
-      if (planData.clientId) {
-        try {
-          const modelosSnap = await getDocs(collection(db, 'workflowModels'));
-          const modelos = modelosSnap.docs.map(d => ({ id: d.id, ...d.data() } as WorkflowModel));
-          const planningModel = modelos.find(m => m.name === 'PLANEJAMENTO');
-          if (planningModel) setWorkflowModel(planningModel);
-        } catch (error) { console.warn('Erro ao carregar modelo de fluxo:', error); }
-      }
-      const clientSnap = await getDoc(doc(db, 'clientes', planData.clientId));
-      if (clientSnap.exists()) setClientName(clientSnap.data().name || '');
+
+      const clientDoc = await getDoc(doc(db, 'clientes', planData.clientId));
+      if (clientDoc.exists()) setClientName(clientDoc.data().name || '');
+
+      const teamSnap = await getDocs(query(collection(db, 'boraselect')));
+      setTeamMembers(teamSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+
     } catch (error) {
-      console.error(error);
-      toast.error('Erro ao carregar dados');
-    } finally { setLoading(false); }
+      toast.error('Erro ao carregar dados.');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const postsOrdenados = useMemo(() => {
-    if (!plan?.posts) return [];
-    return [...plan.posts]
-      .sort((a, b) => {
-        const [d1, m1, y1] = a.publishDate.split('/').map(Number);
-        const [d2, m2, y2] = b.publishDate.split('/').map(Number);
-        return new Date(y1, m1 - 1, d1).getTime() - new Date(y2, m2 - 1, d2).getTime();
-      })
-      .filter(post => {
-        if (isInternal) {
-          const tasks = (post as any).tasks || [];
-          return tasks.length === 0;
-        }
-        return true;
-      });
-  }, [plan, isInternal]);
-
-  const allPosts = useMemo(() => plan?.posts || [], [plan]);
-
-  const porcentagemGeral = useMemo(() => {
-    if (allPosts.length === 0) return 0;
-    const totalPercent = allPosts.reduce((sum, post) => {
-      const fase = calcularFasePost(post, plan!, workflowModel);
-      return sum + fase.percent;
-    }, 0);
-    return Math.round(totalPercent / allPosts.length);
-  }, [allPosts, plan, workflowModel]);
-
-  const openDelegModal = (post: ContentPost) => {
-    setSelectedPost(post);
-    setSelectedDepts([]);
-    setDeptTags({});
-    setDeptDescriptions({});
-    setDepArteDependeVideo(false);
-    setDepVideoDependeArte(false);
-    setShowDelegModal(true);
+  const calcularFasePost = (post: ContentPost): { fase: string; progresso: number } => {
+    const tasks = post.tasks || [];
+    if (tasks.length === 0) return { fase: 'Aguardando Delegação', progresso: 17 };
+    const allDone = tasks.every(t => t.status === 'concluido');
+    if (allDone) return { fase: 'Concluído', progresso: 100 };
+    const anyInProgress = tasks.some(t => ['em_andamento', 'arquivo_anexado'].includes(t.status));
+    if (anyInProgress) return { fase: 'Em Produção', progresso: 60 };
+    return { fase: 'Delegado', progresso: 30 };
   };
 
-  const toggleDept = (dept: TaskDept) => {
-    setSelectedDepts(prev => prev.includes(dept) ? prev.filter(d => d !== dept) : [...prev, dept]);
-  };
-
-  const toggleTag = (dept: TaskDept, tag: string) => {
-    setDeptTags(prev => {
-      const current = prev[dept] || [];
-      const updated = current.includes(tag) ? current.filter(t => t !== tag) : [...current, tag];
-      return { ...prev, [dept]: updated };
-    });
+  const toggleDept = (deptId: string) => {
+    setSelectedDepts(prev =>
+      prev.includes(deptId) ? prev.filter(d => d !== deptId) : [...prev, deptId]
+    );
   };
 
   const handleSaveDeleg = async () => {
     if (!selectedPost || selectedDepts.length === 0) {
-      toast.error('Selecione pelo menos um departamento');
+      toast.error('Selecione pelo menos um departamento.');
       return;
     }
     setSaving(true);
     try {
-      const deptToRole: Record<string, string> = {
-        video: 'editor',
-        design: 'designer',
-        redacao: 'redator',
-        midia_social: 'midia_social'
-      };
-
-      const tasks: MicroTask[] = selectedDepts.map(dept => {
-        const deptInfo = DEPTS.find(d => d.id === dept)!;
-        let dependsOn: TaskDept | null = null;
-        if (dept === 'design' && depArteDependeVideo) dependsOn = 'video';
-        if (dept === 'video' && depVideoDependeArte) dependsOn = 'design';
+      const tasks: MicroTask[] = selectedDepts.map(deptId => {
+        const dept = DEPARTMENTS.find(d => d.id === deptId)!;
         return {
-          id: `task_${dept}_${Date.now()}`,
-          dept,
-          deptLabel: deptInfo.name,
-          responsibleEmail: '', 
-          responsibleName: 'Aguardando...', 
-          tags: deptTags[dept] || [],
-          description: deptDescriptions[dept] || '',
-          status: 'pendente' as const,
-          dependsOn,
-          createdAt: new Date().toISOString()
+          id: `task_${deptId}_${Date.now()}`,
+          dept: deptId,
+          deptLabel: dept.label,
+          responsibleEmail: deptResponsibles[deptId] || '',
+          responsibleName: teamMembers.find(m => m.email === deptResponsibles[deptId])?.name || '',
+          status: 'pendente',
+          tags: deptTags[deptId] || [],
+          description: deptDescriptions[deptId] || '',
+          dependsOn: deptId === 'design' && depArteDependeVideo ? 'video' :
+            deptId === 'video' && depVideoDependeArte ? 'design' : undefined,
         };
       });
 
       await contentPlanService.delegatePost(plan!.id!, selectedPost.id, tasks);
 
-      for (const dept of selectedDepts) {
-        const deptInfo = DEPTS.find(d => d.id === dept)!;
-        const roleToNotify = deptToRole[dept];
-        const membrosSnap = await getDocs(
-          query(collection(db, 'boraselect'), where('role', '==', roleToNotify))
-        );
-
-        for (const docMembro of membrosSnap.docs) {
-          const membro = docMembro.data();
+      const emailsNotificados = new Set<string>();
+      for (const task of tasks) {
+        if (task.responsibleEmail && !emailsNotificados.has(task.responsibleEmail)) {
+          emailsNotificados.add(task.responsibleEmail);
           await notificacaoService.criar({
-            para: membro.email?.toLowerCase(),
-            tipo: 'producao',
-            titulo: `NOVA TAREFA: ${deptInfo.name} — ${selectedPost.headline}`,
-            descricao: deptDescriptions[dept] || `Nova tarefa de ${deptInfo.name} para o post "${selectedPost.headline}"`,
-            planId: plan!.id,
-            postId: selectedPost.id
+            para: task.responsibleEmail,
+            tipo: 'tarefa_delegada',
+            titulo: 'Nova Tarefa Delegada',
+            descricao: `Post #${String(selectedPost.number).padStart(2, '0')} — ${selectedPost.headline?.slice(0, 50)}`,
+            planId: plan!.id!,
+            visto: false,
+            criadoEm: new Date().toISOString()
           });
         }
       }
@@ -320,326 +118,330 @@ export default function PlanejamentoTarefas() {
       toast.success('Tarefas delegadas com sucesso!');
       setShowDelegModal(false);
       setSelectedDepts([]);
-      setDeptTags({});
-      setDeptDescriptions({});
+      setDeptResponsibles({} as any);
+      setDeptTags({} as any);
+      setDeptDescriptions({} as any);
       setDepArteDependeVideo(false);
       setDepVideoDependeArte(false);
       loadData();
     } catch (error) {
-      console.error(error);
       toast.error('Erro ao delegar tarefas.');
     } finally {
       setSaving(false);
     }
   };
 
-  if (loading || !plan || !roleLoaded) {
-    return (
-      <div className="min-h-[60vh] flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-[#ff5351]" />
-      </div>
-    );
-  }
+  if (loading) return (
+    <div className="min-h-screen flex items-center justify-center bg-[#131313]">
+      <Loader2 className="w-8 h-8 animate-spin text-[#ff5351]" />
+    </div>
+  );
+
+  if (!plan) return null;
+
+  const posts = plan.posts || [];
+  const delegatedCount = posts.filter(p => (p.tasks || []).length > 0).length;
+  const totalProgress = posts.length > 0
+    ? Math.round(posts.reduce((sum, p) => sum + calcularFasePost(p).progresso, 0) / posts.length)
+    : 0;
 
   return (
-    <div className="animate-in fade-in duration-700 pb-20">
-      <header className="mb-8">
+    <div className="space-y-8 pb-20 text-left">
+      <header className="space-y-4">
         <button
           onClick={() => navigate(-1)}
-          className="flex items-center gap-2 text-[#ff5351] text-[10px] font-black uppercase tracking-widest mb-4 hover:brightness-110 transition-all"
+          className="flex items-center gap-2 text-zinc-500 hover:text-white transition-colors text-xs font-black uppercase tracking-widest"
         >
           <ArrowLeft className="w-4 h-4" /> Voltar
         </button>
-        <p className="text-[10px] font-black uppercase tracking-[0.3em] text-zinc-500">
-          PLANEJAMENTO · {clientName}
-        </p>
-        <h1 className="text-4xl font-black text-white uppercase italic tracking-tight">
-          # {plan.name}
-        </h1>
-        <p className="text-zinc-500 text-sm mt-1">{plan.monthReference}</p>
-        {isInternal && (
-          <div className="flex items-center gap-3 mt-4">
-            <span className="px-3 py-1 bg-amber-500/10 text-amber-500 border border-amber-500/20 rounded-full text-[9px] font-black uppercase tracking-widest">
-              {postsOrdenados.length} post{postsOrdenados.length !== 1 ? 's' : ''} aguardando delegação
-            </span>
-            {postsOrdenados.length === 0 && (
-              <span className="text-emerald-500 text-[10px] font-black uppercase tracking-widest">
-                ✓ Todos delegados!
-              </span>
-            )}
+        <div>
+          <p className="text-[#ff5351] text-[10px] font-black uppercase tracking-[0.3em]">
+            {clientName} • Planejamento de Conteúdo
+          </p>
+          <h1 className="text-5xl font-black text-white uppercase italic tracking-tight mt-1">
+            {plan.name}
+          </h1>
+          <p className="text-zinc-500 text-sm mt-1">{plan.monthReference}</p>
+        </div>
+
+        <div className="bg-[#1f1f1f] border border-zinc-800 rounded-3xl p-6">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Progresso Geral</span>
+            <span className="text-[#ff5351] font-black text-lg">{totalProgress}%</span>
           </div>
-        )}
+          <div className="w-full h-2 bg-zinc-800 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-[#ff5351] to-[#ff8c8b] rounded-full transition-all duration-700"
+              style={{ width: `${totalProgress}%` }}
+            />
+          </div>
+          <div className="flex gap-2 mt-4 flex-wrap">
+            {[0, 17, 30, 60, 100].map((val, i) => (
+              <div key={i} className="flex items-center gap-1.5">
+                <div className={cn(
+                  "w-2 h-2 rounded-full",
+                  val === 0 ? "bg-zinc-700" :
+                    val === 17 ? "bg-amber-500" :
+                      val === 30 ? "bg-blue-500" :
+                        val === 60 ? "bg-purple-500" : "bg-emerald-500"
+                )} />
+                <span className="text-[9px] text-zinc-500 font-bold uppercase">
+                  {val === 0 ? 'Não delegado' : val === 17 ? 'Aguardando' : val === 30 ? 'Delegado' : val === 60 ? 'Em Produção' : 'Concluído'}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
       </header>
 
-      <div className="bg-zinc-900/50 border border-zinc-800 rounded-[32px] p-8 mb-8">
-        <div className="flex items-center justify-between mb-4">
-          <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Progresso Geral</span>
-          <span className="text-xl font-black text-[#ff5351] italic">{porcentagemGeral}%</span>
+      <div className="bg-[#1f1f1f] border border-zinc-800 rounded-3xl overflow-hidden">
+        <div className="px-6 py-4 border-b border-zinc-800 flex items-center justify-between">
+          <h2 className="text-xs font-black uppercase tracking-widest text-white">
+            {posts.length} Posts Aguardando Delegação
+          </h2>
+          <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">
+            {delegatedCount}/{posts.length} delegados
+          </span>
         </div>
-        <div className="grid grid-cols-4 md:grid-cols-12 gap-2">
-          {allPosts.map((post, idx) => {
-            const isActive = idx < Math.ceil((porcentagemGeral / 100) * allPosts.length);
-            return (
-              <div
-                key={idx}
-                className={cn(
-                  "h-1.5 rounded-full transition-all duration-700",
-                  isActive ? "bg-[#ff5351]" : "bg-zinc-800"
-                )}
-              />
-            );
-          })}
-        </div>
-      </div>
 
-      <div className="bg-[#141414] border border-zinc-800 rounded-[32px] overflow-hidden shadow-2xl">
-        <DataTable
-          data={postsOrdenados}
-          columns={[
-            {
-              header: 'POST',
-              className: 'w-96',
-              accessor: (post) => (
-                <div className="flex items-center gap-4 py-2">
-                  <div className="text-zinc-600 font-black text-xl italic">#{String(post.number).padStart(2, '0')}</div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-white font-black uppercase text-sm truncate">{post.headline || 'Sem título'}</p>
-                    <p className="text-zinc-500 text-[10px] truncate uppercase tracking-widest">{post.caption?.slice(0, 80)}...</p>
-                  </div>
-                </div>
-              )
-            },
-            {
-              header: 'TIPO',
-              accessor: (post) => (
-                <span className={cn(
-                  "px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-widest border",
-                  post.type === 'FEED' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
-                  post.type === 'REEL' ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' :
-                  post.type === 'STORIES' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
-                  post.type === 'CARROSSEL' ? 'bg-orange-500/10 text-orange-400 border-orange-500/20' :
-                  'bg-red-500/10 text-red-400 border-red-500/20'
-                )}>
-                  {post.type}
-                </span>
-              ),
-              align: 'center'
-            },
-            {
-              header: 'DATA POSTAGEM',
-              accessor: (post) => {
-                const dateInfo = formatDate(post.publishDate);
-                return (
-                  <div className="flex flex-col items-center">
-                    <span className="text-zinc-400 font-bold text-xs">{dateInfo.data}</span>
-                    <span className="text-zinc-600 text-[9px] uppercase font-black">{dateInfo.diaSemana}</span>
-                    {dateInfo.isUrgente && (
-                      <span className="mt-1 px-1.5 py-0.5 bg-red-500/10 text-red-400 text-[7px] font-black uppercase rounded border border-red-500/20">URGENTE</span>
+        <table className="w-full text-left border-collapse">
+          <thead>
+            <tr className="border-b border-zinc-800 bg-zinc-900/50">
+              <th className="px-6 py-3 text-[10px] font-black uppercase tracking-widest text-zinc-500">Post</th>
+              <th className="px-6 py-3 text-[10px] font-black uppercase tracking-widest text-zinc-500">Tipo</th>
+              <th className="px-6 py-3 text-[10px] font-black uppercase tracking-widest text-zinc-500 text-center">Data Postagem</th>
+              <th className="px-6 py-3 text-[10px] font-black uppercase tracking-widest text-zinc-500 text-center">Fase Atual</th>
+              <th className="px-6 py-3 text-[10px] font-black uppercase tracking-widest text-zinc-500 text-center">Progresso</th>
+              <th className="px-6 py-3 text-[10px] font-black uppercase tracking-widest text-zinc-500 text-right">Ação</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-zinc-800">
+            {posts.map((post) => {
+              const { fase, progresso } = calcularFasePost(post);
+              const isDelegated = (post.tasks || []).length > 0;
+              return (
+                <tr key={post.id} className="group hover:bg-zinc-800/30 transition-all">
+                  <td className="px-6 py-4 max-w-xs">
+                    <p className="text-white font-bold text-sm line-clamp-2 uppercase">{post.headline}</p>
+                    {post.caption && (
+                      <p className="text-zinc-500 text-xs line-clamp-2 mt-0.5">{post.caption}</p>
                     )}
-                  </div>
-                );
-              },
-              align: 'center'
-            },
-            {
-              header: 'FASE ATUAL',
-              accessor: (post) => {
-                const fase = calcularFasePost(post, plan!, workflowModel);
-                return (
-                  <div className={cn("px-3 py-1 rounded-full border text-[9px] font-black uppercase tracking-widest", fase.bg, fase.color, fase.border)}>
-                    {fase.label}
-                  </div>
-                );
-              },
-              align: 'center'
-            },
-            {
-              header: 'PROGRESSO',
-              accessor: (post) => {
-                const fase = calcularFasePost(post, plan!, workflowModel);
-                return (
-                  <div className="flex items-center gap-2">
-                    <div className="w-16 h-1 bg-zinc-800 rounded-full overflow-hidden">
-                      <div className={cn("h-full rounded-full transition-all duration-500", fase.barColor)} style={{ width: `${fase.percent}%` }} />
+                  </td>
+                  <td className="px-6 py-4">
+                    <span className={cn(
+                      "px-2 py-1 rounded text-[9px] font-black uppercase tracking-widest border",
+                      post.type === 'FEED' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
+                        post.type === 'REEL' ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' :
+                          post.type === 'STORIES' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+                            post.type === 'CARROSSEL' ? 'bg-orange-500/10 text-orange-400 border-orange-500/20' :
+                              'bg-red-500/10 text-red-400 border-red-500/20'
+                    )}>
+                      {post.type}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-center">
+                    <div className="flex flex-col items-center gap-0.5">
+                      <span className="text-white text-xs font-bold">{post.publishDate}</span>
+                      <span className="text-zinc-600 text-[9px]">
+                        {post.publishDate ? new Date(post.publishDate.split('/').reverse().join('-')).toLocaleDateString('pt-BR', { weekday: 'short' }) : ''}
+                      </span>
                     </div>
-                    <span className="text-[9px] font-black text-zinc-500">{fase.percent}%</span>
-                  </div>
-                );
-              },
-              align: 'center'
-            },
-            {
-              header: 'AÇÃO',
-              accessor: (post) => {
-                const hasTasks = (post as any).tasks && (post as any).tasks.length > 0;
-                return !roleLoaded ? (
-                  <div className="w-4 h-4 rounded-full border border-zinc-800 animate-spin border-t-zinc-600" />
-                ) : isInternal ? (
-                  hasTasks ? (
-                    <button
-                      onClick={() => toast.success('Em breve: visualização de tarefas!')}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 border border-zinc-800 rounded-xl text-[9px] font-black uppercase tracking-widest text-zinc-400 hover:text-white hover:border-[#ff5351] transition-all"
-                    >
-                      <Eye className="w-3 h-3" /> Ver
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => openDelegModal(post)}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#ff5351] text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:brightness-110 transition-all"
-                    >
-                      <Zap className="w-3 h-3" /> Delegar
-                    </button>
-                  )
-                ) : (
-                  <span className="text-[9px] font-black uppercase text-zinc-600">—</span>
-                );
-              },
-              align: 'right'
-            }
-          ]}
-        />
+                  </td>
+                  <td className="px-6 py-4 text-center">
+                    <span className={cn(
+                      "px-2 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border",
+                      progresso === 100 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+                        progresso === 60 ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' :
+                          progresso === 30 ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
+                            'bg-zinc-800 text-zinc-400 border-zinc-700'
+                    )}>
+                      {fase}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-center">
+                    <div className="flex items-center justify-center gap-2">
+                      <div className="w-16 h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                        <div
+                          className={cn(
+                            "h-full rounded-full transition-all",
+                            progresso === 100 ? "bg-emerald-500" :
+                              progresso >= 60 ? "bg-purple-500" :
+                                progresso >= 30 ? "bg-blue-500" : "bg-amber-500"
+                          )}
+                          style={{ width: `${progresso}%` }}
+                        />
+                      </div>
+                      <span className="text-[10px] font-black text-zinc-400">{progresso}%</span>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 text-right">
+                    {!isDelegated ? (
+                      <button
+                        onClick={() => { setSelectedPost(post); setShowDelegModal(true); }}
+                        className="flex items-center gap-1.5 px-3 py-2 bg-[#ff5351] text-white rounded-xl font-black uppercase text-[9px] tracking-widest hover:brightness-110 transition-all ml-auto"
+                      >
+                        <Zap className="w-3 h-3" /> Delegar
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => { setSelectedPost(post); setShowDelegModal(true); }}
+                        className="flex items-center gap-1.5 px-3 py-2 bg-zinc-800 border border-zinc-700 text-zinc-400 rounded-xl font-black uppercase text-[9px] tracking-widest hover:text-white transition-all ml-auto"
+                      >
+                        <Eye className="w-3 h-3" /> Ver
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
 
+      {/* Modal de Delegação */}
       {showDelegModal && selectedPost && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[300] flex items-center justify-center p-4">
-          <div className="bg-[#141414] border border-zinc-800 rounded-[40px] w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl">
-            <header className="p-8 border-b border-zinc-800 flex items-center justify-between bg-zinc-900/30">
+          <div className="bg-[#1a1a1a] border border-zinc-800 rounded-3xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl">
+            <div className="p-6 border-b border-zinc-800 flex items-center justify-between sticky top-0 bg-[#1a1a1a]">
               <div>
-                <p className="text-[9px] font-black uppercase tracking-[0.3em] text-[#ff5351] mb-1">POST {String(selectedPost.number).padStart(2, '0')} · {selectedPost.type}</p>
-                <h3 className="text-2xl font-black text-white uppercase italic tracking-tight">Delegar Tarefas</h3>
+                <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500">
+                  Post #{String(selectedPost.number).padStart(2, '0')} · {selectedPost.type}
+                </p>
+                <h3 className="text-xl font-black text-white uppercase italic mt-1">Delegar Tarefas</h3>
               </div>
-              <button onClick={() => setShowDelegModal(false)} className="p-2 hover:bg-zinc-800 rounded-lg text-zinc-500 transition-all"><X className="w-6 h-6" /></button>
-            </header>
+              <button onClick={() => setShowDelegModal(false)} className="p-2 text-zinc-500 hover:text-white transition-all">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
 
-            <div className="flex-1 overflow-y-auto p-8 space-y-10">
-              <div className="space-y-4">
-                <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 flex items-center gap-2">
-                  <div className="w-1 h-1 bg-[#ff5351] rounded-full" /> Departamentos
-                </label>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  {DEPTS.map(dept => {
-                    const isSelected = selectedDepts.includes(dept.id);
-                    return (
-                      <button
-                        key={dept.id}
-                        onClick={() => toggleDept(dept.id)}
-                        className={cn(
-                          'p-4 rounded-2xl border text-left transition-all group',
-                          isSelected ? 'border-[#ff5351] bg-[#ff5351]/5' : 'border-zinc-800 bg-zinc-900/30 hover:border-zinc-700'
+            <div className="p-6 space-y-6">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-3">Departamentos</p>
+                <div className="grid grid-cols-2 gap-3">
+                  {DEPARTMENTS.map(dept => (
+                    <button
+                      key={dept.id}
+                      onClick={() => toggleDept(dept.id)}
+                      className={cn(
+                        "p-4 rounded-2xl border text-left transition-all",
+                        selectedDepts.includes(dept.id)
+                          ? "bg-[#ff5351]/10 border-[#ff5351]/50 text-white"
+                          : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-600"
+                      )}
+                    >
+                      <div className="flex items-start justify-between">
+                        <span className="text-2xl">{dept.icon}</span>
+                        {selectedDepts.includes(dept.id) && (
+                          <span className="w-5 h-5 rounded-full bg-[#ff5351] flex items-center justify-center">
+                            <Zap className="w-3 h-3 text-white" />
+                          </span>
                         )}
-                      >
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-2xl">{dept.icon}</span>
-                          {isSelected && <div className="w-4 h-4 bg-[#ff5351] rounded-full flex items-center justify-center animate-in zoom-in"><Check className="w-2.5 h-2.5 text-white" strokeWidth={4} /></div>}
-                        </div>
-                        <p className={cn("font-black uppercase text-[10px] tracking-widest", isSelected ? "text-white" : "text-zinc-400")}>{dept.name}</p>
-                        <p className="text-[8px] text-zinc-600 font-bold uppercase tracking-tighter mt-0.5">{dept.sub}</p>
-                      </button>
-                    );
-                  })}
+                      </div>
+                      <p className="text-xs font-black uppercase mt-2">{dept.label}</p>
+                      <p className="text-[10px] text-zinc-500 mt-0.5">{dept.description}</p>
+                    </button>
+                  ))}
                 </div>
               </div>
 
-              {selectedDepts.length > 0 && (
-                <div className="space-y-8 animate-in slide-in-from-bottom-2">
-                  <h4 className="text-sm font-black uppercase tracking-widest text-white border-b border-zinc-800 pb-2 flex items-center gap-2">
-                    Configuração por Departamento
-                  </h4>
-                  {selectedDepts.map(deptId => {
-                    const deptInfo = DEPTS.find(d => d.id === deptId)!;
-                    return (
-                      <div key={deptId} className="bg-zinc-900/40 border border-zinc-800 rounded-[24px] p-6 space-y-6">
-                        <div className="flex items-center gap-3">
-                          <span className="text-xl">{deptInfo.icon}</span>
-                          <span className="text-xs font-black uppercase text-white tracking-widest">{deptInfo.name}</span>
-                        </div>
+              {selectedDepts.map(deptId => {
+                const dept = DEPARTMENTS.find(d => d.id === deptId)!;
+                return (
+                  <div key={deptId} className="space-y-3 p-4 bg-zinc-900/50 rounded-2xl border border-zinc-800">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-white flex items-center gap-2">
+                      <span>{dept.icon}</span> {dept.label}
+                    </p>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                          <div className="space-y-3">
-                            <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500">Tags</label>
-                            <div className="flex flex-wrap gap-2">
-                              {deptInfo.tags.map(tag => {
-                                const isActive = (deptTags[deptId] || []).includes(tag);
-                                return (
-                                  <button
-                                    key={tag}
-                                    onClick={() => toggleTag(deptId, tag)}
-                                    className={cn(
-                                      'px-2 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest transition-all',
-                                      isActive ? 'bg-[#ff5351] text-white' : 'bg-zinc-900 border border-zinc-800 text-zinc-500 hover:text-zinc-300'
-                                    )}
-                                  >
-                                    {tag}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </div>
-                          
-                          <div className="space-y-3">
-                            <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500">Dependências</label>
-                            <div className="flex flex-col gap-2">
-                              {deptId === 'design' && (
-                                <button
-                                  onClick={() => setDepArteDependeVideo(!depArteDependeVideo)}
-                                  className={cn(
-                                    'p-3 rounded-xl border text-left transition-all flex items-center justify-between',
-                                    depArteDependeVideo ? 'border-[#ff5351] bg-[#ff5351]/5 text-[#ff5351]' : 'border-zinc-800 bg-zinc-900/30 text-zinc-500'
-                                  )}
-                                >
-                                  <span className="text-[9px] font-black uppercase tracking-widest">Depende do Vídeo</span>
-                                  {depArteDependeVideo && <Check className="w-3 h-3" />}
-                                </button>
-                              )}
-                              {deptId === 'video' && (
-                                <button
-                                  onClick={() => setDepVideoDependeArte(!depVideoDependeArte)}
-                                  className={cn(
-                                    'p-3 rounded-xl border text-left transition-all flex items-center justify-between',
-                                    depVideoDependeArte ? 'border-[#ff5351] bg-[#ff5351]/5 text-[#ff5351]' : 'border-zinc-800 bg-zinc-900/30 text-zinc-500'
-                                  )}
-                                >
-                                  <span className="text-[9px] font-black uppercase tracking-widest">Depende da Arte</span>
-                                  {depVideoDependeArte && <Check className="w-3 h-3" />}
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="space-y-3">
-                          <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500">Descrição / Briefing</label>
-                          <textarea
-                            value={deptDescriptions[deptId] || ''}
-                            onChange={(e) => setDeptDescriptions(prev => ({ ...prev, [deptId]: e.target.value }))}
-                            rows={3}
-                            className="w-full bg-zinc-950 border border-zinc-800 rounded-2xl p-4 text-xs text-white focus:border-[#ff5351] outline-none resize-none"
-                            placeholder={`Instruções para o departamento de ${deptInfo.name}...`}
-                          />
-                        </div>
+                    <div>
+                      <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Responsável</label>
+                      <div className="relative">
+                        <select
+                          value={deptResponsibles[deptId] || ''}
+                          onChange={e => setDeptResponsibles(prev => ({ ...prev, [deptId]: e.target.value }))}
+                          className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3 text-white text-xs appearance-none focus:border-[#ff5351] outline-none"
+                        >
+                          <option value="">Selecionar...</option>
+                          {teamMembers
+                            .filter(m => !m.role || m.role === deptId || ['editor', 'designer', 'redator', 'midia_social'].includes(m.role))
+                            .map(m => (
+                              <option key={m.id} value={m.email}>{m.name} — {m.role}</option>
+                            ))}
+                        </select>
+                        <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 pointer-events-none" />
                       </div>
-                    );
-                  })}
+                    </div>
+
+                    <div>
+                      <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-2">Tags</label>
+                      <div className="flex flex-wrap gap-2">
+                        {dept.tags.map(tag => (
+                          <button
+                            key={tag}
+                            onClick={() => {
+                              const current = deptTags[deptId] || [];
+                              setDeptTags(prev => ({
+                                ...prev,
+                                [deptId]: current.includes(tag) ? current.filter(t => t !== tag) : [...current, tag]
+                              }));
+                            }}
+                            className={cn(
+                              "px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border transition-all",
+                              (deptTags[deptId] || []).includes(tag)
+                                ? "bg-[#ff5351]/10 border-[#ff5351]/30 text-[#ff5351]"
+                                : "bg-zinc-800 border-zinc-700 text-zinc-400 hover:border-zinc-500"
+                            )}
+                          >
+                            {tag}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Descrição / Briefing</label>
+                      <textarea
+                        value={deptDescriptions[deptId] || ''}
+                        onChange={e => setDeptDescriptions(prev => ({ ...prev, [deptId]: e.target.value }))}
+                        rows={2}
+                        placeholder="Detalhes da tarefa..."
+                        className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-2 text-white text-xs resize-none focus:border-[#ff5351] outline-none"
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+
+              {selectedDepts.includes('video') && selectedDepts.includes('design') && (
+                <div className="p-4 bg-zinc-900/50 rounded-2xl border border-zinc-800 space-y-2">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Dependências</p>
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input type="checkbox" checked={depArteDependeVideo} onChange={e => setDepArteDependeVideo(e.target.checked)} className="w-4 h-4 rounded" />
+                    <span className="text-xs text-zinc-300">Arte depende do vídeo</span>
+                  </label>
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input type="checkbox" checked={depVideoDependeArte} onChange={e => setDepVideoDependeArte(e.target.checked)} className="w-4 h-4 rounded" />
+                    <span className="text-xs text-zinc-300">Vídeo depende da arte</span>
+                  </label>
                 </div>
               )}
             </div>
 
-            <footer className="p-8 bg-zinc-900/50 border-t border-zinc-800 flex justify-end gap-4">
+            <div className="p-6 border-t border-zinc-800 flex gap-3 sticky bottom-0 bg-[#1a1a1a]">
               <button
                 onClick={() => setShowDelegModal(false)}
-                className="px-8 py-3 bg-zinc-800 text-zinc-400 rounded-2xl font-black uppercase tracking-widest text-[10px] hover:text-white transition-all"
+                className="flex-1 h-12 bg-zinc-800 border border-zinc-700 text-zinc-400 rounded-xl font-black uppercase tracking-widest text-[10px] hover:text-white transition-all"
               >
                 Cancelar
               </button>
               <button
                 onClick={handleSaveDeleg}
                 disabled={saving || selectedDepts.length === 0}
-                className="px-8 py-3 bg-white text-black rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-[#ff5351] hover:text-white transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 h-12 bg-[#ff5351] text-white rounded-xl font-black uppercase tracking-widest text-[10px] hover:brightness-110 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
               >
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                 Confirmar Delegação
               </button>
-            </footer>
+            </div>
           </div>
         </div>
       )}
