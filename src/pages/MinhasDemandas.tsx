@@ -69,13 +69,11 @@ export default function MinhasDemandas() {
     const clientesData = await Promise.all(snap.docs.map(async d => {
       const clientId = d.id;
 
-      // Busca planejamentos pendentes (coleção demandas)
       const demandasSnap = await getDocs(query(collection(db, 'demandas'), where('clientId', '==', clientId)));
       const demandasPendentes = demandasSnap.docs.filter(dd =>
-        ['rascunho', 'aguardando_cliente', 'devolvido', 'aguardando_validacao_equipe', 'aprovado_equipe'].includes(dd.data().status)
+        ['rascunho', 'aguardando_cliente', 'devolvido', 'aguardando_validacao_equipe', 'aprovado_equipe', 'em_producao'].includes(dd.data().status)
       ).length;
 
-      // Busca posts pendentes (coleção posts)
       const postsSnap = await getDocs(query(collection(db, 'posts'), where('clientId', '==', clientId)));
       const postsPendentes = postsSnap.docs.filter(pd => {
         const tasks = pd.data().tasks || [];
@@ -89,7 +87,8 @@ export default function MinhasDemandas() {
         id: clientId,
         ...d.data(),
         totalDemandas: total,
-        pendentes
+        pendentes,
+        updatedAt: d.data().updatedAt
       };
     }));
     setClientes(clientesData);
@@ -99,56 +98,91 @@ export default function MinhasDemandas() {
     setClienteSelecionado(cliente);
     const itens: any[] = [];
 
-    // Busca planejamentos da coleção demandas
+    // Busca planejamentos
     const demandasSnap = await getDocs(query(collection(db, 'demandas'), where('clientId', '==', cliente.id)));
-    demandasSnap.docs.forEach(d => {
-      const data = d.data();
-      const statusOcultos = ['concluido'];
-      if (!statusOcultos.includes(data.status)) {
-        itens.push({
-          id: d.id,
-          name: data.name,
-          type: 'Planejamento',
-          status: data.status,
-          updatedAt: data.updatedAt,
-          isPost: false,
-          isPlanejamento: true,
-        });
-      }
-    });
 
-    // Busca posts da coleção posts
+    // Busca todos os posts do cliente
     const postsSnap = await getDocs(query(collection(db, 'posts'), where('clientId', '==', cliente.id)));
-    postsSnap.docs.forEach(d => {
+    const todosPosts = postsSnap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
+
+    for (const d of demandasSnap.docs) {
       const data = d.data();
-      const tasks = data.tasks || [];
-      const taskStatus = tasks.length > 0 ? tasks[0].status : data.status;
+
+      // Posts vinculados a esse planejamento
+      const postsDoPlano = todosPosts.filter(p => p.planId === d.id);
+      const totalPosts = postsDoPlano.length;
+      const postsConcluidos = postsDoPlano.filter(p => p.status === 'concluido').length;
+
+      // Se todos os posts estão concluídos E o planejamento está em_producao → oculta
+      const todosCompletos = totalPosts > 0 && postsConcluidos === totalPosts;
+      if (todosCompletos) continue; // Pula — planejamento concluído some da lista
+
+      // Oculta planejamentos com status concluido
+      if (data.status === 'concluido') continue;
+
+      // Calcula aprovação (fluxo do planejamento)
+      const calcAprovacao = (status: string) => {
+        const map: any = {
+          rascunho: 10,
+          aguardando_cliente: 30,
+          aguardando_validacao_equipe: 50,
+          aprovado_equipe: 100,
+          em_producao: 100,
+          concluido: 100,
+          devolvido: 20,
+        };
+        return map[status] || 0;
+      };
+
       itens.push({
         id: d.id,
-        planId: data.planId,
-        postId: d.id,
-        name: `#${String(data.number).padStart(2, '0')} ${data.headline}`,
-        type: data.type,
-        status: taskStatus || data.status,
+        name: data.name,
+        type: 'Planejamento',
+        status: data.status,
         updatedAt: data.updatedAt,
+        isPost: false,
+        isPlanejamento: true,
+        aprovacaoPct: calcAprovacao(data.status),
+        postsConcluidos,
+        totalPosts,
+      });
+    }
+
+    // Adiciona posts que NÃO estão concluídos
+    for (const post of todosPosts) {
+      if (post.status === 'concluido') continue; // Posts concluídos somem
+
+      const tasks = post.tasks || [];
+      const taskStatus = tasks.length > 0 ? tasks[0].status : post.status;
+
+      itens.push({
+        id: post.id,
+        planId: post.planId,
+        postId: post.id,
+        name: `#${String(post.number).padStart(2, '0')} ${post.headline}`,
+        type: post.type,
+        status: taskStatus || post.status,
+        updatedAt: post.updatedAt,
         isPost: true,
         isPlanejamento: false,
-        demandaNome: data.planNome,
+        demandaNome: post.planNome,
+        aprovacaoPct: null,
+        postsConcluidos: null,
+        totalPosts: null,
       });
-    });
+    }
 
-    // Ordena por data
+    // Ordena: planejamentos primeiro, depois posts
     itens.sort((a, b) => {
-      const dateA = a.updatedAt?.toDate ? a.updatedAt.toDate() : new Date(a.updatedAt || 0);
-      const dateB = b.updatedAt?.toDate ? b.updatedAt.toDate() : new Date(b.updatedAt || 0);
-      return dateB.getTime() - dateA.getTime();
+      if (a.isPlanejamento && !b.isPlanejamento) return -1;
+      if (!a.isPlanejamento && b.isPlanejamento) return 1;
+      return 0;
     });
 
     setDemandasCliente(itens);
   };
 
   const loadDemandasEditor = async (email: string) => {
-    // Busca posts delegados para o editor na coleção posts
     const snap = await getDocs(collection(db, 'posts'));
     const itens: any[] = [];
 
@@ -170,13 +204,11 @@ export default function MinhasDemandas() {
             taskStatus: task.status,
             publishDate: data.publishDate,
             status: task.status,
-            taskId: task.id,
           });
         }
       });
     });
 
-    // Busca nomes dos clientes
     const clienteIds = [...new Set(itens.map(i => i.clienteId))];
     const clienteNomes: Record<string, string> = {};
     await Promise.all(clienteIds.map(async id => {
@@ -190,7 +222,6 @@ export default function MinhasDemandas() {
   const loadDemandasCliente = async (clientId: string) => {
     const itens: any[] = [];
 
-    // Busca planejamentos pendentes (ainda não processados)
     const demandasSnap = await getDocs(query(collection(db, 'demandas'), where('clientId', '==', clientId)));
     demandasSnap.docs.forEach(d => {
       const data = d.data();
@@ -207,10 +238,10 @@ export default function MinhasDemandas() {
       }
     });
 
-    // Busca posts da coleção posts
     const postsSnap = await getDocs(query(collection(db, 'posts'), where('clientId', '==', clientId)));
     postsSnap.docs.forEach(d => {
       const data = d.data();
+      if (data.status === 'concluido') return;
       itens.push({
         tipo: 'post',
         postId: d.id,
@@ -244,6 +275,7 @@ export default function MinhasDemandas() {
       aguardando_cliente: { label: 'Aguard. Aprovação', class: 'bg-amber-500/10 text-amber-400 border-amber-500/20' },
       aguardando_validacao_equipe: { label: 'Aguard. Validação', class: 'bg-blue-500/10 text-blue-400 border-blue-500/20' },
       aguardando_delegacao: { label: 'Aguard. Delegação', class: 'bg-amber-500/10 text-amber-400 border-amber-500/20' },
+      em_producao: { label: 'Em Produção', class: 'bg-blue-500/10 text-blue-400 border-blue-500/20' },
       rascunho: { label: 'Rascunho', class: 'bg-zinc-800 text-zinc-400 border-zinc-700' },
       devolvido: { label: 'Devolvido', class: 'bg-red-500/10 text-red-400 border-red-500/20' },
     };
@@ -390,17 +422,50 @@ export default function MinhasDemandas() {
               ),
               align: 'center'
             },
-            { header: 'Status', accessor: (d) => getStatusBadge(d.status), align: 'center' },
             {
-              header: 'Progresso',
+              header: 'Status',
+              accessor: (d) => getStatusBadge(d.status),
+              align: 'center'
+            },
+            {
+              header: 'Aprovação',
               accessor: (d) => {
-                const pct = calcProgresso(d.status);
+                if (!d.isPlanejamento) return <span className="text-zinc-600 text-xs">—</span>;
                 return (
                   <div className="flex items-center gap-2">
-                    <div className="w-24 h-1.5 bg-zinc-800 rounded-full overflow-hidden">
-                      <div className="h-full bg-[#ff5351] rounded-full" style={{ width: `${pct}%` }} />
+                    <div className="w-16 h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                      <div className="h-full bg-[#ff5351] rounded-full" style={{ width: `${d.aprovacaoPct}%` }} />
                     </div>
-                    <span className="text-[10px] font-black text-[#ff5351]">{pct}%</span>
+                    <span className="text-[10px] font-black text-[#ff5351]">{d.aprovacaoPct}%</span>
+                  </div>
+                );
+              },
+              align: 'center'
+            },
+            {
+              header: 'Execução',
+              accessor: (d) => {
+                if (!d.isPlanejamento) {
+                  const pct = calcProgresso(d.status);
+                  return (
+                    <div className="flex items-center gap-2">
+                      <div className="w-16 h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                        <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${pct}%` }} />
+                      </div>
+                      <span className="text-[10px] font-black text-emerald-400">{pct}%</span>
+                    </div>
+                  );
+                }
+                if (d.totalPosts === 0) return <span className="text-zinc-600 text-xs">—</span>;
+                const pct = Math.round((d.postsConcluidos / d.totalPosts) * 100);
+                return (
+                  <div className="flex flex-col items-center gap-1">
+                    <span className="text-[10px] font-black text-emerald-400">
+                      {d.postsConcluidos}/{d.totalPosts}
+                    </span>
+                    <div className="w-16 h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                      <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${pct}%` }} />
+                    </div>
                   </div>
                 );
               },
@@ -510,8 +575,8 @@ export default function MinhasDemandas() {
               header: 'Tipo',
               accessor: (item) => (
                 <span className="px-2 py-0.5 rounded bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[9px] font-black uppercase tracking-widest whitespace-nowrap">
-                  {item.postTipo || 'Planejamento'
-                }</span>
+                  {item.postTipo || 'Planejamento'}
+                </span>
               ),
               align: 'center'
             },
