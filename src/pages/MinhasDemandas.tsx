@@ -194,7 +194,7 @@ export default function MinhasDemandas() {
     const demandasSnap = await getDocs(query(collection(db, 'demandas'), where('clientId', '==', clientId)));
     demandasSnap.docs.forEach(d => {
       const data = d.data();
-      const statusAprovado = ['approuvado_equipe', 'em_producao', 'concluido'];
+      const statusAprovado = ['aprovado_equipe', 'em_producao', 'concluido'];
       if (!statusAprovado.includes(data.status)) {
         itens.push({
           tipo: 'planejamento',
@@ -510,8 +510,8 @@ export default function MinhasDemandas() {
               header: 'Tipo',
               accessor: (item) => (
                 <span className="px-2 py-0.5 rounded bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[9px] font-black uppercase tracking-widest whitespace-nowrap">
-                  {item.postTipo || 'Planejamento'}
-                </span>
+                  {item.postTipo || 'Planejamento'
+                }</span>
               ),
               align: 'center'
             },
