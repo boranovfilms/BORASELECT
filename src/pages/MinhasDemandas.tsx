@@ -225,8 +225,8 @@ export default function MinhasDemandas() {
     const demandasSnap = await getDocs(query(collection(db, 'demandas'), where('clientId', '==', clientId)));
     demandasSnap.docs.forEach(d => {
       const data = d.data();
-      const statusAprovado = ['aprovado_equipe', 'em_producao', 'concluido'];
-      if (!statusAprovado.includes(data.status)) {
+      const statusVisiveis = ['aprovado_equipe', 'em_producao'];
+if (!statusVisiveis.includes(data.status)) {
         itens.push({
           tipo: 'planejamento',
           demandaId: d.id,
