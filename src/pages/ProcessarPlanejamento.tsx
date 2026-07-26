@@ -25,9 +25,13 @@ export default function ProcessarPlanejamento() {
     setLoading(true);
     try {
       const planData = await contentPlanService.getPlanById(planId);
-      if (!planData) { toast.error('Planejamento não encontrado'); navigate(-1); return; }
-      setPlan(planData);
-      setPosts(planData.posts || []);
+if (!planData) { toast.error('Planejamento não encontrado'); navigate(-1); return; }
+setPlan(planData);
+
+// Detecta posts do texto corrido
+const { parsePostsFromText } = await import('../services/contentPlanService');
+const postsDetectados = parsePostsFromText(planData.currentText || '');
+setPosts(postsDetectados);
 
       // Verifica se já foi processado
       const postsSnap = await getDocs(collection(db, 'posts'));
