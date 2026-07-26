@@ -654,7 +654,18 @@ export default function MinhaDemandaDetalhe() {
                   <Check className="w-4 h-4" /> Aprovado ✅
                 </div>
               )}
+{/* REDATOR/MASTER — Delegar */}
+{isRedatorMaster && post?.status === 'aguardando_delegacao' && (
+  <button
+    onClick={() => navigate(`/planejamento/${post.planId}/tarefas`)}
+    className="w-full h-12 bg-[#ff5351] text-white rounded-xl font-black uppercase tracking-widest text-[10px] hover:brightness-110 transition-all flex items-center justify-center gap-2 shadow-xl"
+  >
+    ⚡ Delegar Tarefa
+  </button>
+)}
 
+{/* REDATOR/MASTER — Revisar */}
+{isRedatorMaster && allTasks.some((t: any) => t.status === 'arquivo_anexado') && (
               {/* REDATOR/MASTER — Revisar */}
               {isRedatorMaster && allTasks.some((t: any) => t.status === 'arquivo_anexado') && (
                 <>
