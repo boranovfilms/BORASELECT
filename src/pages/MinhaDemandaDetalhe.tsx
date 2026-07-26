@@ -2,10 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Loader2, Check, Upload, X, MessageSquare, Clock, User } from 'lucide-react';
 import { toast } from 'react-hot-toast';
-import { collection, getDocs, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, getDocs, doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { auth, db, storage } from '../lib/firebase';
-import { contentPlanService } from '../services/contentPlanService';
 import { notificacaoService } from '../services/notificacaoService';
 import { cn } from '../lib/utils';
 
@@ -17,10 +16,10 @@ export default function MinhaDemandaDetalhe() {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [plan, setPlan] = useState<any>(null);
   const [post, setPost] = useState<any>(null);
   const [userTask, setUserTask] = useState<any>(null);
   const [clientName, setClientName] = useState('');
+  const [planNome, setPlanNome] = useState('');
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewType, setPreviewType] = useState<'image' | 'video' | null>(null);
   const [driveLink, setDriveLink] = useState('');
@@ -33,15 +32,16 @@ export default function MinhaDemandaDetalhe() {
   const [userEmail, setUserEmail] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => { loadData(); }, [planId, postId]);
+  useEffect(() => { loadData(); }, [postId]);
 
   const loadData = async () => {
-    if (!planId || !postId) return;
+    if (!postId) return;
     setLoading(true);
     try {
       const email = auth.currentUser?.email?.toLowerCase().trim() || '';
       setUserEmail(email);
 
+      // Carrega role
       let role = 'cliente';
       let name = auth.currentUser?.displayName || '';
       if (email === 'admin@boraselect.com.br') {
@@ -64,28 +64,29 @@ export default function MinhaDemandaDetalhe() {
       setUserRole(role);
       setUserName(name);
 
-      const planData = await contentPlanService.getPlanById(planId);
-      if (!planData) { toast.error('Planejamento não encontrado'); navigate(-1); return; }
-      setPlan(planData);
-
-      const postData = planData.posts?.find((p: any) => p.id === postId);
-      if (!postData) { toast.error('Post não encontrado'); navigate(-1); return; }
+      // Busca o post diretamente da coleção posts/
+      const postDoc = await getDoc(doc(db, 'posts', postId));
+      if (!postDoc.exists()) {
+        toast.error('Post não encontrado');
+        navigate(-1);
+        return;
+      }
+      const postData = { id: postDoc.id, ...postDoc.data() };
       setPost(postData);
+      setPlanNome((postData as any).planNome || '');
 
-      // Busca task baseado no role
+      // Task do usuário
       const isRedMaster = ['master', 'admin', 'redator'].includes(role);
+      const tasks = (postData as any).tasks || [];
       let task = null;
       if (isRedMaster) {
-        task = postData.tasks?.find((t: any) => t.arquivoUrl || t.status === 'arquivo_anexado')
-          || postData.tasks?.[0]
-          || null;
+        task = tasks.find((t: any) => t.arquivoUrl || t.status === 'arquivo_anexado') || tasks[0] || null;
       } else {
-        task = postData.tasks?.find((t: any) => t.responsibleEmail?.toLowerCase() === email) || null;
+        task = tasks.find((t: any) => t.responsibleEmail?.toLowerCase() === email) || null;
       }
       setUserTask(task || null);
 
-      // Preview do arquivo
-      const taskComArquivo = postData.tasks?.find((t: any) => t.arquivoUrl);
+      const taskComArquivo = tasks.find((t: any) => t.arquivoUrl);
       if (taskComArquivo?.arquivoUrl) {
         setPreviewUrl(taskComArquivo.arquivoUrl);
         setPreviewType(taskComArquivo.arquivoTipo || 'image');
@@ -93,11 +94,15 @@ export default function MinhaDemandaDetalhe() {
 
       if (task?.driveDownloadUrl) setDriveSalvo(true);
 
-      const snap = await getDocs(collection(db, 'clientes'));
-      const found = snap.docs.find(d => d.id === planData.clientId);
-      if (found) setClientName(found.data().name || '');
+      // Busca nome do cliente
+      const clienteId = (postData as any).clientId;
+      if (clienteId) {
+        const clienteDoc = await getDoc(doc(db, 'clientes', clienteId));
+        if (clienteDoc.exists()) setClientName(clienteDoc.data().name || '');
+      }
 
     } catch (error) {
+      console.error(error);
       toast.error('Erro ao carregar dados');
     } finally {
       setLoading(false);
@@ -105,7 +110,7 @@ export default function MinhaDemandaDetalhe() {
   };
 
   const registrarHistorico = async (acao: string, obs?: string) => {
-    if (!planId || !plan || !post) return;
+    if (!postId || !post) return;
     const registro = {
       acao,
       quem: userName || userEmail,
@@ -115,27 +120,23 @@ export default function MinhaDemandaDetalhe() {
       data: new Date().toISOString()
     };
     const historico = post.historico || [];
-    const updatedPosts = plan.posts.map((p: any) => {
-      if (p.id !== post.id) return p;
-      return { ...p, historico: [...historico, registro] };
+    await updateDoc(doc(db, 'posts', postId), {
+      historico: [...historico, registro],
+      updatedAt: serverTimestamp()
     });
-    await updateDoc(doc(db, 'demandas', planId), { posts: updatedPosts, updatedAt: serverTimestamp() });
   };
 
   const handleAceitar = async () => {
-    if (!planId || !plan || !post || !userTask) return;
+    if (!postId || !post || !userTask) return;
     setSaving(true);
     try {
-      const updatedPosts = plan.posts.map((p: any) => {
-        if (p.id !== post.id) return p;
-        return {
-          ...p,
-          tasks: p.tasks.map((t: any) =>
-            t.id === userTask.id ? { ...t, status: 'em_andamento' } : t
-          )
-        };
+      const updatedTasks = (post.tasks || []).map((t: any) =>
+        t.id === userTask.id ? { ...t, status: 'em_andamento' } : t
+      );
+      await updateDoc(doc(db, 'posts', postId), {
+        tasks: updatedTasks,
+        updatedAt: serverTimestamp()
       });
-      await updateDoc(doc(db, 'demandas', planId), { posts: updatedPosts, updatedAt: serverTimestamp() });
       await registrarHistorico('Demanda aceita');
       toast.success('Demanda aceita! Mãos à obra!');
       await loadData();
@@ -206,7 +207,7 @@ export default function MinhaDemandaDetalhe() {
     setUploading(true);
     setUploadProgress(0);
     try {
-      const path = `demandas/${planId}/${postId}/${Date.now()}_${file.name}`;
+      const path = `posts/${postId}/${Date.now()}_${file.name}`;
       const storageRef = ref(storage, path);
       const uploadTask = uploadBytesResumable(storageRef, file);
       await new Promise<void>((resolve, reject) => {
@@ -231,54 +232,51 @@ export default function MinhaDemandaDetalhe() {
   };
 
   const salvarArquivoNaTask = async (url: string, tipo: 'video' | 'image', thumbnailUrl?: string, isSubstituicao = false) => {
-    if (!planId || !plan || !post || !userTask) return;
-    const updatedPosts = plan.posts.map((p: any) => {
-      if (p.id !== post.id) return p;
-      return {
-        ...p,
-        tasks: p.tasks.map((t: any) =>
-          t.id === userTask.id ? {
-            ...t,
-            status: 'arquivo_anexado',
-            arquivoUrl: url,
-            arquivoTipo: tipo,
-            thumbnailUrl: thumbnailUrl || null,
-            arquivoAnterior: isSubstituicao ? t.arquivoUrl : null,
-            arquivoEnviadoEm: new Date().toISOString()
-          } : t
-        )
-      };
+    if (!postId || !post || !userTask) return;
+    const updatedTasks = (post.tasks || []).map((t: any) =>
+      t.id === userTask.id ? {
+        ...t,
+        status: 'arquivo_anexado',
+        arquivoUrl: url,
+        arquivoTipo: tipo,
+        thumbnailUrl: thumbnailUrl || null,
+        arquivoAnterior: isSubstituicao ? t.arquivoUrl : null,
+        arquivoEnviadoEm: new Date().toISOString()
+      } : t
+    );
+    await updateDoc(doc(db, 'posts', postId), {
+      tasks: updatedTasks,
+      updatedAt: serverTimestamp()
     });
-    await updateDoc(doc(db, 'demandas', planId), { posts: updatedPosts, updatedAt: serverTimestamp() });
+
     const acao = isSubstituicao ? 'Arquivo substituído (anterior descartado)' : 'Arquivo enviado para revisão';
     await registrarHistorico(acao);
+
     await notificacaoService.criar({
       para: 'boranovfilms@gmail.com',
       tipo: 'arquivo_enviado',
       titulo: isSubstituicao ? 'Arquivo Substituído' : 'Arquivo Enviado para Revisão',
       descricao: `Post #${String(post.number).padStart(2, '0')} — ${post.headline?.slice(0, 50)}`,
-      planId: planId,
-      postId: post.id,
+      planId: post.planId,
+      postId,
       visto: false,
       criadoEm: new Date().toISOString()
     });
+
     await loadData();
   };
 
   const handleSaveDriveLink = async () => {
-    if (!planId || !plan || !post || !userTask || !driveLink) return;
+    if (!postId || !post || !userTask || !driveLink) return;
     setSavingDrive(true);
     try {
-      const updatedPosts = plan.posts.map((p: any) => {
-        if (p.id !== post.id) return p;
-        return {
-          ...p,
-          tasks: p.tasks.map((t: any) =>
-            t.id === userTask.id ? { ...t, driveLink, driveDownloadUrl: driveLink } : t
-          )
-        };
+      const updatedTasks = (post.tasks || []).map((t: any) =>
+        t.id === userTask.id ? { ...t, driveLink, driveDownloadUrl: driveLink } : t
+      );
+      await updateDoc(doc(db, 'posts', postId), {
+        tasks: updatedTasks,
+        updatedAt: serverTimestamp()
       });
-      await updateDoc(doc(db, 'demandas', planId), { posts: updatedPosts, updatedAt: serverTimestamp() });
       await registrarHistorico('Link do Drive salvo');
       toast.success('Link do Drive salvo!');
       setDriveLink('');
@@ -292,20 +290,17 @@ export default function MinhaDemandaDetalhe() {
   };
 
   const handleAprovar = async (taskId: string) => {
-    if (!planId || !plan || !post) return;
+    if (!postId || !post) return;
     setSaving(true);
     try {
-      const postAtualizado = plan.posts.find((p: any) => p.id === post.id);
-      const updatedPosts = plan.posts.map((p: any) => {
-        if (p.id !== post.id) return p;
-        return {
-          ...p,
-          tasks: (p.tasks || []).map((t: any) =>
-            t.id === taskId ? { ...t, status: 'concluido' } : t
-          )
-        };
+      const updatedTasks = (post.tasks || []).map((t: any) =>
+        t.id === taskId || t.status === 'arquivo_anexado' ? { ...t, status: 'concluido' } : t
+      );
+      await updateDoc(doc(db, 'posts', postId), {
+        tasks: updatedTasks,
+        status: updatedTasks.every((t: any) => t.status === 'concluido') ? 'concluido' : post.status,
+        updatedAt: serverTimestamp()
       });
-      await updateDoc(doc(db, 'demandas', planId), { posts: updatedPosts, updatedAt: serverTimestamp() });
       await registrarHistorico('Arquivo aprovado');
       toast.success('Arquivo aprovado!');
       await loadData();
@@ -317,28 +312,25 @@ export default function MinhaDemandaDetalhe() {
   };
 
   const handlePedirCorrecao = async (taskId: string, responsibleEmail: string) => {
-    if (!planId || !plan || !post) return;
+    if (!postId || !post) return;
     if (!anotacao.trim()) { toast.error('Descreva o que precisa ser corrigido'); return; }
     setSaving(true);
     try {
-      const updatedPosts = plan.posts.map((p: any) => {
-        if (p.id !== post.id) return p;
-        return {
-          ...p,
-          tasks: p.tasks.map((t: any) =>
-            t.id === taskId ? { ...t, status: 'fazer_correcao' } : t
-          )
-        };
+      const updatedTasks = (post.tasks || []).map((t: any) =>
+        t.id === taskId || t.status === 'arquivo_anexado' ? { ...t, status: 'fazer_correcao' } : t
+      );
+      await updateDoc(doc(db, 'posts', postId), {
+        tasks: updatedTasks,
+        updatedAt: serverTimestamp()
       });
-      await updateDoc(doc(db, 'demandas', planId), { posts: updatedPosts, updatedAt: serverTimestamp() });
       await registrarHistorico('Correção solicitada', anotacao);
       await notificacaoService.criar({
         para: responsibleEmail,
         tipo: 'tarefa_delegada',
         titulo: 'Correção Solicitada',
         descricao: `Post #${String(post.number).padStart(2, '0')} — ${anotacao.slice(0, 60)}`,
-        planId: planId,
-        postId: post.id,
+        planId: post.planId,
+        postId,
         visto: false,
         criadoEm: new Date().toISOString()
       });
@@ -348,22 +340,6 @@ export default function MinhaDemandaDetalhe() {
       await loadData();
     } catch (error) {
       toast.error('Erro ao solicitar correção');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleAnotacao = async () => {
-    if (!anotacao.trim()) { toast.error('Escreva uma anotação'); return; }
-    setSaving(true);
-    try {
-      await registrarHistorico('Anotação', anotacao);
-      setAnotacao('');
-      setShowAnotacao(false);
-      toast.success('Anotação registrada!');
-      await loadData();
-    } catch (error) {
-      toast.error('Erro ao salvar anotação');
     } finally {
       setSaving(false);
     }
@@ -390,12 +366,18 @@ export default function MinhaDemandaDetalhe() {
       pendente: { label: '⏳ Pendente', class: 'bg-amber-500/10 text-amber-400 border-amber-500/20' },
       em_andamento: { label: '⚡ Em Andamento', class: 'bg-blue-500/10 text-blue-400 border-blue-500/20' },
       arquivo_anexado: { label: '📎 Arquivo Enviado', class: 'bg-purple-500/10 text-purple-400 border-purple-500/20' },
-      concluido: { label: '✅ Concluído', class: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' },
+      concluido: { label: '✅ Aprovado', class: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' },
       fazer_correcao: { label: '🔄 Correção', class: 'bg-red-500/10 text-red-400 border-red-500/20' },
     };
     const config = configs[status] || configs.pendente;
     return <span className={cn('px-3 py-1 rounded-full border text-[9px] font-black uppercase tracking-widest', config.class)}>{config.label}</span>;
   };
+
+  const isEditorDesigner = ['editor', 'designer', 'midia_social'].includes(userRole);
+  const isRedatorMaster = ['master', 'admin', 'redator'].includes(userRole);
+  const isClienteEquipe = ['cliente', 'equipe'].includes(userRole);
+  const allTasks = post?.tasks || [];
+  const historico = post?.historico || [];
 
   if (loading) return (
     <div className="min-h-[60vh] flex items-center justify-center">
@@ -403,15 +385,7 @@ export default function MinhaDemandaDetalhe() {
     </div>
   );
 
-  if (!post || !plan) return null;
-
-  const isEditorDesigner = ['editor', 'designer'].includes(userRole);
-  const isRedatorMaster = ['redator', 'admin', 'master'].includes(userRole);
-  const isClienteEquipe = ['cliente', 'equipe'].includes(userRole);
-
-  const postAtual = plan?.posts?.find((p: any) => p.id === post?.id);
-  const allTasks = postAtual?.tasks || post?.tasks || [];
-  const historico = postAtual?.historico || post?.historico || [];
+  if (!post) return null;
 
   return (
     <div className="space-y-6 pb-8 text-left">
@@ -421,13 +395,13 @@ export default function MinhaDemandaDetalhe() {
         </button>
         <div>
           <p className="text-[#ff5351] text-xs font-black uppercase tracking-[0.2em] mb-2">
-            DETALHES DA TAREFA • {clientName}
+            {isEditorDesigner ? 'Sua Tarefa' : isRedatorMaster ? 'Revisão de Arquivo' : 'Aprovação de Conteúdo'} • {clientName}
           </p>
-          <h1 className="text-3xl font-black text-white uppercase italic tracking-tight leading-none">
+          <h1 className="text-3xl font-black text-white uppercase italic tracking-tight">
             Post #{String(post.number).padStart(2, '0')} — {post.type}
           </h1>
-          <p className="text-zinc-500 text-sm mt-1">{plan.name} / {post.headline}</p>
-          <div className="flex items-center gap-2 mt-4">
+          <p className="text-zinc-500 text-sm mt-1">{planNome}</p>
+          <div className="flex items-center gap-2 mt-3">
             {userTask && (
               <span className="px-3 py-1 rounded-full border text-[9px] font-black uppercase tracking-widest bg-[#ff5351]/10 text-[#ff5351] border-[#ff5351]/20">
                 {getDeptIcon(userTask.dept)} {userTask.deptLabel}
@@ -444,7 +418,7 @@ export default function MinhaDemandaDetalhe() {
         <div className="space-y-6">
           <div className="bg-[#1f1f1f] border border-zinc-800 rounded-[24px] overflow-hidden">
             <div className="p-5 border-b border-zinc-800 flex items-center justify-between">
-              <h2 className="text-xs font-black uppercase tracking-widest text-white italic">Conteúdo do Post</h2>
+              <h2 className="text-xs font-black uppercase tracking-widest text-white">Conteúdo do Post</h2>
               <div className="flex items-center gap-3">
                 <span className={cn('px-2 py-1 rounded-lg border text-[8px] font-black uppercase tracking-widest', getTypeStyle(post.type))}>
                   {post.type}
@@ -452,16 +426,16 @@ export default function MinhaDemandaDetalhe() {
                 <span className="text-zinc-500 text-[10px] font-black uppercase">{post.publishDate}</span>
               </div>
             </div>
-            <div className="p-6 space-y-6">
+            <div className="p-6 space-y-5">
               <div>
-                <span className="text-[9px] font-black uppercase tracking-[0.3em] text-[#ff5351] block mb-2">Headline / Título</span>
+                <span className="text-[9px] font-black uppercase tracking-[0.3em] text-[#ff5351] block mb-2">Headline</span>
                 <p className="text-white font-black uppercase text-base leading-tight">{post.headline}</p>
               </div>
               {post.caption && (
                 <>
                   <div className="h-px bg-zinc-800" />
                   <div>
-                    <span className="text-[9px] font-black uppercase tracking-[0.3em] text-[#ff5351] block mb-2">Legenda Final</span>
+                    <span className="text-[9px] font-black uppercase tracking-[0.3em] text-[#ff5351] block mb-2">Legenda</span>
                     <p className="text-zinc-300 text-sm leading-relaxed whitespace-pre-wrap">{post.caption}</p>
                   </div>
                 </>
@@ -470,7 +444,7 @@ export default function MinhaDemandaDetalhe() {
                 <>
                   <div className="h-px bg-zinc-800" />
                   <div>
-                    <span className="text-[9px] font-black uppercase tracking-[0.3em] text-[#ff5351] block mb-2">Call to Action (Botão/Link)</span>
+                    <span className="text-[9px] font-black uppercase tracking-[0.3em] text-[#ff5351] block mb-2">CTA</span>
                     <div className="bg-[#ff5351]/5 border border-[#ff5351]/15 rounded-xl p-3">
                       <p className="text-[#ff5351] text-sm font-bold">🎯 {post.cta}</p>
                     </div>
@@ -481,7 +455,7 @@ export default function MinhaDemandaDetalhe() {
                 <>
                   <div className="h-px bg-zinc-800" />
                   <div>
-                    <span className="text-[9px] font-black uppercase tracking-[0.3em] text-[#ff5351] block mb-2">Hashtags Recomendadas</span>
+                    <span className="text-[9px] font-black uppercase tracking-[0.3em] text-[#ff5351] block mb-2">Hashtags</span>
                     <p className="text-zinc-500 text-xs italic">{post.hashtags}</p>
                   </div>
                 </>
@@ -490,15 +464,12 @@ export default function MinhaDemandaDetalhe() {
                 <>
                   <div className="h-px bg-zinc-800" />
                   <div>
-                    <span className="text-[9px] font-black uppercase tracking-[0.3em] text-[#ff5351] block mb-4">Estrutura de Slides ({post.slides.length})</span>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <span className="text-[9px] font-black uppercase tracking-[0.3em] text-[#ff5351] block mb-3">Slides</span>
+                    <div className="space-y-2">
                       {post.slides.map((slide: any, i: number) => (
-                        <div key={i} className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
-                          <p className="text-white text-[10px] font-black uppercase mb-1.5 flex items-center gap-2">
-                            <span className="w-5 h-5 bg-zinc-800 rounded flex items-center justify-center text-zinc-500">{i + 1}</span>
-                            {slide.title}
-                          </p>
-                          {slide.description && <p className="text-zinc-500 text-[11px] leading-relaxed">{slide.description}</p>}
+                        <div key={i} className="bg-zinc-900 border border-zinc-800 rounded-xl p-3">
+                          <p className="text-white text-xs font-black uppercase mb-1">Slide {i + 1} — {slide.title}</p>
+                          {slide.description && <p className="text-zinc-400 text-xs">{slide.description}</p>}
                         </div>
                       ))}
                     </div>
@@ -508,22 +479,26 @@ export default function MinhaDemandaDetalhe() {
             </div>
           </div>
 
-          {/* HISTÓRICO DE AÇÕES */}
+          {/* Histórico */}
           {historico.length > 0 && (
             <div className="bg-[#1f1f1f] border border-zinc-800 rounded-[24px] overflow-hidden">
               <div className="p-5 border-b border-zinc-800">
-                <h2 className="text-xs font-black uppercase tracking-widest text-white italic">Histórico da Demanda</h2>
+                <h2 className="text-xs font-black uppercase tracking-widest text-white">Histórico</h2>
               </div>
-              <div className="p-6 space-y-4">
+              <div className="p-6 space-y-3">
                 {historico.map((h: any, i: number) => (
-                  <div key={i} className="flex gap-4">
-                    <div className="w-8 h-8 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center shrink-0">
-                      <Clock className="w-4 h-4 text-zinc-600" />
+                  <div key={i} className="flex gap-3 p-3 bg-zinc-900 border border-zinc-800 rounded-xl">
+                    <div className="w-8 h-8 rounded-full bg-[#ff5351]/10 border border-[#ff5351]/20 flex items-center justify-center shrink-0">
+                      <User className="w-3.5 h-3.5 text-[#ff5351]" />
                     </div>
-                    <div>
-                      <div className="flex items-center gap-2 mb-0.5">
-                        <span className="text-white text-[10px] font-black uppercase">{h.quem}</span>
-                        <span className="text-zinc-600 text-[9px] font-bold tracking-tighter">{new Date(h.data).toLocaleString('pt-BR')}</span>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-white text-xs font-black uppercase">{h.quem}</span>
+                        <span className="text-zinc-600 text-[9px]">•</span>
+                        <span className="text-zinc-500 text-[9px] flex items-center gap-1">
+                          <Clock className="w-2.5 h-2.5" />
+                          {new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(h.data))}
+                        </span>
                       </div>
                       <p className="text-zinc-400 text-xs font-bold uppercase">{h.acao}</p>
                       {h.obs && <p className="text-zinc-500 text-xs mt-1 italic">"{h.obs}"</p>}
@@ -575,7 +550,7 @@ export default function MinhaDemandaDetalhe() {
               </div>
             )}
 
-            {/* PREVIEW — todos veem */}
+            {/* PREVIEW */}
             {previewUrl && (
               <div>
                 <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-2">Preview</p>
