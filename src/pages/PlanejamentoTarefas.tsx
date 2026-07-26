@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Calendar, Loader2, Zap, Eye, X, Save, ChevronDown } from 'lucide-react';
 import { toast } from 'react-hot-toast';
-import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
 import { contentPlanService, ContentPlan, ContentPost, MicroTask, TaskDept } from '../services/contentPlanService';
 import { notificacaoService } from '../services/notificacaoService';
@@ -38,7 +38,6 @@ function calcularFasePost(
   plan: ContentPlan,
   workflowModel: WorkflowModel | null
 ): { faseId: string; label: string; color: string; bg: string; border: string; barColor: string; percent: number } {
-  // Se não temos modelo, usa fallback
   if (!workflowModel || !workflowModel.stages || workflowModel.stages.length === 0) {
     const tasks = (post as any).tasks || [];
     if (tasks.length === 0) {
@@ -66,44 +65,25 @@ function calcularFasePost(
     };
   }
 
-  // Calcula etapas cumpridas com base no fluxo
   let etapasCumpridas = 0;
   const totalEtapas = workflowModel.stages.length;
 
-  // Etapa 1: REDAÇÃO — post existe (sempre cumprida)
-  if (post.id) {
-    etapasCumpridas = 1;
-  }
-
-  // Etapa 2: APROVAÇÃO BORANOV (stage 1) — planejamento saiu de rascunho
-  if (plan.status && plan.status !== 'rascunho') {
-    etapasCumpridas = Math.max(etapasCumpridas, 2);
-  }
-
-  // Etapa 3: APROVAÇÃO CLIENTE (stage 2) — post tem aprovação do cliente
+  if (post.id) etapasCumpridas = 1;
+  if (plan.status && plan.status !== 'rascunho') etapasCumpridas = Math.max(etapasCumpridas, 2);
+  
   const hasClientApproval = (post as any).approvals?.some((a: any) => a.role === 'cliente' && a.status === 'aprovado');
-  if (hasClientApproval) {
-    etapasCumpridas = Math.max(etapasCumpridas, 3);
-  }
+  if (hasClientApproval) etapasCumpridas = Math.max(etapasCumpridas, 3);
 
-  // Etapa 4: VALIDAÇÃO EQUIPE CLIENTE (stage 3) — post tem validação
   const hasTeamValidation = (post as any).approvals?.some((a: any) => a.role === 'equipe' && a.status === 'validado_equipe');
-  if (hasTeamValidation) {
-    etapasCumpridas = Math.max(etapasCumpridas, 4);
-  }
+  if (hasTeamValidation) etapasCumpridas = Math.max(etapasCumpridas, 4);
 
-  // Etapa 5: PRODUÇÃO (stage 4) — post foi delegado (tem tarefas)
   const tasks = (post as any).tasks || [];
-  if (tasks.length > 0) {
-    etapasCumpridas = Math.max(etapasCumpridas, 5);
-  }
+  if (tasks.length > 0) etapasCumpridas = Math.max(etapasCumpridas, 5);
 
-  // Etapas 6+: Preenchidas pela Fase 2 (produção real)
-  // Por enquanto, se todas as tasks estão concluídas, considera até concluído
   if (tasks.length > 0) {
     const concluidas = tasks.filter((t: any) => t.status === 'concluido').length;
     if (concluidas === tasks.length && tasks.length > 0) {
-      etapasCumpridas = totalEtapas; // Concluído
+      etapasCumpridas = totalEtapas;
     }
   }
 
@@ -122,7 +102,6 @@ function calcularFasePost(
   }
 
   if (tasks.length > 0) {
-    const concluidas = tasks.filter((t: any) => t.status === 'concluido').length;
     const emAndamento = tasks.find((t: any) => t.status === 'em_andamento');
     return {
       faseId: 'producao',
@@ -174,16 +153,13 @@ export default function PlanejamentoTarefas() {
   const [loading, setLoading] = useState(true);
   const [userRole, setUserRole] = useState('cliente');
   const [roleLoaded, setRoleLoaded] = useState(false);
-
   const [showDelegModal, setShowDelegModal] = useState(false);
   const [selectedPost, setSelectedPost] = useState<ContentPost | null>(null);
   const [selectedDepts, setSelectedDepts] = useState<TaskDept[]>([]);
-  const [deptResponsibles, setDeptResponsibles] = useState<Record<TaskDept, string>>({} as any);
-  const [deptTags, setDeptTags] = useState<Record<TaskDept, string[]>>({} as any);
-  const [deptDescriptions, setDeptDescriptions] = useState<Record<TaskDept, string>>({} as any);
+  const [deptTags, setDeptTags] = useState<Record<string, string[]>>({});
+  const [deptDescriptions, setDeptDescriptions] = useState<Record<string, string>>({});
   const [depArteDependeVideo, setDepArteDependeVideo] = useState(false);
   const [depVideoDependeArte, setDepVideoDependeArte] = useState(false);
-  const [teamMembers, setTeamMembers] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
 
   const internalRoles = ['master', 'admin', 'redator', 'editor', 'designer', 'midia_social'];
@@ -198,30 +174,14 @@ export default function PlanejamentoTarefas() {
     const currentEmail = auth.currentUser?.email?.toLowerCase();
     if (!currentEmail) { setRoleLoaded(true); return; }
     try {
-      if (currentEmail === 'admin@boraselect.com.br') {
-        setUserRole('master');
-        setRoleLoaded(true);
-        return;
-      }
-      // Busca em boraselect primeiro
+      if (currentEmail === 'admin@boraselect.com.br') { setUserRole('master'); setRoleLoaded(true); return; }
       const qBora = query(collection(db, 'boraselect'), where('email', '==', currentEmail));
       const snapBora = await getDocs(qBora);
-      if (!snapBora.empty) {
-        setUserRole(snapBora.docs[0].data().role || 'redator');
-        setRoleLoaded(true);
-        return;
-      }
-      // Depois em clientes
+      if (!snapBora.empty) { setUserRole(snapBora.docs[0].data().role || 'redator'); setRoleLoaded(true); return; }
       const q = query(collection(db, 'clientes'), where('email', '==', currentEmail));
       const snap = await getDocs(q);
-      if (!snap.empty) {
-        setUserRole(snap.docs[0].data().role || 'cliente');
-      }
-    } catch (e) {
-      console.warn('Erro ao carregar role:', e);
-    } finally {
-      setRoleLoaded(true);
-    }
+      if (!snap.empty) { setUserRole(snap.docs[0].data().role || 'cliente'); }
+    } catch (e) { console.warn('Erro ao carregar role:', e); } finally { setRoleLoaded(true); }
   };
 
   const loadData = async () => {
@@ -235,52 +195,20 @@ export default function PlanejamentoTarefas() {
         return;
       }
       setPlan(planData);
-
-      // Carrega o modelo de fluxo vinculado ao cliente
       if (planData.clientId) {
         try {
           const modelosSnap = await getDocs(collection(db, 'workflowModels'));
           const modelos = modelosSnap.docs.map(d => ({ id: d.id, ...d.data() } as WorkflowModel));
-          
-          // Tenta buscar o modelo "PLANEJAMENTO" vinculado ao cliente
-          // Por enquanto, usa o primeiro modelo de tipo "PLANEJAMENTO" encontrado
           const planningModel = modelos.find(m => m.name === 'PLANEJAMENTO');
-          if (planningModel) {
-            setWorkflowModel(planningModel);
-          }
-        } catch (error) {
-          console.warn('Erro ao carregar modelo de fluxo:', error);
-        }
+          if (planningModel) setWorkflowModel(planningModel);
+        } catch (error) { console.warn('Erro ao carregar modelo de fluxo:', error); }
       }
-
-      // Busca nome do cliente em 'clientes'
       const clientSnap = await getDoc(doc(db, 'clientes', planData.clientId));
-      if (clientSnap.exists()) {
-        setClientName(clientSnap.data().name || '');
-      }
-
-      // Membros da equipe do cliente
-      const q = query(
-        collection(db, 'clientes'),
-        where('type', '==', 'membro'),
-        where('companyId', '==', planData.clientId)
-      );
-      const snap = await getDocs(q);
-      const clientTeam = snap.docs.map(d => ({ id: d.id, ...d.data(), grupo: 'Equipe Cliente' }));
-
-      // Membros internos Boranov
-      const boranovSnap = await getDocs(collection(db, 'boraselect'));
-      const boranovMembers = boranovSnap.docs.map(d => ({
-        id: d.id, ...d.data(), grupo: 'Equipe Boranov'
-      }));
-
-      setTeamMembers([...clientTeam, ...boranovMembers]);
+      if (clientSnap.exists()) setClientName(clientSnap.data().name || '');
     } catch (error) {
       console.error(error);
       toast.error('Erro ao carregar dados');
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   };
 
   const postsOrdenados = useMemo(() => {
@@ -292,7 +220,6 @@ export default function PlanejamentoTarefas() {
         return new Date(y1, m1 - 1, d1).getTime() - new Date(y2, m2 - 1, d2).getTime();
       })
       .filter(post => {
-        // Para o redator: mostra apenas posts ainda não delegados
         if (isInternal) {
           const tasks = (post as any).tasks || [];
           return tasks.length === 0;
@@ -301,10 +228,7 @@ export default function PlanejamentoTarefas() {
       });
   }, [plan, isInternal]);
 
-  // Barra geral usa TODOS os posts, não só os visíveis
-  const allPosts = useMemo(() => {
-    return plan?.posts || [];
-  }, [plan]);
+  const allPosts = useMemo(() => plan?.posts || [], [plan]);
 
   const porcentagemGeral = useMemo(() => {
     if (allPosts.length === 0) return 0;
@@ -315,23 +239,11 @@ export default function PlanejamentoTarefas() {
     return Math.round(totalPercent / allPosts.length);
   }, [allPosts, plan, workflowModel]);
 
-  const getTypeStyles = (type: string) => {
-    const styles: Record<string, string> = {
-      FEED: 'bg-blue-900/40 text-blue-400 border-blue-500/20',
-      REEL: 'bg-purple-900/40 text-purple-400 border-purple-500/20',
-      STORIES: 'bg-emerald-900/40 text-emerald-400 border-emerald-500/20',
-      CARROSSEL: 'bg-orange-900/40 text-orange-400 border-orange-500/20',
-      VIDEO: 'bg-red-900/40 text-red-400 border-red-500/20'
-    };
-    return styles[type] || 'bg-zinc-800 text-zinc-400 border-zinc-700';
-  };
-
   const openDelegModal = (post: ContentPost) => {
     setSelectedPost(post);
     setSelectedDepts([]);
-    setDeptResponsibles({} as any);
-    setDeptTags({} as any);
-    setDeptDescriptions({} as any);
+    setDeptTags({});
+    setDeptDescriptions({});
     setDepArteDependeVideo(false);
     setDepVideoDependeArte(false);
     setShowDelegModal(true);
@@ -356,18 +268,24 @@ export default function PlanejamentoTarefas() {
     }
     setSaving(true);
     try {
+      const deptToRole: Record<string, string> = {
+        video: 'editor',
+        design: 'designer',
+        redacao: 'redator',
+        midia_social: 'midia_social'
+      };
+
       const tasks: MicroTask[] = selectedDepts.map(dept => {
         const deptInfo = DEPTS.find(d => d.id === dept)!;
         let dependsOn: TaskDept | null = null;
         if (dept === 'design' && depArteDependeVideo) dependsOn = 'video';
         if (dept === 'video' && depVideoDependeArte) dependsOn = 'design';
-
         return {
           id: `task_${dept}_${Date.now()}`,
           dept,
           deptLabel: deptInfo.name,
-          responsibleEmail: deptResponsibles[dept] || '',
-          responsibleName: deptResponsibles[dept] || '',
+          responsibleEmail: '', // Agora delegado para departamento
+          responsibleName: 'Aguardando...', 
           tags: deptTags[dept] || [],
           description: deptDescriptions[dept] || '',
           status: 'pendente' as const,
@@ -378,32 +296,37 @@ export default function PlanejamentoTarefas() {
 
       await contentPlanService.delegatePost(plan!.id!, selectedPost.id, tasks);
 
-const emailsNotificados = new Set<string>();
-for (const task of tasks) {
-  if (task.responsibleEmail && !emailsNotificados.has(task.responsibleEmail)) {
-    emailsNotificados.add(task.responsibleEmail);
-    await notificacaoService.criar({
-      para: task.responsibleEmail,
-      tipo: 'tarefa_delegada',
-      titulo: 'Nova Tarefa Delegada',
-      descricao: `Post #${String(selectedPost.number).padStart(2, '0')} — ${selectedPost.headline?.slice(0, 50)}`,
-      planId: plan!.id!,
-      visto: false,
-      criadoEm: new Date().toISOString()
-    });
-  }
-}
+      // Notificar todos os membros dos departamentos selecionados
+      for (const dept of selectedDepts) {
+        const deptInfo = DEPTS.find(d => d.id === dept)!;
+        const roleToNotify = deptToRole[dept];
+        const membrosSnap = await getDocs(
+          query(collection(db, 'boraselect'), where('role', '==', roleToNotify))
+        );
 
-toast.success('Tarefas delegadas com sucesso!');
+        for (const docMembro of membrosSnap.docs) {
+          const membro = docMembro.data();
+          await notificacaoService.criar({
+            para: membro.email?.toLowerCase(),
+            tipo: 'producao',
+            titulo: `NOVA TAREFA: ${deptInfo.name} — ${selectedPost.headline}`,
+            descricao: deptDescriptions[dept] || `Nova tarefa de ${deptInfo.name} para o post \"${selectedPost.headline}\"`,
+            planId: plan!.id,
+            postId: selectedPost.id
+          });
+        }
+      }
+
+      toast.success('Tarefas delegadas com sucesso!');
       setShowDelegModal(false);
       setSelectedDepts([]);
-      setDeptResponsibles({} as any);
-      setDeptTags({} as any);
-      setDeptDescriptions({} as any);
+      setDeptTags({});
+      setDeptDescriptions({});
       setDepArteDependeVideo(false);
       setDepVideoDependeArte(false);
       loadData();
     } catch (error) {
+      console.error(error);
       toast.error('Erro ao delegar tarefas.');
     } finally {
       setSaving(false);
@@ -412,28 +335,35 @@ toast.success('Tarefas delegadas com sucesso!');
 
   if (loading || !plan || !roleLoaded) {
     return (
-      <div className="min-h-[60vh] flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-[#ff5351]" />
+      <div className=\"min-h-[60vh] flex items-center justify-center\">
+        <Loader2 className=\"w-8 h-8 animate-spin text-[#ff5351]\" />
       </div>
     );
   }
 
   return (
-    <div className="max-w-7xl mx-auto text-left pb-20">
-      <header className="mb-8">
-        <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-[#ff5351] text-[10px] font-black uppercase tracking-widest mb-4 hover:brightness-110 transition-all">
-          <ArrowLeft className="w-4 h-4" /> Voltar
+    <div className=\"animate-in fade-in duration-700 pb-20\">
+      <header className=\"mb-8\">
+        <button
+          onClick={() => navigate(-1)}
+          className=\"flex items-center gap-2 text-[#ff5351] text-[10px] font-black uppercase tracking-widest mb-4 hover:brightness-110 transition-all\"
+        >
+          <ArrowLeft className=\"w-4 h-4\" /> Voltar
         </button>
-        <p className="text-[10px] font-black uppercase tracking-widest text-[#ff5351] mb-1">PLANEJAMENTO · {clientName}</p>
-        <h1 className="text-3xl font-black text-white uppercase italic tracking-tighter">{plan.name}</h1>
-        <p className="text-zinc-500 text-sm mt-1">{plan.monthReference}</p>
+        <p className=\"text-[10px] font-black uppercase tracking-[0.3em] text-zinc-500\">
+          PLANEJAMENTO · {clientName}
+        </p>
+        <h1 className=\"text-4xl font-black text-white uppercase italic tracking-tight\">
+          # {plan.name}
+        </h1>
+        <p className=\"text-zinc-500 text-sm mt-1\">{plan.monthReference}</p>
         {isInternal && (
-          <div className="flex items-center gap-3 mt-3">
-            <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">
+          <div className=\"flex items-center gap-3 mt-4\">
+            <span className=\"px-3 py-1 bg-amber-500/10 text-amber-500 border border-amber-500/20 rounded-full text-[9px] font-black uppercase tracking-widest\">
               {postsOrdenados.length} post{postsOrdenados.length !== 1 ? 's' : ''} aguardando delegação
             </span>
             {postsOrdenados.length === 0 && (
-              <span className="px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-full text-emerald-400 text-[9px] font-black uppercase tracking-widest">
+              <span className=\"text-emerald-500 text-[10px] font-black uppercase tracking-widest\">
                 ✓ Todos delegados!
               </span>
             )}
@@ -441,156 +371,174 @@ toast.success('Tarefas delegadas com sucesso!');
         )}
       </header>
 
-      <div className="bg-[#1f1f1f] border border-zinc-800 rounded-3xl p-6 mb-8">
-        <div className="flex items-center justify-between mb-4">
-          <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Progresso Geral</span>
-          <span className="text-2xl font-black italic text-[#ff5351]">{porcentagemGeral}%</span>
+      {/* Barra de Progresso Geral */}
+      <div className=\"bg-zinc-900/50 border border-zinc-800 rounded-[32px] p-8 mb-8\">
+        <div className=\"flex items-center justify-between mb-4\">
+          <span className=\"text-[10px] font-black uppercase tracking-widest text-zinc-400\">Progresso Geral</span>
+          <span className=\"text-xl font-black text-[#ff5351] italic\">{porcentagemGeral}%</span>
         </div>
-        <div className="w-full h-1 bg-zinc-800 rounded-full overflow-hidden mb-4">
-          <div className="h-full bg-[#ff5351] rounded-full transition-all duration-700" style={{ width: `${porcentagemGeral}%` }} />
-        </div>
-        <div className="flex flex-wrap gap-1">
+        <div className=\"grid grid-cols-4 md:grid-cols-12 gap-2\">
           {allPosts.map((post, idx) => {
             const fase = calcularFasePost(post, plan, workflowModel);
-            const isConcluido = fase.percent === 100;
             const isActive = idx < Math.ceil((porcentagemGeral / 100) * allPosts.length);
             return (
-              <div key={post.id} title={`Post ${post.number}: ${fase.percent}%`} className={cn('w-4 h-1.5 rounded-sm transition-all', isConcluido ? 'bg-[#ff5351]' : isActive ? 'bg-amber-500' : 'bg-zinc-800')} />
+              <div
+                key={idx}
+                className={cn(
+                  \"h-1.5 rounded-full transition-all duration-700\",
+                  isActive ? \"bg-[#ff5351]\" : \"bg-zinc-800\"
+                )}
+                title={`Post ${idx + 1}: ${fase.label}`}
+              />
             );
           })}
         </div>
       </div>
 
-      <div className="bg-[#1f1f1f] border border-zinc-800 rounded-3xl overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-zinc-800">
-                <th className="text-left px-6 py-4 text-[9px] font-black uppercase tracking-widest text-zinc-500">POST</th>
-                <th className="text-center px-6 py-4 text-[9px] font-black uppercase tracking-widest text-zinc-500">TIPO</th>
-                <th className="text-center px-6 py-4 text-[9px] font-black uppercase tracking-widest text-zinc-500">DATA POSTAGEM</th>
-                <th className="text-center px-6 py-4 text-[9px] font-black uppercase tracking-widest text-zinc-500">FASE ATUAL</th>
-                <th className="text-left px-6 py-4 text-[9px] font-black uppercase tracking-widest text-zinc-500">PROGRESSO</th>
-                <th className="text-center px-6 py-4 text-[9px] font-black uppercase tracking-widest text-zinc-500">AÇÃO</th>
-              </tr>
-            </thead>
-            <tbody>
-              {postsOrdenados.map((post) => {
-                const fase = calcularFasePost(post, plan, workflowModel);
+      <div className=\"bg-[#141414] border border-zinc-800 rounded-[32px] overflow-hidden shadow-2xl\">
+        <DataTable
+          data={postsOrdenados}
+          columns={[
+            {
+              header: 'POST',
+              className: 'w-96',
+              accessor: (post) => (
+                <div className=\"flex items-center gap-4 py-2\">
+                  <div className=\"text-zinc-600 font-black text-xl italic\">#{String(post.number).padStart(2, '0')}</div>
+                  <div className=\"flex-1 min-w-0\">
+                    <p className=\"text-white font-black uppercase text-sm truncate\">{post.headline || 'Sem título'}</p>
+                    <p className=\"text-zinc-500 text-[10px] truncate uppercase tracking-widest\">{post.caption?.slice(0, 80)}...</p>
+                  </div>
+                </div>
+              )
+            },
+            {
+              header: 'TIPO',
+              accessor: (post) => (
+                <span className={cn(
+                  \"px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-widest border\",
+                  post.type === 'FEED' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
+                  post.type === 'REEL' ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' :
+                  post.type === 'STORIES' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+                  post.type === 'CARROSSEL' ? 'bg-orange-500/10 text-orange-400 border-orange-500/20' :
+                  'bg-red-500/10 text-red-400 border-red-500/20'
+                )}>
+                  {post.type}
+                </span>
+              ),
+              align: 'center'
+            },
+            {
+              header: 'DATA POSTAGEM',
+              accessor: (post) => {
                 const dateInfo = formatDate(post.publishDate);
-                const hasTasks = (post as any).tasks && (post as any).tasks.length > 0;
-
                 return (
-                  <tr key={post.id} className="border-b border-zinc-800/50 hover:bg-zinc-900/30 transition-all">
-                    <td className="px-6 py-5">
-                      <div className="flex items-start gap-3">
-                        <span className="text-[10px] font-black text-zinc-600 mt-0.5">#{String(post.number).padStart(2, '0')}</span>
-                        <div>
-                          <p className="text-white font-black uppercase text-sm leading-tight">{post.headline || 'Sem título'}</p>
-                          <p className="text-zinc-500 text-[10px] mt-1 line-clamp-2">{post.caption}</p>
-                        </div>
-                      </div>
-                    </td>
-
-                    <td className="px-6 py-5 text-center">
-                      <span className={cn('px-2 py-1 rounded-lg border text-[8px] font-black uppercase tracking-widest', getTypeStyles(post.type))}>
-                        {post.type}
-                      </span>
-                    </td>
-
-                    <td className="px-6 py-5 text-center">
-                      <div className="flex flex-col items-center">
-                        <span className={cn('text-xs font-black uppercase', dateInfo.isUrgente ? 'text-amber-400' : 'text-white')}>
-                          {dateInfo.data}
-                        </span>
-                        <span className="text-[9px] text-zinc-500 mt-0.5">{dateInfo.diaSemana}</span>
-                        {dateInfo.isUrgente && (
-                          <span className="text-[7px] font-black uppercase tracking-widest text-amber-500 mt-1">URGENTE</span>
-                        )}
-                      </div>
-                    </td>
-
-                    <td className="px-6 py-5 text-center">
-                      <div className="flex items-center justify-center gap-2">
-                        <span className={cn('w-2 h-2 rounded-full', fase.barColor)} />
-                        <span className={cn('px-2 py-1 rounded-lg border text-[8px] font-black uppercase tracking-widest', fase.bg, fase.color, fase.border)}>
-                          {fase.label}
-                        </span>
-                      </div>
-                    </td>
-
-                    <td className="px-6 py-5">
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-3">
-                          <div className="flex-1 h-1 bg-zinc-800 rounded-full overflow-hidden">
-                            <div className={cn('h-full rounded-full transition-all duration-500', fase.barColor)} style={{ width: `${fase.percent}%` }} />
-                          </div>
-                          <span className={cn('text-[10px] font-black w-8 text-right', fase.color)}>{fase.percent}%</span>
-                        </div>
-                      </div>
-                    </td>
-
-                    <td className="px-6 py-5 text-center">
-                      {!roleLoaded ? (
-                        <Loader2 className="w-4 h-4 animate-spin text-zinc-600 mx-auto" />
-                      ) : isInternal ? (
-                        hasTasks ? (
-                          <button
-                            onClick={() => toast.success('Em breve: visualização de tarefas!')}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 border border-zinc-800 rounded-xl text-[9px] font-black uppercase tracking-widest text-zinc-400 hover:text-white hover:border-[#ff5351] transition-all"
-                          >
-                            <Eye className="w-3 h-3" /> Ver
-                          </button>
-                        ) : (
-                          <button
-                            onClick={() => openDelegModal(post)}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#ff5351] text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:brightness-110 transition-all"
-                          >
-                            <Zap className="w-3 h-3" /> Delegar
-                          </button>
-                        )
-                      ) : (
-                        <span className={cn('px-2 py-1 rounded-lg border text-[8px] font-black uppercase tracking-widest', fase.bg, fase.color, fase.border)}>
-                          {fase.label}
-                        </span>
-                      )}
-                    </td>
-                  </tr>
+                  <div className=\"flex flex-col items-center\">
+                    <span className=\"text-zinc-400 font-bold text-xs\">{dateInfo.data}</span>
+                    <span className=\"text-zinc-600 text-[9px] uppercase font-black\">{dateInfo.diaSemana}</span>
+                    {dateInfo.isUrgente && (
+                      <span className=\"mt-1 px-1.5 py-0.5 bg-red-500/10 text-red-400 text-[7px] font-black uppercase rounded border border-red-500/20\">URGENTE</span>
+                    )}
+                  </div>
                 );
-              })}
-            </tbody>
-          </table>
-        </div>
+              },
+              align: 'center'
+            },
+            {
+              header: 'FASE ATUAL',
+              accessor: (post) => {
+                const fase = calcularFasePost(post, plan, workflowModel);
+                return (
+                  <div className={cn(\"px-3 py-1 rounded-full border text-[9px] font-black uppercase tracking-widest\", fase.bg, fase.color, fase.border)}>
+                    {fase.label}
+                  </div>
+                );
+              },
+              align: 'center'
+            },
+            {
+              header: 'PROGRESSO',
+              accessor: (post) => {
+                const fase = calcularFasePost(post, plan, workflowModel);
+                return (
+                  <div className=\"flex items-center gap-2\">
+                    <div className=\"w-16 h-1 bg-zinc-800 rounded-full overflow-hidden\">
+                      <div className={cn(\"h-full rounded-full transition-all duration-500\", fase.barColor)} style={{ width: `${fase.percent}%` }} />
+                    </div>
+                    <span className=\"text-[9px] font-black text-zinc-500\">{fase.percent}%</span>
+                  </div>
+                );
+              },
+              align: 'center'
+            },
+            {
+              header: 'AÇÃO',
+              accessor: (post) => {
+                const hasTasks = (post as any).tasks && (post as any).tasks.length > 0;
+                return !roleLoaded ? (
+                  <div className=\"w-4 h-4 rounded-full border border-zinc-800 animate-spin border-t-zinc-600\" />
+                ) : isInternal ? (
+                  hasTasks ? (
+                    <button
+                      onClick={() => toast.success('Em breve: visualização de tarefas!')}
+                      className=\"inline-flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 border border-zinc-800 rounded-xl text-[9px] font-black uppercase tracking-widest text-zinc-400 hover:text-white hover:border-[#ff5351] transition-all\"
+                    >
+                      <Eye className=\"w-3 h-3\" /> Ver
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => openDelegModal(post)}
+                      className=\"inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#ff5351] text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:brightness-110 transition-all\"
+                    >
+                      <Zap className=\"w-3 h-3\" /> Delegar
+                    </button>
+                  )
+                ) : (
+                  <span className=\"text-[9px] font-black uppercase text-zinc-600\">—</span>
+                );
+              },
+              align: 'right'
+            }
+          ]}
+        />
       </div>
 
       {/* MODAL DE DELEGAÇÃO */}
       {showDelegModal && selectedPost && (
-        <div className="fixed inset-0 z-[400] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#141414] border border-zinc-800 rounded-[24px] w-full max-w-[580px] max-h-[88vh] flex flex-col">
-            <header className="px-6 py-4 border-b border-zinc-800 flex items-center justify-between shrink-0">
+        <div className=\"fixed inset-0 bg-black/80 backdrop-blur-sm z-[300] flex items-center justify-center p-4\">
+          <div className=\"bg-[#141414] border border-zinc-800 rounded-[40px] w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl\">
+            <header className=\"p-8 border-b border-zinc-800 flex items-center justify-between bg-zinc-900/30\">
               <div>
-                <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500">POST {String(selectedPost.number).padStart(2, '0')} · {selectedPost.type}</p>
-                <h3 className="text-lg font-black text-white uppercase italic">Delegar Tarefas</h3>
+                <p className=\"text-[9px] font-black uppercase tracking-[0.3em] text-[#ff5351] mb-1\">POST {String(selectedPost.number).padStart(2, '0')} · {selectedPost.type}</p>
+                <h3 className=\"text-2xl font-black text-white uppercase italic tracking-tight\">Delegar Tarefas</h3>
               </div>
-              <button onClick={() => setShowDelegModal(false)} className="p-2 hover:bg-zinc-800 rounded-lg text-zinc-500">
-                <X className="w-5 h-5" />
-              </button>
+              <button onClick={() => setShowDelegModal(false)} className=\"p-2 hover:bg-zinc-800 rounded-lg text-zinc-500 transition-all\"><X className=\"w-6 h-6\" /></button>
             </header>
 
-            <div className="overflow-y-auto px-6 py-5 space-y-6">
-              <div className="space-y-3">
-                <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500">Departamentos</p>
-                <div className="grid grid-cols-2 gap-3">
+            <div className=\"flex-1 overflow-y-auto p-8 space-y-10\">
+              {/* Departamentos */}
+              <div className=\"space-y-4\">
+                <label className=\"text-[10px] font-black uppercase tracking-widest text-zinc-500 flex items-center gap-2\">
+                  <div className=\"w-1 h-1 bg-[#ff5351] rounded-full\" /> Departamentos
+                </label>
+                <div className=\"grid grid-cols-2 md:grid-cols-4 gap-4\">
                   {DEPTS.map(dept => {
                     const isSelected = selectedDepts.includes(dept.id);
                     return (
-                      <button key={dept.id} onClick={() => toggleDept(dept.id)} className={cn('p-4 rounded-2xl border text-left transition-all', isSelected ? 'border-[#ff5351] bg-[#ff5351]/5' : 'border-zinc-800 bg-zinc-900/30 hover:border-zinc-700')}>
-                        <div className="flex items-start justify-between mb-2">
-                          <span className="text-2xl">{dept.icon}</span>
-                          {isSelected && <div className="w-5 h-5 rounded-full bg-[#ff5351] flex items-center justify-center"><Zap className="w-3 h-3 text-white" /></div>}
+                      <button
+                        key={dept.id}
+                        onClick={() => toggleDept(dept.id)}
+                        className={cn(
+                          'p-4 rounded-2xl border text-left transition-all group',
+                          isSelected ? 'border-[#ff5351] bg-[#ff5351]/5' : 'border-zinc-800 bg-zinc-900/30 hover:border-zinc-700'
+                        )}
+                      >
+                        <div className=\"flex items-center justify-between mb-2\">
+                          <span className=\"text-2xl\">{dept.icon}</span>
+                          {isSelected && <div className=\"w-4 h-4 bg-[#ff5351] rounded-full flex items-center justify-center animate-in zoom-in\"><Check className=\"w-2.5 h-2.5 text-white\" strokeWidth={4} /></div>}
                         </div>
-                        <p className="text-white font-black uppercase text-xs">{dept.name}</p>
-                        <p className="text-zinc-500 text-[9px] mt-0.5">{dept.sub}</p>
+                        <p className={cn(\"font-black uppercase text-[10px] tracking-widest\", isSelected ? \"text-white\" : \"text-zinc-400\")}>{dept.name}</p>
+                        <p className=\"text-[8px] text-zinc-600 font-bold uppercase tracking-tighter mt-0.5\">{dept.sub}</p>
                       </button>
                     );
                   })}
@@ -598,90 +546,103 @@ toast.success('Tarefas delegadas com sucesso!');
               </div>
 
               {selectedDepts.length > 0 && (
-                <div className="space-y-4">
-                  <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500">Configuração por Departamento</p>
+                <div className=\"space-y-8 animate-in slide-in-from-bottom-2\">
+                  <h4 className=\"text-sm font-black uppercase tracking-widest text-white border-b border-zinc-800 pb-2 flex items-center gap-2\">
+                    Configuração por Departamento
+                  </h4>
                   {selectedDepts.map(deptId => {
                     const deptInfo = DEPTS.find(d => d.id === deptId)!;
                     return (
-                      <div key={deptId} className="bg-zinc-900/30 border border-zinc-800 rounded-2xl p-4 space-y-3">
-                        <div className="flex items-center gap-2">
-                          <span>{deptInfo.icon}</span>
-                          <p className="text-white font-black uppercase text-xs">{deptInfo.name}</p>
+                      <div key={deptId} className=\"bg-zinc-900/40 border border-zinc-800 rounded-[24px] p-6 space-y-6\">
+                        <div className=\"flex items-center gap-3\">
+                          <span className=\"text-xl\">{deptInfo.icon}</span>
+                          <span className=\"text-xs font-black uppercase text-white tracking-widest\">{deptInfo.name}</span>
                         </div>
 
-                        <div className="space-y-1">
-                          <label className="text-[8px] font-black uppercase tracking-widest text-zinc-600">Responsável</label>
-                          <div className="relative">
-                            <select value={deptResponsibles[deptId] || ''} onChange={e => setDeptResponsibles(prev => ({ ...prev, [deptId]: e.target.value }))} className="w-full h-10 bg-zinc-900 border border-zinc-800 rounded-xl px-3 text-white text-xs focus:border-[#ff5351] outline-none appearance-none cursor-pointer">
-                              <option value="">Selecionar...</option>
-                              <optgroup label="— Equipe Boranov —">
-                                {teamMembers.filter(m => m.grupo === 'Equipe Boranov').map(m => (
-                                  <option key={m.id} value={m.email}>{m.name} ({m.role})</option>
-                                ))}
-                              </optgroup>
-                              <optgroup label="— Equipe Cliente —">
-                                {teamMembers.filter(m => m.grupo === 'Equipe Cliente').map(m => (
-                                  <option key={m.id} value={m.email}>{m.name} ({m.jobTitle || m.role})</option>
-                                ))}
-                              </optgroup>
-                            </select>
-                            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-600 pointer-events-none" />
+                        <div className=\"grid grid-cols-1 md:grid-cols-2 gap-6\">
+                          {/* No longer selecting specific member - delegation is department-wide */}
+                          <div className=\"space-y-3\">
+                            <label className=\"text-[9px] font-black uppercase tracking-widest text-zinc-500\">Tags</label>
+                            <div className=\"flex flex-wrap gap-2\">
+                              {deptInfo.tags.map(tag => {
+                                const isActive = (deptTags[deptId] || []).includes(tag);
+                                return (
+                                  <button
+                                    key={tag}
+                                    onClick={() => toggleTag(deptId, tag)}
+                                    className={cn(
+                                      'px-2 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest transition-all',
+                                      isActive ? 'bg-[#ff5351] text-white' : 'bg-zinc-900 border border-zinc-800 text-zinc-500 hover:text-zinc-300'
+                                    )}
+                                  >
+                                    {tag}
+                                  </button>
+                                );
+                              })}
+                            </div>
                           </div>
-                        </div>
-
-                        <div className="space-y-1">
-                          <label className="text-[8px] font-black uppercase tracking-widest text-zinc-600">Tags</label>
-                          <div className="flex flex-wrap gap-1.5">
-                            {deptInfo.tags.map(tag => {
-                              const isActive = (deptTags[deptId] || []).includes(tag);
-                              return (
-                                <button key={tag} onClick={() => toggleTag(deptId, tag)} className={cn('px-2 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest transition-all', isActive ? 'bg-[#ff5351] text-white' : 'bg-zinc-900 border border-zinc-800 text-zinc-500 hover:text-zinc-300')}>
-                                  {tag}
+                          
+                          <div className=\"space-y-3\">
+                            <label className=\"text-[9px] font-black uppercase tracking-widest text-zinc-500\">Dependências</label>
+                            <div className=\"flex flex-col gap-2\">
+                              {deptId === 'design' && (
+                                <button
+                                  onClick={() => setDepArteDependeVideo(!depArteDependeVideo)}
+                                  className={cn(
+                                    'p-3 rounded-xl border text-left transition-all flex items-center justify-between',
+                                    depArteDependeVideo ? 'border-[#ff5351] bg-[#ff5351]/5 text-[#ff5351]' : 'border-zinc-800 bg-zinc-900/30 text-zinc-500'
+                                  )}
+                                >
+                                  <span className=\"text-[9px] font-black uppercase tracking-widest\">Depende do Vídeo</span>
+                                  {depArteDependeVideo && <Check className=\"w-3 h-3\" />}
                                 </button>
-                              );
-                            })}
+                              )}
+                              {deptId === 'video' && (
+                                <button
+                                  onClick={() => setDepVideoDependeArte(!depVideoDependeArte)}
+                                  className={cn(
+                                    'p-3 rounded-xl border text-left transition-all flex items-center justify-between',
+                                    depVideoDependeArte ? 'border-[#ff5351] bg-[#ff5351]/5 text-[#ff5351]' : 'border-zinc-800 bg-zinc-900/30 text-zinc-500'
+                                  )}
+                                >
+                                  <span className=\"text-[9px] font-black uppercase tracking-widest\">Depende da Arte</span>
+                                  {depVideoDependeArte && <Check className=\"w-3 h-3\" />}
+                                </button>
+                              )}
+                            </div>
                           </div>
                         </div>
 
-                        <div className="space-y-1">
-                          <label className="text-[8px] font-black uppercase tracking-widest text-zinc-600">Descrição / Briefing</label>
-                          <textarea value={deptDescriptions[deptId] || ''} onChange={e => setDeptDescriptions(prev => ({ ...prev, [deptId]: e.target.value }))} rows={2} placeholder="Detalhes da tarefa..." className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-3 text-white text-xs focus:border-[#ff5351] outline-none resize-none" />
+                        <div className=\"space-y-3\">
+                          <label className=\"text-[9px] font-black uppercase tracking-widest text-zinc-500\">Descrição / Briefing</label>
+                          <textarea
+                            value={deptDescriptions[deptId] || ''}
+                            onChange={(e) => setDeptDescriptions(prev => ({ ...prev, [deptId]: e.target.value }))}
+                            rows={3}
+                            className=\"w-full bg-zinc-950 border border-zinc-800 rounded-2xl p-4 text-xs text-white focus:border-[#ff5351] outline-none resize-none\"
+                            placeholder={`Instruções para o departamento de ${deptInfo.name}...`}
+                          />
                         </div>
                       </div>
                     );
                   })}
                 </div>
               )}
-
-              {selectedDepts.includes('design') && selectedDepts.includes('video') && (
-                <div className="space-y-3">
-                  <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500">Dependências</p>
-                  <div className="space-y-2">
-                    <label className="flex items-center gap-3 p-3 bg-zinc-900/30 border border-zinc-800 rounded-xl cursor-pointer">
-                      <input type="checkbox" checked={depArteDependeVideo} onChange={e => setDepArteDependeVideo(e.target.checked)} className="w-4 h-4 accent-[#ff5351]" />
-                      <div>
-                        <p className="text-white text-xs font-black uppercase">Arte depende do Vídeo</p>
-                        <p className="text-zinc-500 text-[8px]">Designer aguarda Editor finalizar</p>
-                      </div>
-                    </label>
-                    <label className="flex items-center gap-3 p-3 bg-zinc-900/30 border border-zinc-800 rounded-xl cursor-pointer">
-                      <input type="checkbox" checked={depVideoDependeArte} onChange={e => setDepVideoDependeArte(e.target.checked)} className="w-4 h-4 accent-[#ff5351]" />
-                      <div>
-                        <p className="text-white text-xs font-black uppercase">Vídeo depende da Arte</p>
-                        <p className="text-zinc-500 text-[8px]">Editor aguarda Designer finalizar</p>
-                      </div>
-                    </label>
-                  </div>
-                </div>
-              )}
             </div>
 
-            <footer className="px-6 py-4 border-t border-zinc-800 flex gap-3 shrink-0">
-              <button onClick={() => setShowDelegModal(false)} className="flex-1 h-11 bg-zinc-900 border border-zinc-800 text-zinc-500 rounded-xl text-[10px] font-black uppercase tracking-widest hover:text-white transition-all">
+            <footer className=\"p-8 bg-zinc-900/50 border-t border-zinc-800 flex justify-end gap-4\">
+              <button
+                onClick={() => setShowDelegModal(false)}
+                className=\"px-8 py-3 bg-zinc-800 text-zinc-400 rounded-2xl font-black uppercase tracking-widest text-[10px] hover:text-white transition-all\"
+              >
                 Cancelar
               </button>
-              <button onClick={handleSaveDeleg} disabled={saving || selectedDepts.length === 0} className="flex-1 h-11 bg-[#ff5351] text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:brightness-110 transition-all disabled:opacity-50 flex items-center justify-center gap-2">
-                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              <button
+                onClick={handleSaveDeleg}
+                disabled={saving || selectedDepts.length === 0}
+                className=\"px-8 py-3 bg-white text-black rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-[#ff5351] hover:text-white transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed\"
+              >
+                {saving ? <Loader2 className=\"w-4 h-4 animate-spin\" /> : <Save className=\"w-4 h-4\" />}
                 Confirmar Delegação
               </button>
             </footer>
