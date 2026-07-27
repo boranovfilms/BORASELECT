@@ -1,15 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
 import { Loader2, ChevronRight, AlertCircle, CheckCircle2, Clock, FileText, Zap } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { DataTable } from '../components/ui/DataTable';
 
 export default function MinhasDemandas() {
-  // ============================================================
-  // ESTADOS
-  // ============================================================
   const [loading, setLoading] = useState(true);
   const [userRole, setUserRole] = useState('cliente');
   const [userEmail, setUserEmail] = useState('');
@@ -20,96 +17,204 @@ export default function MinhasDemandas() {
   const [demandasCliente, setDemandasCliente] = useState<any[]>([]);
   const navigate = useNavigate();
 
-  useEffect(() => { init(); }, []);
+  useEffect(() => {
+    let unsubscribe: (() => void) | null = null;
 
-  // ============================================================
-  // INICIALIZAÇÃO — detecta o role do usuário logado
-  // e chama a função correta de carregamento
-  // ============================================================
-  const init = async () => {
-    const user = auth.currentUser;
-    if (!user) return;
-    const email = user.email?.toLowerCase().trim() || '';
-    setUserEmail(email);
+    const setup = async () => {
+      const user = auth.currentUser;
+      if (!user) return;
+      const email = user.email?.toLowerCase().trim() || '';
+      setUserEmail(email);
 
-    let role = 'cliente';
-    let clientId: string | null = null;
+      let role = 'cliente';
+      let clientId: string | null = null;
 
-    if (email === 'admin@boraselect.com.br') {
-      role = 'master';
-    } else {
-      const qBora = query(collection(db, 'boraselect'), where('email', '==', email));
-      const snapBora = await getDocs(qBora);
-      if (!snapBora.empty) {
-        role = snapBora.docs[0].data().role || 'redator';
+      if (email === 'admin@boraselect.com.br') {
+        role = 'master';
       } else {
-        const qCliente = query(collection(db, 'clientes'), where('email', '==', email));
-        const snapCliente = await getDocs(qCliente);
-        if (!snapCliente.empty) {
-          const data = snapCliente.docs[0].data();
-          role = data.role || 'cliente';
-          clientId = data.companyId || snapCliente.docs[0].id;
+        const qBora = query(collection(db, 'boraselect'), where('email', '==', email));
+        const snapBora = await getDocs(qBora);
+        if (!snapBora.empty) {
+          role = snapBora.docs[0].data().role || 'redator';
+        } else {
+          const qCliente = query(collection(db, 'clientes'), where('email', '==', email));
+          const snapCliente = await getDocs(qCliente);
+          if (!snapCliente.empty) {
+            const data = snapCliente.docs[0].data();
+            role = data.role || 'cliente';
+            clientId = data.companyId || snapCliente.docs[0].id;
+          }
         }
       }
-    }
 
-    setUserRole(role);
-    setUserClientId(clientId);
+      setUserRole(role);
+      setUserClientId(clientId);
 
-    const isMasterOrRedator = ['master', 'admin', 'redator'].includes(role);
-    const isEditorDesigner = ['editor', 'designer', 'midia_social'].includes(role);
-    const isClienteOrEquipe = ['cliente', 'equipe'].includes(role);
+      const isMasterOrRedator = ['master', 'admin', 'redator'].includes(role);
+      const isEditorDesigner = ['editor', 'designer', 'midia_social'].includes(role);
+      const isClienteOrEquipe = ['cliente', 'equipe'].includes(role);
 
-    if (isMasterOrRedator) await loadClientes();
-    else if (isEditorDesigner) await loadDemandasEditor(email);
-    else if (isClienteOrEquipe && clientId) await loadDemandasCliente(clientId);
+      if (isMasterOrRedator) {
+        // Listener em tempo real para clientes
+        unsubscribe = onSnapshot(
+          query(collection(db, 'clientes'), where('role', '==', 'cliente')),
+          async (snap) => {
+            const clientesData = await Promise.all(snap.docs.map(async d => {
+              const cId = d.id;
+              const demandasSnap = await getDocs(query(collection(db, 'demandas'), where('clientId', '==', cId)));
+              const postsSnap = await getDocs(query(collection(db, 'posts'), where('clientId', '==', cId)));
+              const pendentes = demandasSnap.docs.filter(dd =>
+                ['rascunho', 'aguardando_cliente', 'devolvido', 'aguardando_validacao_equipe', 'aprovado_equipe', 'em_producao'].includes(dd.data().status)
+              ).length + postsSnap.docs.filter(pd => {
+                const tasks = pd.data().tasks || [];
+                return tasks.some((t: any) => ['pendente', 'em_andamento', 'arquivo_anexado'].includes(t.status));
+              }).length;
+              return {
+                id: cId,
+                ...d.data(),
+                totalDemandas: demandasSnap.docs.length + postsSnap.docs.length,
+                pendentes,
+                updatedAt: d.data().updatedAt
+              };
+            }));
+            setClientes(clientesData);
+            setLoading(false);
+          }
+        );
+      } else if (isEditorDesigner) {
+        // Listener em tempo real para posts do editor
+        unsubscribe = onSnapshot(collection(db, 'posts'), async (snap) => {
+          const itens: any[] = [];
+          snap.docs.forEach(d => {
+            const data = d.data();
+            const tasks = data.tasks || [];
+            tasks.forEach((task: any) => {
+              if (task.responsibleEmail?.toLowerCase() === email) {
+                itens.push({
+                  postId: d.id,
+                  demandaId: data.planId,
+                  demandaNome: data.planNome,
+                  clienteId: data.clientId,
+                  numero: data.number,
+                  headline: data.headline,
+                  tipoPost: data.type,
+                  taskTipo: task.dept,
+                  taskLabel: task.deptLabel,
+                  taskStatus: task.status,
+                  publishDate: data.publishDate,
+                  status: task.status,
+                });
+              }
+            });
+          });
 
-    setLoading(false);
-  };
+          const clienteIds = [...new Set(itens.map(i => i.clienteId))];
+          const clienteNomes: Record<string, string> = {};
+          await Promise.all(clienteIds.map(async id => {
+            const s = await getDoc(doc(db, 'clientes', id));
+            if (s.exists()) clienteNomes[id] = s.data().name;
+          }));
 
-  // ============================================================
-  // UTILITÁRIO — retorna apenas o primeiro nome
-  // ============================================================
-  const primeiroNome = (nomeCompleto: string) => {
-    return nomeCompleto?.split(' ')[0] || nomeCompleto || '';
-  };
+          setDemandas(itens.map(i => ({ ...i, clienteNome: clienteNomes[i.clienteId] || i.clienteId })));
+          setLoading(false);
+        });
+      } else if (isClienteOrEquipe && clientId) {
+        // Listener em tempo real para demandas do cliente
+        unsubscribe = onSnapshot(
+          query(collection(db, 'demandas'), where('clientId', '==', clientId)),
+          async (demandasSnap) => {
+            const postsSnap = await getDocs(query(collection(db, 'posts'), where('clientId', '==', clientId)));
+            const todosPosts = postsSnap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
+            const itens: any[] = [];
 
-  // ============================================================
-  // CARREGAR CLIENTES (Master/Redator)
-  // Busca lista de clientes com total de demandas e pendências
-  // ============================================================
-  const loadClientes = async () => {
-    const snap = await getDocs(query(collection(db, 'clientes'), where('role', '==', 'cliente')));
-    const clientesData = await Promise.all(snap.docs.map(async d => {
-      const clientId = d.id;
+            for (const d of demandasSnap.docs) {
+              const data = d.data();
+              const statusVisiveis = ['aguardando_cliente', 'aguardando_validacao_equipe', 'aprovado_equipe', 'em_producao'];
+              if (!statusVisiveis.includes(data.status)) continue;
 
-      const demandasSnap = await getDocs(query(collection(db, 'demandas'), where('clientId', '==', clientId)));
-      const demandasPendentes = demandasSnap.docs.filter(dd =>
-        ['rascunho', 'aguardando_cliente', 'devolvido', 'aguardando_validacao_equipe', 'aprovado_equipe', 'em_producao'].includes(dd.data().status)
-      ).length;
+              const postsDoPlano = todosPosts.filter(p => p.planId === d.id);
+              const totalPosts = postsDoPlano.length;
+              const postsConcluidos = postsDoPlano.filter(p => p.status === 'concluido').length;
 
-      const postsSnap = await getDocs(query(collection(db, 'posts'), where('clientId', '==', clientId)));
-      const postsPendentes = postsSnap.docs.filter(pd => {
-        const tasks = pd.data().tasks || [];
-        return tasks.some((t: any) => ['pendente', 'em_andamento', 'arquivo_anexado'].includes(t.status));
-      }).length;
+              if (totalPosts > 0 && postsConcluidos === totalPosts) continue;
 
-      return {
-        id: clientId,
-        ...d.data(),
-        totalDemandas: demandasSnap.docs.length + postsSnap.docs.length,
-        pendentes: demandasPendentes + postsPendentes,
-        updatedAt: d.data().updatedAt
-      };
-    }));
-    setClientes(clientesData);
-  };
+              const aprovacaoMap: any = {
+                aguardando_cliente: 30,
+                aguardando_validacao_equipe: 60,
+                aprovado_equipe: 100,
+                em_producao: 100,
+              };
+
+              itens.push({
+                tipo: 'planejamento',
+                demandaId: d.id,
+                demandaNome: data.name,
+                postTipo: 'Planejamento',
+                status: data.status,
+                publishDate: data.updatedAt,
+                totalPosts,
+                postsConcluidos,
+                aprovacaoPct: aprovacaoMap[data.status] || 0,
+              });
+
+              postsDoPlano.forEach(post => {
+                if (post.status === 'concluido') return;
+                const postTasks = post.tasks || [];
+                if (postTasks.length === 0) return;
+
+                const taskStatus = postTasks[0].status;
+                const statusClienteMap: Record<string, string> = {
+                  pendente: 'em_producao',
+                  em_andamento: 'em_producao',
+                  em_edicao: 'em_producao',
+                  arquivo_anexado: 'em_producao',
+                  fazer_correcao: 'em_producao',
+                  aguardando_aprovacao_cliente: 'aguardando_cliente',
+                  aprovado_cliente: 'aprovado',
+                  aguardando_revisao_equipe: 'aguardando_validacao_equipe',
+                  em_programacao: 'em_producao',
+                  programado: 'em_producao',
+                  concluido: 'concluido',
+                };
+                const progressoClienteMap: Record<string, number> = {
+                  pendente: 10, em_andamento: 20, em_edicao: 35,
+                  arquivo_anexado: 50, fazer_correcao: 40,
+                  aguardando_aprovacao_cliente: 60, aprovado_cliente: 70,
+                  aguardando_revisao_equipe: 80, em_programacao: 90,
+                  programado: 95, concluido: 100,
+                };
+
+                itens.push({
+                  tipo: 'post',
+                  postId: post.id,
+                  demandaId: d.id,
+                  demandaNome: data.name,
+                  numero: post.number,
+                  headline: post.headline,
+                  postTipo: post.type,
+                  publishDate: post.publishDate,
+                  status: statusClienteMap[taskStatus] || 'em_producao',
+                  taskStatus,
+                  progressoCliente: progressoClienteMap[taskStatus] || 10,
+                });
+              });
+            }
+
+            setDemandas(itens);
+            setLoading(false);
+          }
+        );
+      } else {
+        setLoading(false);
+      }
+    };
+
+    setup();
+    return () => { if (unsubscribe) unsubscribe(); };
+  }, []);
 
   // ============================================================
   // CARREGAR DEMANDAS DO CLIENTE SELECIONADO (Master/Redator)
-  // Busca planejamentos + posts vinculados ao cliente clicado
-  // Planejamentos concluídos (todos posts ok) são ocultados
-  // Posts não delegados (aguardando_delegacao) são ocultados
   // ============================================================
   const loadDemandasDoCliente = async (cliente: any) => {
     setClienteSelecionado(cliente);
@@ -119,14 +224,12 @@ export default function MinhasDemandas() {
     const postsSnap = await getDocs(query(collection(db, 'posts'), where('clientId', '==', cliente.id)));
     const todosPosts = postsSnap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
 
-    // Adiciona planejamentos
     for (const d of demandasSnap.docs) {
       const data = d.data();
       const postsDoPlano = todosPosts.filter(p => p.planId === d.id);
       const totalPosts = postsDoPlano.length;
       const postsConcluidos = postsDoPlano.filter(p => p.status === 'concluido').length;
 
-      // Oculta planejamentos 100% concluídos ou com status concluido
       if (totalPosts > 0 && postsConcluidos === totalPosts) continue;
       if (data.status === 'concluido') continue;
 
@@ -153,7 +256,6 @@ export default function MinhasDemandas() {
       });
     }
 
-    // Adiciona posts (exceto não delegados e concluídos)
     for (const post of todosPosts) {
       if (post.status === 'concluido') continue;
       if (post.status === 'aguardando_delegacao') continue;
@@ -175,7 +277,6 @@ export default function MinhasDemandas() {
       });
     }
 
-    // Ordena: planejamentos primeiro, posts depois
     itens.sort((a, b) => {
       if (a.isPlanejamento && !b.isPlanejamento) return -1;
       if (!a.isPlanejamento && b.isPlanejamento) return 1;
@@ -186,145 +287,10 @@ export default function MinhasDemandas() {
   };
 
   // ============================================================
-  // CARREGAR DEMANDAS DO EDITOR/DESIGNER
-  // Busca posts na coleção posts/ onde a task tem o email do editor
+  // UTILITÁRIOS
   // ============================================================
-  const loadDemandasEditor = async (email: string) => {
-    const snap = await getDocs(collection(db, 'posts'));
-    const itens: any[] = [];
+  const primeiroNome = (nomeCompleto: string) => nomeCompleto?.split(' ')[0] || nomeCompleto || '';
 
-    snap.docs.forEach(d => {
-      const data = d.data();
-      const tasks = data.tasks || [];
-      tasks.forEach((task: any) => {
-        if (task.responsibleEmail?.toLowerCase() === email) {
-          itens.push({
-            postId: d.id,
-            demandaId: data.planId,
-            demandaNome: data.planNome,
-            clienteId: data.clientId,
-            numero: data.number,
-            headline: data.headline,
-            tipoPost: data.type,       // FEED, REEL, CARROSSEL, etc
-            taskTipo: task.dept,       // video, design, redacao, midia_social
-            taskLabel: task.deptLabel, // Edição de Vídeo, Design / Arte, etc
-            taskStatus: task.status,
-            publishDate: data.publishDate,
-            status: task.status,
-          });
-        }
-      });
-    });
-
-    // Busca nomes dos clientes
-    const clienteIds = [...new Set(itens.map(i => i.clienteId))];
-    const clienteNomes: Record<string, string> = {};
-    await Promise.all(clienteIds.map(async id => {
-      const snap = await getDoc(doc(db, 'clientes', id));
-      if (snap.exists()) clienteNomes[id] = snap.data().name;
-    }));
-
-    setDemandas(itens.map(i => ({ ...i, clienteNome: clienteNomes[i.clienteId] || i.clienteId })));
-  };
-
-  // ============================================================
-  // CARREGAR DEMANDAS DO CLIENTE/EQUIPE
-  // Busca planejamentos aprovados + posts delegados do cliente
-  // Status são traduzidos para linguagem do cliente
-  // Planejamentos 100% concluídos somem da lista
-  // ============================================================
-  const loadDemandasCliente = async (clientId: string) => {
-    const itens: any[] = [];
-
-    const demandasSnap = await getDocs(query(collection(db, 'demandas'), where('clientId', '==', clientId)));
-    const postsSnap = await getDocs(query(collection(db, 'posts'), where('clientId', '==', clientId)));
-    const todosPosts = postsSnap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
-
-    for (const d of demandasSnap.docs) {
-      const data = d.data();
-      // Só mostra planejamentos aprovados ou em produção
-      const statusVisiveis = ['aguardando_cliente', 'aguardando_validacao_equipe', 'aprovado_equipe', 'em_producao'];
-if (!statusVisiveis.includes(data.status)) continue;
-
-      const postsDoPlano = todosPosts.filter(p => p.planId === d.id);
-      const totalPosts = postsDoPlano.length;
-      const postsConcluidos = postsDoPlano.filter(p => p.status === 'concluido').length;
-
-      // Oculta planejamentos 100% concluídos
-      if (totalPosts > 0 && postsConcluidos === totalPosts) continue;
-
-      // Adiciona o planejamento
-      itens.push({
-        tipo: 'planejamento',
-        demandaId: d.id,
-        demandaNome: data.name,
-        postTipo: 'Planejamento',
-        status: data.status,
-        publishDate: data.updatedAt,
-        totalPosts,
-        postsConcluidos,
-      });
-
-      // Adiciona posts delegados (com tasks)
-      postsDoPlano.forEach(post => {
-        if (post.status === 'concluido') return;
-        const postTasks = post.tasks || [];
-        if (postTasks.length === 0) return; // Só mostra posts delegados
-
-        const taskStatus = postTasks[0].status;
-
-        // Tradução de status interno → status visível para o cliente
-        const statusClienteMap: Record<string, string> = {
-          pendente: 'em_producao',
-          em_andamento: 'em_producao',
-          em_edicao: 'em_producao',
-          arquivo_anexado: 'em_producao',
-          fazer_correcao: 'em_producao',
-          aguardando_aprovacao_cliente: 'aguardando_cliente',
-          aprovado_cliente: 'aprovado',
-          aguardando_revisao_equipe: 'aguardando_validacao_equipe',
-          em_programacao: 'em_producao',
-          programado: 'em_producao',
-          concluido: 'concluido',
-        };
-
-        // Progresso visível para o cliente (baseado no status real da task)
-        const progressoClienteMap: Record<string, number> = {
-          pendente: 10,
-          em_andamento: 20,
-          em_edicao: 35,
-          arquivo_anexado: 50,
-          fazer_correcao: 40,
-          aguardando_aprovacao_cliente: 60,
-          aprovado_cliente: 70,
-          aguardando_revisao_equipe: 80,
-          em_programacao: 90,
-          programado: 95,
-          concluido: 100,
-        };
-
-        itens.push({
-          tipo: 'post',
-          postId: post.id,
-          demandaId: d.id,
-          demandaNome: data.name,
-          numero: post.number,
-          headline: post.headline,
-          postTipo: post.type,
-          publishDate: post.publishDate,
-          status: statusClienteMap[taskStatus] || 'em_producao',
-          taskStatus,
-          progressoCliente: progressoClienteMap[taskStatus] || 10,
-        });
-      });
-    }
-
-    setDemandas(itens);
-  };
-
-  // ============================================================
-  // UTILITÁRIOS — badges de status e ícones de departamento
-  // ============================================================
   const getStatusBadge = (status: string, isCliente = false) => {
     const configs: any = {
       pendente: { label: 'Pendente', class: 'bg-amber-500/10 text-amber-400 border-amber-500/20' },
@@ -333,7 +299,6 @@ if (!statusVisiveis.includes(data.status)) continue;
       fazer_correcao: { label: 'Correção', class: 'bg-red-500/10 text-red-400 border-red-500/20' },
       aprovado: { label: 'Aprovado', class: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' },
       aprovado_equipe: { label: 'Aprovado ✓', class: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' },
-      reprovado: { label: 'Reprovado', class: 'bg-red-500/10 text-red-400 border-red-500/20' },
       em_revisao: { label: isCliente ? 'Em Produção' : 'Em Revisão', class: 'bg-purple-500/10 text-purple-400 border-purple-500/20' },
       arquivo_anexado: { label: 'Arquivo Enviado', class: 'bg-purple-500/10 text-purple-400 border-purple-500/20' },
       aguardando_cliente: { label: 'Aguard. Aprovação', class: 'bg-amber-500/10 text-amber-400 border-amber-500/20' },
@@ -357,12 +322,11 @@ if (!statusVisiveis.includes(data.status)) continue;
       rascunho: 10, aguardando_cliente: 30,
       aguardando_validacao_equipe: 50, aprovado_equipe: 100,
       em_producao: 100, concluido: 100, devolvido: 20,
-      pendente: 10, em_andamento: 20,
-      em_edicao: 35, arquivo_anexado: 50,
-      fazer_correcao: 40, aguardando_aprovacao_cliente: 60,
-      aprovado_cliente: 70, aguardando_revisao_equipe: 80,
-      em_programacao: 90, programado: 95,
-      aguardando_delegacao: 0,
+      pendente: 10, em_andamento: 20, em_edicao: 35,
+      arquivo_anexado: 50, fazer_correcao: 40,
+      aguardando_aprovacao_cliente: 60, aprovado_cliente: 70,
+      aguardando_revisao_equipe: 80, em_programacao: 90,
+      programado: 95, aguardando_delegacao: 0,
     };
     return map[status] || 0;
   };
@@ -379,9 +343,7 @@ if (!statusVisiveis.includes(data.status)) continue;
 
   return (
     <div className="space-y-8 pb-20">
-      {/* ========================================================
-          HEADER — título da página
-      ======================================================== */}
+      {/* HEADER */}
       <header>
         <p className="text-[11px] uppercase tracking-[0.4em] text-[#ff5351] font-black mb-2">
           {isMasterOrRedator ? 'Gestão de Demandas' : isEditorDesigner ? 'Minhas Tarefas' : 'Meus Conteúdos'}
@@ -399,10 +361,7 @@ if (!statusVisiveis.includes(data.status)) continue;
         )}
       </header>
 
-      {/* ========================================================
-          TABELA 1 — MASTER/REDATOR: Lista de clientes
-          Exibe todos os clientes com total e pendências
-      ======================================================== */}
+      {/* TABELA 1 — MASTER/REDATOR: Lista de clientes */}
       {isMasterOrRedator && !clienteSelecionado && (
         <DataTable
           data={clientes}
@@ -456,11 +415,7 @@ if (!statusVisiveis.includes(data.status)) continue;
         />
       )}
 
-      {/* ========================================================
-          TABELA 2 — MASTER/REDATOR: Demandas do cliente selecionado
-          Exibe planejamentos + posts delegados do cliente
-          Botão "Delegar" aparece nos planejamentos aprovados
-      ======================================================== */}
+      {/* TABELA 2 — MASTER/REDATOR: Demandas do cliente selecionado */}
       {isMasterOrRedator && clienteSelecionado && (
         <DataTable
           data={demandasCliente}
@@ -483,9 +438,7 @@ if (!statusVisiveis.includes(data.status)) continue;
                   </div>
                   <div>
                     <p className="text-white font-black uppercase text-sm line-clamp-2 leading-tight">{d.name}</p>
-                    {d.isPost && (
-                      <p className="text-zinc-500 text-[10px] uppercase mt-0.5">📋 {d.demandaNome}</p>
-                    )}
+                    {d.isPost && <p className="text-zinc-500 text-[10px] uppercase mt-0.5">📋 {d.demandaNome}</p>}
                   </div>
                 </div>
               )
@@ -499,11 +452,7 @@ if (!statusVisiveis.includes(data.status)) continue;
               ),
               align: 'center'
             },
-            {
-              header: 'Status',
-              accessor: (d) => getStatusBadge(d.status),
-              align: 'center'
-            },
+            { header: 'Status', accessor: (d) => getStatusBadge(d.status), align: 'center' },
             {
               header: 'Aprovação',
               accessor: (d) => {
@@ -537,9 +486,7 @@ if (!statusVisiveis.includes(data.status)) continue;
                 const pct = Math.round((d.postsConcluidos / d.totalPosts) * 100);
                 return (
                   <div className="flex flex-col items-center gap-1">
-                    <span className="text-[10px] font-black text-emerald-400">
-                      {d.postsConcluidos}/{d.totalPosts}
-                    </span>
+                    <span className="text-[10px] font-black text-emerald-400">{d.postsConcluidos}/{d.totalPosts}</span>
                     <div className="w-16 h-1.5 bg-zinc-800 rounded-full overflow-hidden">
                       <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${pct}%` }} />
                     </div>
@@ -549,17 +496,13 @@ if (!statusVisiveis.includes(data.status)) continue;
               align: 'center'
             },
             {
-              // Botão Delegar — aparece só nos planejamentos aprovados
               header: 'Ação',
               accessor: (d) => {
                 if (!d.isPlanejamento) return null;
                 if (!['aprovado_equipe', 'em_producao'].includes(d.status)) return null;
                 return (
                   <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      navigate(`/planejamento/${d.id}/tarefas`);
-                    }}
+                    onClick={(e) => { e.stopPropagation(); navigate(`/planejamento/${d.id}/tarefas`); }}
                     className="flex items-center gap-1.5 px-3 py-2 bg-[#ff5351] text-white rounded-xl font-black uppercase text-[9px] tracking-widest hover:brightness-110 transition-all"
                   >
                     <Zap className="w-3 h-3" /> Delegar
@@ -582,11 +525,7 @@ if (!statusVisiveis.includes(data.status)) continue;
         />
       )}
 
-      {/* ========================================================
-          TABELA 3 — EDITOR/DESIGNER: Posts delegados para ele
-          Exibe posts onde a task tem o email do editor
-          Colunas: Item | Cliente | Post (tipo) | Departamento | Status | Data
-      ======================================================== */}
+      {/* TABELA 3 — EDITOR/DESIGNER: Posts delegados */}
       {isEditorDesigner && (
         <DataTable
           data={demandas}
@@ -608,13 +547,10 @@ if (!statusVisiveis.includes(data.status)) continue;
             {
               header: 'Cliente',
               accessor: (item) => (
-                <span className="text-zinc-300 text-xs font-black uppercase">
-                  {primeiroNome(item.clienteNome)}
-                </span>
+                <span className="text-zinc-300 text-xs font-black uppercase">{primeiroNome(item.clienteNome)}</span>
               )
             },
             {
-              // Tipo do post: FEED, REEL, CARROSSEL, STORIES, etc
               header: 'Post',
               accessor: (item) => (
                 <span className="px-2 py-0.5 rounded bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[9px] font-black uppercase tracking-widest whitespace-nowrap">
@@ -624,7 +560,6 @@ if (!statusVisiveis.includes(data.status)) continue;
               align: 'center'
             },
             {
-              // Departamento responsável: Edição de Vídeo, Design, etc
               header: 'Departamento',
               accessor: (item) => (
                 <span className="px-2 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-zinc-300 text-[9px] font-black uppercase tracking-widest whitespace-nowrap">
@@ -633,27 +568,16 @@ if (!statusVisiveis.includes(data.status)) continue;
               ),
               align: 'center'
             },
-            {
-              header: 'Status',
-              accessor: (item) => getStatusBadge(item.taskStatus),
-              align: 'center'
-            },
+            { header: 'Status', accessor: (item) => getStatusBadge(item.taskStatus), align: 'center' },
             {
               header: 'Data',
-              accessor: (item) => (
-                <span className="text-zinc-500 text-xs">{item.publishDate || '—'}</span>
-              )
+              accessor: (item) => <span className="text-zinc-500 text-xs">{item.publishDate || '—'}</span>
             }
           ]}
         />
       )}
 
-      {/* ========================================================
-          TABELA 4 — CLIENTE/EQUIPE: Planejamentos e posts do cliente
-          Exibe planejamentos aprovados + posts delegados
-          Status são traduzidos para linguagem do cliente
-          Sem botão de ação — apenas visualização
-      ======================================================== */}
+      {/* TABELA 4 — CLIENTE/EQUIPE: Planejamentos e posts */}
       {isClienteOrEquipe && (
         <DataTable
           data={demandas}
@@ -678,8 +602,7 @@ if (!statusVisiveis.includes(data.status)) continue;
                     <p className="text-white font-black uppercase text-sm line-clamp-2 leading-tight">
                       {item.tipo === 'post'
                         ? `#${String(item.numero).padStart(2, '0')} ${item.headline}`
-                        : item.demandaNome
-                      }
+                        : item.demandaNome}
                     </p>
                     {item.tipo === 'post' && (
                       <p className="text-zinc-500 text-[10px] uppercase mt-0.5">📋 {item.demandaNome}</p>
@@ -697,36 +620,24 @@ if (!statusVisiveis.includes(data.status)) continue;
               ),
               align: 'center'
             },
+            { header: 'Status', accessor: (item) => getStatusBadge(item.status, true), align: 'center' },
             {
-              header: 'Status',
-              accessor: (item) => getStatusBadge(item.status, true),
+              header: 'Aprovação',
+              accessor: (item) => {
+                if (item.tipo !== 'planejamento') return <span className="text-zinc-600 text-xs">—</span>;
+                const pct = item.aprovacaoPct || 0;
+                return (
+                  <div className="flex items-center gap-2">
+                    <div className="w-16 h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                      <div className="h-full bg-[#ff5351] rounded-full" style={{ width: `${pct}%` }} />
+                    </div>
+                    <span className="text-[10px] font-black text-[#ff5351]">{pct}%</span>
+                  </div>
+                );
+              },
               align: 'center'
             },
             {
-              // Aprovação do planejamento (100% quando aprovado pela equipe)
-            header: 'Aprovação',
-accessor: (item) => {
-  if (item.tipo !== 'planejamento') return <span className="text-zinc-600 text-xs">—</span>;
-  const aprovacaoMap: any = {
-    aguardando_cliente: 30,
-    aguardando_validacao_equipe: 60,
-    aprovado_equipe: 100,
-    em_producao: 100,
-  };
-  const pct = aprovacaoMap[item.status] || 0;
-  return (
-    <div className="flex items-center gap-2">
-      <div className="w-16 h-1.5 bg-zinc-800 rounded-full overflow-hidden">
-        <div className="h-full bg-[#ff5351] rounded-full" style={{ width: `${pct}%` }} />
-      </div>
-      <span className="text-[10px] font-black text-[#ff5351]">{pct}%</span>
-    </div>
-  );
-},
-              align: 'center'
-            },
-            {
-              // Execução: X/total para planejamentos, % para posts
               header: 'Execução',
               accessor: (item) => {
                 if (item.tipo === 'planejamento') {
@@ -753,9 +664,7 @@ accessor: (item) => {
               header: 'Data',
               accessor: (item) => {
                 try {
-                  const date = item.publishDate?.toDate
-                    ? item.publishDate.toDate()
-                    : new Date(item.publishDate);
+                  const date = item.publishDate?.toDate ? item.publishDate.toDate() : new Date(item.publishDate);
                   return <span className="text-zinc-500 text-xs">{new Intl.DateTimeFormat('pt-BR').format(date)}</span>;
                 } catch {
                   return <span className="text-zinc-600">—</span>;
