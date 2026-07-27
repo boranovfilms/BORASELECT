@@ -236,7 +236,6 @@ export default function MinhasDemandas() {
         const tasks = post.tasks || [];
         if (tasks.length === 0) return;
 
-        const tasks = post.tasks || [];
 const taskStatus = tasks.length > 0 ? tasks[0].status : post.status;
 
 // Status visível para o cliente
