@@ -19,6 +19,7 @@ export default function MinhaDemandaDetalhe() {
   const [post, setPost] = useState<any>(null);
   const [userTask, setUserTask] = useState<any>(null);
   const [clientName, setClientName] = useState('');
+  const [clientEmail, setClientEmail] = useState('');
   const [planNome, setPlanNome] = useState('');
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewType, setPreviewType] = useState<'image' | 'video' | null>(null);
@@ -34,6 +35,11 @@ export default function MinhaDemandaDetalhe() {
 
   useEffect(() => { loadData(); }, [postId]);
 
+  // ============================================================
+  // CARREGAR DADOS DO POST
+  // Busca o post diretamente da coleção posts/
+  // Detecta o role do usuário e a task correspondente
+  // ============================================================
   const loadData = async () => {
     if (!postId) return;
     setLoading(true);
@@ -41,7 +47,7 @@ export default function MinhaDemandaDetalhe() {
       const email = auth.currentUser?.email?.toLowerCase().trim() || '';
       setUserEmail(email);
 
-      // Carrega role
+      // Detecta role do usuário
       let role = 'cliente';
       let name = auth.currentUser?.displayName || '';
       if (email === 'admin@boraselect.com.br') {
@@ -64,7 +70,7 @@ export default function MinhaDemandaDetalhe() {
       setUserRole(role);
       setUserName(name);
 
-      // Busca o post diretamente da coleção posts/
+      // Busca o post da coleção posts/
       const postDoc = await getDoc(doc(db, 'posts', postId));
       if (!postDoc.exists()) {
         toast.error('Post não encontrado');
@@ -75,7 +81,7 @@ export default function MinhaDemandaDetalhe() {
       setPost(postData);
       setPlanNome((postData as any).planNome || '');
 
-      // Task do usuário
+      // Detecta task do usuário baseado no role
       const isRedMaster = ['master', 'admin', 'redator'].includes(role);
       const tasks = (postData as any).tasks || [];
       let task = null;
@@ -86,6 +92,7 @@ export default function MinhaDemandaDetalhe() {
       }
       setUserTask(task || null);
 
+      // Preview do arquivo se existir
       const taskComArquivo = tasks.find((t: any) => t.arquivoUrl);
       if (taskComArquivo?.arquivoUrl) {
         setPreviewUrl(taskComArquivo.arquivoUrl);
@@ -94,11 +101,14 @@ export default function MinhaDemandaDetalhe() {
 
       if (task?.driveDownloadUrl) setDriveSalvo(true);
 
-      // Busca nome do cliente
+      // Busca nome e email do cliente
       const clienteId = (postData as any).clientId;
       if (clienteId) {
         const clienteDoc = await getDoc(doc(db, 'clientes', clienteId));
-        if (clienteDoc.exists()) setClientName(clienteDoc.data().name || '');
+        if (clienteDoc.exists()) {
+          setClientName(clienteDoc.data().name || '');
+          setClientEmail(clienteDoc.data().email?.toLowerCase() || '');
+        }
       }
 
     } catch (error) {
@@ -109,6 +119,10 @@ export default function MinhaDemandaDetalhe() {
     }
   };
 
+  // ============================================================
+  // REGISTRAR HISTÓRICO
+  // Salva ação com nome, email, role, data e observação
+  // ============================================================
   const registrarHistorico = async (acao: string, obs?: string) => {
     if (!postId || !post) return;
     const registro = {
@@ -126,6 +140,10 @@ export default function MinhaDemandaDetalhe() {
     });
   };
 
+  // ============================================================
+  // ACEITAR DEMANDA (Editor)
+  // Muda status da task para em_andamento
+  // ============================================================
   const handleAceitar = async () => {
     if (!postId || !post || !userTask) return;
     setSaving(true);
@@ -147,6 +165,10 @@ export default function MinhaDemandaDetalhe() {
     }
   };
 
+  // ============================================================
+  // SELECIONAR ARQUIVO (Editor)
+  // Detecta tipo e inicia upload correspondente
+  // ============================================================
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -160,6 +182,9 @@ export default function MinhaDemandaDetalhe() {
     else uploadImage(file);
   };
 
+  // ============================================================
+  // UPLOAD DE VÍDEO — Cloudflare Stream
+  // ============================================================
   const uploadVideo = async (file: File, isSubstituicao = false) => {
     setUploading(true);
     setUploadProgress(0);
@@ -203,6 +228,9 @@ export default function MinhaDemandaDetalhe() {
     }
   };
 
+  // ============================================================
+  // UPLOAD DE IMAGEM — Firebase Storage
+  // ============================================================
   const uploadImage = async (file: File, isSubstituicao = false) => {
     setUploading(true);
     setUploadProgress(0);
@@ -231,6 +259,10 @@ export default function MinhaDemandaDetalhe() {
     }
   };
 
+  // ============================================================
+  // SALVAR ARQUIVO NA TASK
+  // Atualiza status para arquivo_anexado e notifica redator
+  // ============================================================
   const salvarArquivoNaTask = async (url: string, tipo: 'video' | 'image', thumbnailUrl?: string, isSubstituicao = false) => {
     if (!postId || !post || !userTask) return;
     const updatedTasks = (post.tasks || []).map((t: any) =>
@@ -252,6 +284,7 @@ export default function MinhaDemandaDetalhe() {
     const acao = isSubstituicao ? 'Arquivo substituído (anterior descartado)' : 'Arquivo enviado para revisão';
     await registrarHistorico(acao);
 
+    // Notifica o redator
     await notificacaoService.criar({
       para: 'boranovfilms@gmail.com',
       tipo: 'arquivo_enviado',
@@ -266,6 +299,10 @@ export default function MinhaDemandaDetalhe() {
     await loadData();
   };
 
+  // ============================================================
+  // SALVAR LINK DO DRIVE
+  // Salva link para download em alta qualidade
+  // ============================================================
   const handleSaveDriveLink = async () => {
     if (!postId || !post || !userTask || !driveLink) return;
     setSavingDrive(true);
@@ -289,20 +326,57 @@ export default function MinhaDemandaDetalhe() {
     }
   };
 
+  // ============================================================
+  // APROVAR ARQUIVO
+  // Redator aprova → vai para cliente (aguardando_aprovacao_cliente)
+  // Cliente aprova → concluído
+  // ============================================================
   const handleAprovar = async (taskId: string) => {
     if (!postId || !post) return;
     setSaving(true);
     try {
+      const isRedMaster = ['master', 'admin', 'redator'].includes(userRole);
+      const isClienteEquipeRole = ['cliente', 'equipe'].includes(userRole);
+
+      let novoStatus = 'concluido';
+
+      if (isRedMaster) {
+        novoStatus = 'aguardando_aprovacao_cliente';
+      }
+
       const updatedTasks = (post.tasks || []).map((t: any) =>
-        t.id === taskId || t.status === 'arquivo_anexado' ? { ...t, status: 'concluido' } : t
+        t.id === taskId || t.status === 'arquivo_anexado' ? { ...t, status: novoStatus } : t
       );
+
+      const todosConcluidos = updatedTasks.every((t: any) => t.status === 'concluido');
+
       await updateDoc(doc(db, 'posts', postId), {
         tasks: updatedTasks,
-        status: updatedTasks.every((t: any) => t.status === 'concluido') ? 'concluido' : post.status,
+        status: todosConcluidos ? 'concluido' : post.status,
         updatedAt: serverTimestamp()
       });
-      await registrarHistorico('Arquivo aprovado');
-      toast.success('Arquivo aprovado!');
+
+      await registrarHistorico(
+        isRedMaster
+          ? 'Arquivo aprovado pelo redator — enviado para cliente'
+          : 'Arquivo aprovado pelo cliente'
+      );
+
+      // Redator aprova → notifica cliente
+      if (isRedMaster && clientEmail) {
+        await notificacaoService.criar({
+          para: clientEmail,
+          tipo: 'arquivo_enviado',
+          titulo: 'Conteúdo pronto para aprovação',
+          descricao: `Post #${String(post.number).padStart(2, '0')} — ${post.headline?.slice(0, 50)} aguarda sua aprovação`,
+          planId: post.planId,
+          postId,
+          visto: false,
+          criadoEm: new Date().toISOString()
+        });
+      }
+
+      toast.success(isRedMaster ? 'Aprovado! Cliente foi notificado.' : 'Arquivo aprovado!');
       await loadData();
     } catch (error) {
       toast.error('Erro ao aprovar');
@@ -311,6 +385,10 @@ export default function MinhaDemandaDetalhe() {
     }
   };
 
+  // ============================================================
+  // PEDIR CORREÇÃO
+  // Notifica o editor com a anotação do que precisa ser corrigido
+  // ============================================================
   const handlePedirCorrecao = async (taskId: string, responsibleEmail: string) => {
     if (!postId || !post) return;
     if (!anotacao.trim()) { toast.error('Descreva o que precisa ser corrigido'); return; }
@@ -345,6 +423,9 @@ export default function MinhaDemandaDetalhe() {
     }
   };
 
+  // ============================================================
+  // UTILITÁRIOS — estilos e badges
+  // ============================================================
   const getTypeStyle = (type: string) => {
     const styles: any = {
       FEED: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
@@ -366,6 +447,7 @@ export default function MinhaDemandaDetalhe() {
       pendente: { label: '⏳ Pendente', class: 'bg-amber-500/10 text-amber-400 border-amber-500/20' },
       em_andamento: { label: '⚡ Em Andamento', class: 'bg-blue-500/10 text-blue-400 border-blue-500/20' },
       arquivo_anexado: { label: '📎 Arquivo Enviado', class: 'bg-purple-500/10 text-purple-400 border-purple-500/20' },
+      aguardando_aprovacao_cliente: { label: '👀 Aguard. Cliente', class: 'bg-amber-500/10 text-amber-400 border-amber-500/20' },
       concluido: { label: '✅ Aprovado', class: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' },
       fazer_correcao: { label: '🔄 Correção', class: 'bg-red-500/10 text-red-400 border-red-500/20' },
     };
@@ -373,6 +455,9 @@ export default function MinhaDemandaDetalhe() {
     return <span className={cn('px-3 py-1 rounded-full border text-[9px] font-black uppercase tracking-widest', config.class)}>{config.label}</span>;
   };
 
+  // ============================================================
+  // VARIÁVEIS DE CONTROLE DE ROLE
+  // ============================================================
   const isEditorDesigner = ['editor', 'designer', 'midia_social'].includes(userRole);
   const isRedatorMaster = ['master', 'admin', 'redator'].includes(userRole);
   const isClienteEquipe = ['cliente', 'equipe'].includes(userRole);
@@ -389,6 +474,9 @@ export default function MinhaDemandaDetalhe() {
 
   return (
     <div className="space-y-6 pb-8 text-left">
+      {/* ========================================================
+          HEADER — título e status da tarefa
+      ======================================================== */}
       <header className="space-y-3">
         <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-zinc-500 hover:text-white transition-colors text-xs font-black uppercase tracking-widest">
           <ArrowLeft className="w-4 h-4" /> Voltar
@@ -414,7 +502,9 @@ export default function MinhaDemandaDetalhe() {
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
 
-        {/* COLUNA ESQUERDA */}
+        {/* ========================================================
+            COLUNA ESQUERDA — Conteúdo do post + Histórico
+        ======================================================== */}
         <div className="space-y-6">
           <div className="bg-[#1f1f1f] border border-zinc-800 rounded-[24px] overflow-hidden">
             <div className="p-5 border-b border-zinc-800 flex items-center justify-between">
@@ -479,7 +569,7 @@ export default function MinhaDemandaDetalhe() {
             </div>
           </div>
 
-          {/* Histórico */}
+          {/* Histórico de ações */}
           {historico.length > 0 && (
             <div className="bg-[#1f1f1f] border border-zinc-800 rounded-[24px] overflow-hidden">
               <div className="p-5 border-b border-zinc-800">
@@ -510,7 +600,9 @@ export default function MinhaDemandaDetalhe() {
           )}
         </div>
 
-        {/* COLUNA DIREITA */}
+        {/* ========================================================
+            COLUNA DIREITA — Arquivo, preview e botões de ação
+        ======================================================== */}
         <div className="bg-[#1f1f1f] border border-zinc-800 rounded-[24px] overflow-hidden flex flex-col">
           <div className="p-5 border-b border-zinc-800">
             <h2 className="text-xs font-black uppercase tracking-widest text-white">
@@ -519,7 +611,7 @@ export default function MinhaDemandaDetalhe() {
           </div>
           <div className="p-6 flex flex-col flex-1 gap-4">
 
-            {/* INFO EDITOR */}
+            {/* Info do departamento — visível para editor */}
             {isEditorDesigner && userTask && (
               <div className="flex items-center gap-4 p-4 bg-[#ff5351]/5 border border-[#ff5351]/10 rounded-2xl">
                 <span className="text-3xl">{getDeptIcon(userTask.dept)}</span>
@@ -550,7 +642,7 @@ export default function MinhaDemandaDetalhe() {
               </div>
             )}
 
-            {/* PREVIEW */}
+            {/* Preview do arquivo — visível para todos */}
             {previewUrl && (
               <div>
                 <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-2">Preview</p>
@@ -571,7 +663,7 @@ export default function MinhaDemandaDetalhe() {
               </div>
             )}
 
-            {/* DOWNLOAD — só Redator/Master */}
+            {/* Download em alta qualidade — visível só para Redator/Master */}
             {isRedatorMaster && allTasks.some((t: any) => t.driveDownloadUrl) && (
               <button
                 onClick={() => window.open(allTasks.find((t: any) => t.driveDownloadUrl)?.driveDownloadUrl, '_blank')}
@@ -581,13 +673,15 @@ export default function MinhaDemandaDetalhe() {
               </button>
             )}
 
-            {/* INPUT OCULTO */}
+            {/* Input de arquivo oculto */}
             <input ref={fileInputRef} type="file" accept="image/*,video/*" onChange={handleFileSelect} className="hidden" />
 
-            {/* BOTÕES */}
+            {/* ====================================================
+                BOTÕES DE AÇÃO — variam conforme o role e status
+            ==================================================== */}
             <div className="mt-auto pt-4 border-t border-zinc-800 space-y-2">
 
-              {/* EDITOR — Aceitar */}
+              {/* EDITOR: Aceitar demanda */}
               {isEditorDesigner && userTask?.status === 'pendente' && (
                 <button onClick={handleAceitar} disabled={saving}
                   className="w-full h-12 bg-[#ff5351] text-white rounded-xl font-black uppercase tracking-widest text-[10px] hover:brightness-110 transition-all flex items-center justify-center gap-2 disabled:opacity-50">
@@ -596,7 +690,7 @@ export default function MinhaDemandaDetalhe() {
                 </button>
               )}
 
-              {/* EDITOR — Em andamento */}
+              {/* EDITOR: Enviar arquivo + Link Drive */}
               {isEditorDesigner && userTask?.status === 'em_andamento' && (
                 <div className="space-y-3">
                   <button onClick={() => fileInputRef.current?.click()} disabled={uploading}
@@ -622,11 +716,11 @@ export default function MinhaDemandaDetalhe() {
                 </div>
               )}
 
-              {/* EDITOR — Arquivo enviado */}
+              {/* EDITOR: Arquivo enviado aguardando revisão */}
               {isEditorDesigner && userTask?.status === 'arquivo_anexado' && (
                 <>
                   <div className="w-full h-10 bg-purple-500/10 border border-purple-500/20 text-purple-400 rounded-xl font-black uppercase tracking-widest text-[10px] flex items-center justify-center gap-2">
-                    📎 Aguardando Revisão
+                    📎 Aguardando Revisão do Redator
                   </div>
                   <button onClick={() => fileInputRef.current?.click()} disabled={uploading}
                     className="w-full h-10 bg-zinc-800 border border-zinc-700 text-zinc-400 rounded-xl font-black uppercase tracking-widest text-[10px] hover:text-white transition-all flex items-center justify-center gap-2">
@@ -635,7 +729,7 @@ export default function MinhaDemandaDetalhe() {
                 </>
               )}
 
-              {/* EDITOR — Correção */}
+              {/* EDITOR: Correção solicitada */}
               {isEditorDesigner && userTask?.status === 'fazer_correcao' && (
                 <>
                   <div className="w-full h-10 bg-red-500/10 border border-red-500/20 text-red-400 rounded-xl font-black uppercase tracking-widest text-[10px] flex items-center justify-center gap-2">
@@ -648,22 +742,21 @@ export default function MinhaDemandaDetalhe() {
                 </>
               )}
 
-              {/* EDITOR — Concluído */}
+              {/* EDITOR: Aguardando aprovação do cliente */}
+              {isEditorDesigner && userTask?.status === 'aguardando_aprovacao_cliente' && (
+                <div className="w-full h-10 bg-amber-500/10 border border-amber-500/20 text-amber-400 rounded-xl font-black uppercase tracking-widest text-[10px] flex items-center justify-center gap-2">
+                  👀 Aguardando Aprovação do Cliente
+                </div>
+              )}
+
+              {/* EDITOR: Concluído */}
               {isEditorDesigner && userTask?.status === 'concluido' && (
                 <div className="w-full h-12 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-xl font-black uppercase tracking-widest text-[10px] flex items-center justify-center gap-2">
                   <Check className="w-4 h-4" /> Aprovado ✅
                 </div>
               )}
-{/* REDATOR/MASTER — Delegar */}
-{isRedatorMaster && post?.status === 'aguardando_delegacao' && (
-  <button
-    onClick={() => navigate(`/planejamento/${post.planId}/tarefas`)}
-    className="w-full h-12 bg-[#ff5351] text-white rounded-xl font-black uppercase tracking-widest text-[10px] hover:brightness-110 transition-all flex items-center justify-center gap-2 shadow-xl"
-  >
-    ⚡ Delegar Tarefa
-  </button>
-)}
-              {/* REDATOR/MASTER — Revisar */}
+
+              {/* REDATOR/MASTER: Revisar arquivo — Aprovar ou Pedir Correção */}
               {isRedatorMaster && allTasks.some((t: any) => t.status === 'arquivo_anexado') && (
                 <>
                   {!showAnotacao ? (
@@ -707,19 +800,26 @@ export default function MinhaDemandaDetalhe() {
                 </>
               )}
 
-              {/* CLIENTE/EQUIPE */}
-              {isClienteEquipe && allTasks.some((t: any) => t.status === 'arquivo_anexado') && (
+              {/* REDATOR/MASTER: Aguardando aprovação do cliente */}
+              {isRedatorMaster && allTasks.some((t: any) => t.status === 'aguardando_aprovacao_cliente') && (
+                <div className="w-full h-10 bg-amber-500/10 border border-amber-500/20 text-amber-400 rounded-xl font-black uppercase tracking-widest text-[10px] flex items-center justify-center gap-2">
+                  👀 Aguardando Aprovação do Cliente
+                </div>
+              )}
+
+              {/* CLIENTE/EQUIPE: Aprovar ou Pedir Correção */}
+              {isClienteEquipe && allTasks.some((t: any) => t.status === 'aguardando_aprovacao_cliente') && (
                 <>
                   {!showAnotacao ? (
                     <div className="space-y-2">
                       <button
                         onClick={() => {
-                          const t = allTasks.find((t: any) => t.status === 'arquivo_anexado');
+                          const t = allTasks.find((t: any) => t.status === 'aguardando_aprovacao_cliente');
                           if (t) handleAprovar(t.id);
                         }}
                         disabled={saving}
                         className="w-full h-10 bg-emerald-500 text-white rounded-xl font-black uppercase tracking-widest text-[10px] hover:brightness-110 transition-all flex items-center justify-center gap-2">
-                        <Check className="w-3 h-3" /> Aprovar
+                        <Check className="w-3 h-3" /> Aprovar Conteúdo
                       </button>
                       <button onClick={() => setShowAnotacao(true)}
                         className="w-full h-10 bg-zinc-800 border border-zinc-700 text-zinc-400 rounded-xl font-black uppercase tracking-widest text-[10px] hover:text-red-400 hover:border-red-500/20 transition-all flex items-center justify-center gap-2">
@@ -738,7 +838,7 @@ export default function MinhaDemandaDetalhe() {
                         </button>
                         <button
                           onClick={() => {
-                            const t = allTasks.find((t: any) => t.status === 'arquivo_anexado');
+                            const t = allTasks.find((t: any) => t.status === 'aguardando_aprovacao_cliente');
                             if (t) handlePedirCorrecao(t.id, t.responsibleEmail);
                           }}
                           disabled={saving || !anotacao.trim()}
@@ -751,7 +851,7 @@ export default function MinhaDemandaDetalhe() {
                 </>
               )}
 
-              {/* Anotação extra */}
+              {/* Botão de anotação extra para Redator/Master e Cliente/Equipe */}
               {(isRedatorMaster || isClienteEquipe) && !showAnotacao && (
                 <button onClick={() => setShowAnotacao(true)}
                   className="w-full h-9 bg-zinc-900 border border-zinc-800 text-zinc-500 rounded-xl font-black uppercase tracking-widest text-[9px] hover:text-white transition-all flex items-center justify-center gap-2">
