@@ -704,18 +704,25 @@ if (!statusVisiveis.includes(data.status)) continue;
             },
             {
               // Aprovação do planejamento (100% quando aprovado pela equipe)
-              header: 'Aprovação',
-              accessor: (item) => {
-                if (item.tipo !== 'planejamento') return <span className="text-zinc-600 text-xs">—</span>;
-                return (
-                  <div className="flex items-center gap-2">
-                    <div className="w-16 h-1.5 bg-zinc-800 rounded-full overflow-hidden">
-                      <div className="h-full bg-[#ff5351] rounded-full" style={{ width: '100%' }} />
-                    </div>
-                    <span className="text-[10px] font-black text-[#ff5351]">100%</span>
-                  </div>
-                );
-              },
+            header: 'Aprovação',
+accessor: (item) => {
+  if (item.tipo !== 'planejamento') return <span className="text-zinc-600 text-xs">—</span>;
+  const aprovacaoMap: any = {
+    aguardando_cliente: 30,
+    aguardando_validacao_equipe: 60,
+    aprovado_equipe: 100,
+    em_producao: 100,
+  };
+  const pct = aprovacaoMap[item.status] || 0;
+  return (
+    <div className="flex items-center gap-2">
+      <div className="w-16 h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+        <div className="h-full bg-[#ff5351] rounded-full" style={{ width: `${pct}%` }} />
+      </div>
+      <span className="text-[10px] font-black text-[#ff5351]">{pct}%</span>
+    </div>
+  );
+},
               align: 'center'
             },
             {
