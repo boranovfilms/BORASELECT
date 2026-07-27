@@ -148,8 +148,13 @@ export default function ContentPlanDetails() {
     setSaving(true);
     try {
       await contentPlanService.updateStatus(planId, 'aguardando_cliente');
+      
+      // Busca email do cliente diretamente do Firestore para garantir valor atualizado
+      const clienteDoc = await getDoc(doc(db, 'clientes', plan.clientId));
+      const emailCliente = clienteDoc.exists() ? clienteDoc.data().email?.toLowerCase() : clientEmail;
+      
       await notificacaoService.criar({
-        para: clientEmail,
+        para: emailCliente,
         tipo: 'planejamento_enviado',
         titulo: 'Novo Planejamento para Aprovação',
         descricao: `O planejamento "${plan.name}" está aguardando sua aprovação`,
