@@ -7,6 +7,9 @@ import { cn } from '../lib/utils';
 import { DataTable } from '../components/ui/DataTable';
 
 export default function MinhasDemandas() {
+  // ============================================================
+  // ESTADOS
+  // ============================================================
   const [loading, setLoading] = useState(true);
   const [userRole, setUserRole] = useState('cliente');
   const [userEmail, setUserEmail] = useState('');
@@ -19,6 +22,10 @@ export default function MinhasDemandas() {
 
   useEffect(() => { init(); }, []);
 
+  // ============================================================
+  // INICIALIZAÇÃO — detecta o role do usuário logado
+  // e chama a função correta de carregamento
+  // ============================================================
   const init = async () => {
     const user = auth.currentUser;
     if (!user) return;
@@ -60,10 +67,17 @@ export default function MinhasDemandas() {
     setLoading(false);
   };
 
+  // ============================================================
+  // UTILITÁRIO — retorna apenas o primeiro nome
+  // ============================================================
   const primeiroNome = (nomeCompleto: string) => {
     return nomeCompleto?.split(' ')[0] || nomeCompleto || '';
   };
 
+  // ============================================================
+  // CARREGAR CLIENTES (Master/Redator)
+  // Busca lista de clientes com total de demandas e pendências
+  // ============================================================
   const loadClientes = async () => {
     const snap = await getDocs(query(collection(db, 'clientes'), where('role', '==', 'cliente')));
     const clientesData = await Promise.all(snap.docs.map(async d => {
@@ -80,20 +94,23 @@ export default function MinhasDemandas() {
         return tasks.some((t: any) => ['pendente', 'em_andamento', 'arquivo_anexado'].includes(t.status));
       }).length;
 
-      const total = demandasSnap.docs.length + postsSnap.docs.length;
-      const pendentes = demandasPendentes + postsPendentes;
-
       return {
         id: clientId,
         ...d.data(),
-        totalDemandas: total,
-        pendentes,
+        totalDemandas: demandasSnap.docs.length + postsSnap.docs.length,
+        pendentes: demandasPendentes + postsPendentes,
         updatedAt: d.data().updatedAt
       };
     }));
     setClientes(clientesData);
   };
 
+  // ============================================================
+  // CARREGAR DEMANDAS DO CLIENTE SELECIONADO (Master/Redator)
+  // Busca planejamentos + posts vinculados ao cliente clicado
+  // Planejamentos concluídos (todos posts ok) são ocultados
+  // Posts não delegados (aguardando_delegacao) são ocultados
+  // ============================================================
   const loadDemandasDoCliente = async (cliente: any) => {
     setClienteSelecionado(cliente);
     const itens: any[] = [];
@@ -102,14 +119,15 @@ export default function MinhasDemandas() {
     const postsSnap = await getDocs(query(collection(db, 'posts'), where('clientId', '==', cliente.id)));
     const todosPosts = postsSnap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
 
+    // Adiciona planejamentos
     for (const d of demandasSnap.docs) {
       const data = d.data();
       const postsDoPlano = todosPosts.filter(p => p.planId === d.id);
       const totalPosts = postsDoPlano.length;
       const postsConcluidos = postsDoPlano.filter(p => p.status === 'concluido').length;
 
-      const todosCompletos = totalPosts > 0 && postsConcluidos === totalPosts;
-      if (todosCompletos) continue;
+      // Oculta planejamentos 100% concluídos ou com status concluido
+      if (totalPosts > 0 && postsConcluidos === totalPosts) continue;
       if (data.status === 'concluido') continue;
 
       const calcAprovacao = (status: string) => {
@@ -135,6 +153,7 @@ export default function MinhasDemandas() {
       });
     }
 
+    // Adiciona posts (exceto não delegados e concluídos)
     for (const post of todosPosts) {
       if (post.status === 'concluido') continue;
       if (post.status === 'aguardando_delegacao') continue;
@@ -156,6 +175,7 @@ export default function MinhasDemandas() {
       });
     }
 
+    // Ordena: planejamentos primeiro, posts depois
     itens.sort((a, b) => {
       if (a.isPlanejamento && !b.isPlanejamento) return -1;
       if (!a.isPlanejamento && b.isPlanejamento) return 1;
@@ -165,6 +185,10 @@ export default function MinhasDemandas() {
     setDemandasCliente(itens);
   };
 
+  // ============================================================
+  // CARREGAR DEMANDAS DO EDITOR/DESIGNER
+  // Busca posts na coleção posts/ onde a task tem o email do editor
+  // ============================================================
   const loadDemandasEditor = async (email: string) => {
     const snap = await getDocs(collection(db, 'posts'));
     const itens: any[] = [];
@@ -181,9 +205,9 @@ export default function MinhasDemandas() {
             clienteId: data.clientId,
             numero: data.number,
             headline: data.headline,
-            tipo: data.type,
-            taskTipo: task.dept,
-            taskLabel: task.deptLabel,
+            tipoPost: data.type,       // FEED, REEL, CARROSSEL, etc
+            taskTipo: task.dept,       // video, design, redacao, midia_social
+            taskLabel: task.deptLabel, // Edição de Vídeo, Design / Arte, etc
             taskStatus: task.status,
             publishDate: data.publishDate,
             status: task.status,
@@ -192,6 +216,7 @@ export default function MinhasDemandas() {
       });
     });
 
+    // Busca nomes dos clientes
     const clienteIds = [...new Set(itens.map(i => i.clienteId))];
     const clienteNomes: Record<string, string> = {};
     await Promise.all(clienteIds.map(async id => {
@@ -202,6 +227,12 @@ export default function MinhasDemandas() {
     setDemandas(itens.map(i => ({ ...i, clienteNome: clienteNomes[i.clienteId] || i.clienteId })));
   };
 
+  // ============================================================
+  // CARREGAR DEMANDAS DO CLIENTE/EQUIPE
+  // Busca planejamentos aprovados + posts delegados do cliente
+  // Status são traduzidos para linguagem do cliente
+  // Planejamentos 100% concluídos somem da lista
+  // ============================================================
   const loadDemandasCliente = async (clientId: string) => {
     const itens: any[] = [];
 
@@ -211,6 +242,7 @@ export default function MinhasDemandas() {
 
     for (const d of demandasSnap.docs) {
       const data = d.data();
+      // Só mostra planejamentos aprovados ou em produção
       const statusVisiveis = ['aprovado_equipe', 'em_producao'];
       if (!statusVisiveis.includes(data.status)) continue;
 
@@ -218,8 +250,10 @@ export default function MinhasDemandas() {
       const totalPosts = postsDoPlano.length;
       const postsConcluidos = postsDoPlano.filter(p => p.status === 'concluido').length;
 
+      // Oculta planejamentos 100% concluídos
       if (totalPosts > 0 && postsConcluidos === totalPosts) continue;
 
+      // Adiciona o planejamento
       itens.push({
         tipo: 'planejamento',
         demandaId: d.id,
@@ -231,13 +265,15 @@ export default function MinhasDemandas() {
         postsConcluidos,
       });
 
+      // Adiciona posts delegados (com tasks)
       postsDoPlano.forEach(post => {
         if (post.status === 'concluido') return;
         const postTasks = post.tasks || [];
-        if (postTasks.length === 0) return;
+        if (postTasks.length === 0) return; // Só mostra posts delegados
 
         const taskStatus = postTasks[0].status;
 
+        // Tradução de status interno → status visível para o cliente
         const statusClienteMap: Record<string, string> = {
           pendente: 'em_producao',
           em_andamento: 'em_producao',
@@ -252,6 +288,7 @@ export default function MinhasDemandas() {
           concluido: 'concluido',
         };
 
+        // Progresso visível para o cliente (baseado no status real da task)
         const progressoClienteMap: Record<string, number> = {
           pendente: 10,
           em_andamento: 20,
@@ -285,6 +322,9 @@ export default function MinhasDemandas() {
     setDemandas(itens);
   };
 
+  // ============================================================
+  // UTILITÁRIOS — badges de status e ícones de departamento
+  // ============================================================
   const getStatusBadge = (status: string, isCliente = false) => {
     const configs: any = {
       pendente: { label: 'Pendente', class: 'bg-amber-500/10 text-amber-400 border-amber-500/20' },
@@ -294,10 +334,7 @@ export default function MinhasDemandas() {
       aprovado: { label: 'Aprovado', class: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' },
       aprovado_equipe: { label: 'Aprovado ✓', class: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' },
       reprovado: { label: 'Reprovado', class: 'bg-red-500/10 text-red-400 border-red-500/20' },
-      em_revisao: {
-        label: isCliente ? 'Em Produção' : 'Em Revisão',
-        class: 'bg-purple-500/10 text-purple-400 border-purple-500/20'
-      },
+      em_revisao: { label: isCliente ? 'Em Produção' : 'Em Revisão', class: 'bg-purple-500/10 text-purple-400 border-purple-500/20' },
       arquivo_anexado: { label: 'Arquivo Enviado', class: 'bg-purple-500/10 text-purple-400 border-purple-500/20' },
       aguardando_cliente: { label: 'Aguard. Aprovação', class: 'bg-amber-500/10 text-amber-400 border-amber-500/20' },
       aguardando_validacao_equipe: { label: 'Aguard. Validação', class: 'bg-blue-500/10 text-blue-400 border-blue-500/20' },
@@ -342,6 +379,9 @@ export default function MinhasDemandas() {
 
   return (
     <div className="space-y-8 pb-20">
+      {/* ========================================================
+          HEADER — título da página
+      ======================================================== */}
       <header>
         <p className="text-[11px] uppercase tracking-[0.4em] text-[#ff5351] font-black mb-2">
           {isMasterOrRedator ? 'Gestão de Demandas' : isEditorDesigner ? 'Minhas Tarefas' : 'Meus Conteúdos'}
@@ -359,7 +399,10 @@ export default function MinhasDemandas() {
         )}
       </header>
 
-      {/* MASTER / REDATOR — Lista de clientes */}
+      {/* ========================================================
+          TABELA 1 — MASTER/REDATOR: Lista de clientes
+          Exibe todos os clientes com total e pendências
+      ======================================================== */}
       {isMasterOrRedator && !clienteSelecionado && (
         <DataTable
           data={clientes}
@@ -413,7 +456,11 @@ export default function MinhasDemandas() {
         />
       )}
 
-      {/* MASTER / REDATOR — Demandas do cliente selecionado */}
+      {/* ========================================================
+          TABELA 2 — MASTER/REDATOR: Demandas do cliente selecionado
+          Exibe planejamentos + posts delegados do cliente
+          Botão "Delegar" aparece nos planejamentos aprovados
+      ======================================================== */}
       {isMasterOrRedator && clienteSelecionado && (
         <DataTable
           data={demandasCliente}
@@ -502,6 +549,7 @@ export default function MinhasDemandas() {
               align: 'center'
             },
             {
+              // Botão Delegar — aparece só nos planejamentos aprovados
               header: 'Ação',
               accessor: (d) => {
                 if (!d.isPlanejamento) return null;
@@ -534,7 +582,11 @@ export default function MinhasDemandas() {
         />
       )}
 
-      {/* EDITOR / DESIGNER — Posts delegados */}
+      {/* ========================================================
+          TABELA 3 — EDITOR/DESIGNER: Posts delegados para ele
+          Exibe posts onde a task tem o email do editor
+          Colunas: Item | Cliente | Post (tipo) | Departamento | Status | Data
+      ======================================================== */}
       {isEditorDesigner && (
         <DataTable
           data={demandas}
@@ -543,7 +595,7 @@ export default function MinhasDemandas() {
           columns={[
             {
               header: 'Item',
-              className: 'w-96',
+              className: 'w-80',
               accessor: (item) => (
                 <div>
                   <p className="text-white font-black uppercase text-sm line-clamp-2 leading-tight">
@@ -562,7 +614,18 @@ export default function MinhasDemandas() {
               )
             },
             {
-              header: 'Tipo',
+              // Tipo do post: FEED, REEL, CARROSSEL, STORIES, etc
+              header: 'Post',
+              accessor: (item) => (
+                <span className="px-2 py-0.5 rounded bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[9px] font-black uppercase tracking-widest whitespace-nowrap">
+                  {item.tipoPost || '—'}
+                </span>
+              ),
+              align: 'center'
+            },
+            {
+              // Departamento responsável: Edição de Vídeo, Design, etc
+              header: 'Departamento',
               accessor: (item) => (
                 <span className="px-2 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-zinc-300 text-[9px] font-black uppercase tracking-widest whitespace-nowrap">
                   {getDeptIcon(item.taskTipo)} {item.taskLabel}
@@ -585,7 +648,12 @@ export default function MinhasDemandas() {
         />
       )}
 
-      {/* CLIENTE / EQUIPE */}
+      {/* ========================================================
+          TABELA 4 — CLIENTE/EQUIPE: Planejamentos e posts do cliente
+          Exibe planejamentos aprovados + posts delegados
+          Status são traduzidos para linguagem do cliente
+          Sem botão de ação — apenas visualização
+      ======================================================== */}
       {isClienteOrEquipe && (
         <DataTable
           data={demandas}
@@ -635,6 +703,7 @@ export default function MinhasDemandas() {
               align: 'center'
             },
             {
+              // Aprovação do planejamento (100% quando aprovado pela equipe)
               header: 'Aprovação',
               accessor: (item) => {
                 if (item.tipo !== 'planejamento') return <span className="text-zinc-600 text-xs">—</span>;
@@ -650,6 +719,7 @@ export default function MinhasDemandas() {
               align: 'center'
             },
             {
+              // Execução: X/total para planejamentos, % para posts
               header: 'Execução',
               accessor: (item) => {
                 if (item.tipo === 'planejamento') {
