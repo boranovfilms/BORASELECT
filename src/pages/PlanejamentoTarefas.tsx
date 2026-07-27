@@ -70,7 +70,7 @@ export default function PlanejamentoTarefas() {
 
   const calcularFasePost = (post: any): { fase: string; progresso: number } => {
     const tasks = post.tasks || [];
-    if (tasks.length === 0) return { fase: 'Aguardando Delegação', progresso: 17 };
+    if (tasks.length === 0) return { fase: 'Aguardando Delegação', progresso: 0 };
     const allDone = tasks.every((t: any) => t.status === 'concluido');
     if (allDone) return { fase: 'Concluído', progresso: 100 };
     const anyInProgress = tasks.some((t: any) => ['em_andamento', 'arquivo_anexado'].includes(t.status));
