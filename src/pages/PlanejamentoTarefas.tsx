@@ -68,15 +68,39 @@ export default function PlanejamentoTarefas() {
     }
   };
 
-  const calcularFasePost = (post: any): { fase: string; progresso: number } => {
-    const tasks = post.tasks || [];
-    if (tasks.length === 0) return { fase: 'Aguardando Delegação', progresso: 0 };
-    const allDone = tasks.every((t: any) => t.status === 'concluido');
-    if (allDone) return { fase: 'Concluído', progresso: 100 };
-    const anyInProgress = tasks.some((t: any) => ['em_andamento', 'arquivo_anexado'].includes(t.status));
-    if (anyInProgress) return { fase: 'Em Produção', progresso: 60 };
-    return { fase: 'Delegado', progresso: 30 };
+ const calcularFasePost = (post: any): { fase: string; progresso: number } => {
+  const tasks = post.tasks || [];
+  if (tasks.length === 0) return { fase: 'Aguardando Delegação', progresso: 0 };
+
+  const statusMap: Record<string, { fase: string; progresso: number }> = {
+    concluido:                    { fase: 'Concluído', progresso: 100 },
+    programado:                   { fase: 'Programado', progresso: 95 },
+    em_programacao:               { fase: 'Em Programação', progresso: 90 },
+    aguardando_revisao_equipe:    { fase: 'Aguard. Revisão Equipe', progresso: 80 },
+    aprovado_cliente:             { fase: 'Aprovado Cliente', progresso: 70 },
+    aguardando_aprovacao_cliente: { fase: 'Aguard. Aprovação', progresso: 60 },
+    arquivo_anexado:              { fase: 'Arquivo Enviado', progresso: 50 },
+    em_edicao:                    { fase: 'Em Edição', progresso: 35 },
+    em_andamento:                 { fase: 'Em Andamento', progresso: 20 },
+    pendente:                     { fase: 'Delegado', progresso: 10 },
   };
+
+  // Pega o status mais avançado entre todas as tasks
+  const prioridade = Object.keys(statusMap);
+  let melhorFase = { fase: 'Delegado', progresso: 10 };
+
+  for (const task of tasks) {
+    const idx = prioridade.indexOf(task.status);
+    const melhorIdx = prioridade.indexOf(
+      Object.keys(statusMap).find(k => statusMap[k].fase === melhorFase.fase) || 'pendente'
+    );
+    if (idx !== -1 && idx < melhorIdx) {
+      melhorFase = statusMap[task.status];
+    }
+  }
+
+  return melhorFase;
+};
 
   const toggleDept = (deptId: string) => {
     setSelectedDepts(prev =>
