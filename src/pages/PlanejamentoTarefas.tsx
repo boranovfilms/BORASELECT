@@ -102,8 +102,8 @@ export default function PlanejamentoTarefas() {
           status: 'pendente',
           tags: deptTags[deptId] || [],
           description: deptDescriptions[deptId] || '',
-          dependsOn: deptId === 'design' && depArteDependeVideo ? 'video' :
-            deptId === 'video' && depVideoDependeArte ? 'design' : undefined,
+         dependsOn: deptId === 'design' && depArteDependeVideo ? 'video' :
+  deptId === 'video' && depVideoDependeArte ? 'design' : null,
         };
       });
 
