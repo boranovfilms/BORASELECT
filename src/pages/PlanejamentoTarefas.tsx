@@ -141,9 +141,10 @@ export default function PlanejamentoTarefas() {
       setDepArteDependeVideo(false);
       setDepVideoDependeArte(false);
       loadData();
-    } catch (error) {
-      toast.error('Erro ao delegar tarefas.');
-    } finally {
+    } catch (error: any) {
+  console.error('Erro ao delegar:', error);
+  toast.error(`Erro: ${error?.message || 'desconhecido'}`);
+} finally {
       setSaving(false);
     }
   };
