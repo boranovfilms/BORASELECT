@@ -135,11 +135,11 @@ export default function MinhasDemandas() {
       });
     }
 
-   for (const post of todosPosts) {
-  if (post.status === 'concluido') continue;
-  if (post.status === 'aguardando_delegacao') continue; // Não mostra posts não delegados
-  const tasks = post.tasks || [];
-  itens.push({
+    for (const post of todosPosts) {
+      if (post.status === 'concluido') continue;
+      if (post.status === 'aguardando_delegacao') continue;
+      const tasks = post.tasks || [];
+      itens.push({
         id: post.id,
         planId: post.planId,
         postId: post.id,
@@ -233,38 +233,52 @@ export default function MinhasDemandas() {
 
       postsDoPlano.forEach(post => {
         if (post.status === 'concluido') return;
-        const tasks = post.tasks || [];
-        if (tasks.length === 0) return;
+        const postTasks = post.tasks || [];
+        if (postTasks.length === 0) return;
 
-const taskStatus = tasks.length > 0 ? tasks[0].status : post.status;
+        const taskStatus = postTasks[0].status;
 
-// Status visível para o cliente
-const statusClienteMap: Record<string, string> = {
-  pendente: 'em_producao',
-  em_andamento: 'em_producao',
-  em_edicao: 'em_producao',
-  arquivo_anexado: 'em_producao',
-  fazer_correcao: 'em_producao',
-  aguardando_aprovacao_cliente: 'aguardando_cliente',
-  aprovado_cliente: 'aprovado',
-  aguardando_revisao_equipe: 'aguardando_validacao_equipe',
-  em_programacao: 'em_producao',
-  programado: 'em_producao',
-  concluido: 'concluido',
-};
+        const statusClienteMap: Record<string, string> = {
+          pendente: 'em_producao',
+          em_andamento: 'em_producao',
+          em_edicao: 'em_producao',
+          arquivo_anexado: 'em_producao',
+          fazer_correcao: 'em_producao',
+          aguardando_aprovacao_cliente: 'aguardando_cliente',
+          aprovado_cliente: 'aprovado',
+          aguardando_revisao_equipe: 'aguardando_validacao_equipe',
+          em_programacao: 'em_producao',
+          programado: 'em_producao',
+          concluido: 'concluido',
+        };
 
-itens.push({
-  tipo: 'post',
-  postId: post.id,
-  demandaId: d.id,
-  demandaNome: data.name,
-  numero: post.number,
-  headline: post.headline,
-  postTipo: post.type,
-  publishDate: post.publishDate,
-  status: statusClienteMap[taskStatus] || 'em_producao',
-  taskStatus,
-});
+        const progressoClienteMap: Record<string, number> = {
+          pendente: 10,
+          em_andamento: 20,
+          em_edicao: 35,
+          arquivo_anexado: 50,
+          fazer_correcao: 40,
+          aguardando_aprovacao_cliente: 60,
+          aprovado_cliente: 70,
+          aguardando_revisao_equipe: 80,
+          em_programacao: 90,
+          programado: 95,
+          concluido: 100,
+        };
+
+        itens.push({
+          tipo: 'post',
+          postId: post.id,
+          demandaId: d.id,
+          demandaNome: data.name,
+          numero: post.number,
+          headline: post.headline,
+          postTipo: post.type,
+          publishDate: post.publishDate,
+          status: statusClienteMap[taskStatus] || 'em_producao',
+          taskStatus,
+          progressoCliente: progressoClienteMap[taskStatus] || 10,
+        });
       });
     }
 
@@ -306,9 +320,12 @@ itens.push({
       rascunho: 10, aguardando_cliente: 30,
       aguardando_validacao_equipe: 50, aprovado_equipe: 100,
       em_producao: 100, concluido: 100, devolvido: 20,
-      pendente: 10, em_andamento: 40,
-      arquivo_anexado: 60, fazer_correcao: 50,
-      aguardando_delegacao: 15,
+      pendente: 10, em_andamento: 20,
+      em_edicao: 35, arquivo_anexado: 50,
+      fazer_correcao: 40, aguardando_aprovacao_cliente: 60,
+      aprovado_cliente: 70, aguardando_revisao_equipe: 80,
+      em_programacao: 90, programado: 95,
+      aguardando_delegacao: 0,
     };
     return map[status] || 0;
   };
@@ -635,22 +652,22 @@ itens.push({
             {
               header: 'Execução',
               accessor: (item) => {
-                if (item.tipo !== 'planejamento') {
-                  const pct = calcProgresso(item.status);
+                if (item.tipo === 'planejamento') {
+                  if (!item.totalPosts) return <span className="text-zinc-600 text-xs">—</span>;
                   return (
-                    <div className="flex items-center gap-2">
-                      <div className="w-16 h-1.5 bg-zinc-800 rounded-full overflow-hidden">
-                        <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${pct}%` }} />
-                      </div>
-                      <span className="text-[10px] font-black text-emerald-400">{pct}%</span>
-                    </div>
+                    <span className="text-[10px] font-black text-emerald-400">
+                      {item.postsConcluidos}/{item.totalPosts}
+                    </span>
                   );
                 }
-                if (!item.totalPosts) return <span className="text-zinc-600 text-xs">—</span>;
+                const pct = item.progressoCliente || 0;
                 return (
-                  <span className="text-[10px] font-black text-emerald-400">
-                    {item.postsConcluidos}/{item.totalPosts}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <div className="w-16 h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                      <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${pct}%` }} />
+                    </div>
+                    <span className="text-[10px] font-black text-emerald-400">{pct}%</span>
+                  </div>
                 );
               },
               align: 'center'
