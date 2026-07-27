@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Loader2, Check, Upload, X, MessageSquare, Clock, User } from 'lucide-react';
+import { ArrowLeft, Loader2, Check, Upload, X, MessageSquare, Clock, User, Calendar } from 'lucide-react';
 import { toast } from 'react-hot-toast';
-import { collection, getDocs, doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, getDocs, doc, getDoc, updateDoc, serverTimestamp, query, where } from 'firebase/firestore';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { auth, db, storage } from '../lib/firebase';
 import { notificacaoService } from '../services/notificacaoService';
@@ -20,6 +20,9 @@ export default function MinhaDemandaDetalhe() {
   const [userTask, setUserTask] = useState<any>(null);
   const [clientName, setClientName] = useState('');
   const [clientEmail, setClientEmail] = useState('');
+  const [clientId, setClientId] = useState('');
+  const [hasEquipe, setHasEquipe] = useState(false);
+  const [equipeEmails, setEquipeEmails] = useState<string[]>([]);
   const [planNome, setPlanNome] = useState('');
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewType, setPreviewType] = useState<'image' | 'video' | null>(null);
@@ -28,6 +31,7 @@ export default function MinhaDemandaDetalhe() {
   const [driveSalvo, setDriveSalvo] = useState(false);
   const [anotacao, setAnotacao] = useState('');
   const [showAnotacao, setShowAnotacao] = useState(false);
+  const [dataPostagem, setDataPostagem] = useState('');
   const [userRole, setUserRole] = useState('cliente');
   const [userName, setUserName] = useState('');
   const [userEmail, setUserEmail] = useState('');
@@ -35,11 +39,6 @@ export default function MinhaDemandaDetalhe() {
 
   useEffect(() => { loadData(); }, [postId]);
 
-  // ============================================================
-  // CARREGAR DADOS DO POST
-  // Busca o post diretamente da coleção posts/
-  // Detecta o role do usuário e a task correspondente
-  // ============================================================
   const loadData = async () => {
     if (!postId) return;
     setLoading(true);
@@ -47,7 +46,7 @@ export default function MinhaDemandaDetalhe() {
       const email = auth.currentUser?.email?.toLowerCase().trim() || '';
       setUserEmail(email);
 
-      // Detecta role do usuário
+      // Detecta role
       let role = 'cliente';
       let name = auth.currentUser?.displayName || '';
       if (email === 'admin@boraselect.com.br') {
@@ -70,44 +69,52 @@ export default function MinhaDemandaDetalhe() {
       setUserRole(role);
       setUserName(name);
 
-      // Busca o post da coleção posts/
+      // Busca post
       const postDoc = await getDoc(doc(db, 'posts', postId));
-      if (!postDoc.exists()) {
-        toast.error('Post não encontrado');
-        navigate(-1);
-        return;
-      }
+      if (!postDoc.exists()) { toast.error('Post não encontrado'); navigate(-1); return; }
       const postData = { id: postDoc.id, ...postDoc.data() };
       setPost(postData);
       setPlanNome((postData as any).planNome || '');
 
-      // Detecta task do usuário baseado no role
+      // Task do usuário
       const isRedMaster = ['master', 'admin', 'redator'].includes(role);
       const tasks = (postData as any).tasks || [];
       let task = null;
       if (isRedMaster) {
-        task = tasks.find((t: any) => t.arquivoUrl || t.status === 'arquivo_anexado') || tasks[0] || null;
+        task = tasks.find((t: any) =>
+          ['arquivo_anexado', 'aguardando_aprovacao_cliente', 'aguardando_revisao_equipe'].includes(t.status)
+        ) || tasks[0] || null;
       } else {
         task = tasks.find((t: any) => t.responsibleEmail?.toLowerCase() === email) || null;
       }
       setUserTask(task || null);
 
-      // Preview do arquivo se existir
       const taskComArquivo = tasks.find((t: any) => t.arquivoUrl);
       if (taskComArquivo?.arquivoUrl) {
         setPreviewUrl(taskComArquivo.arquivoUrl);
         setPreviewType(taskComArquivo.arquivoTipo || 'image');
       }
-
       if (task?.driveDownloadUrl) setDriveSalvo(true);
 
-      // Busca nome e email do cliente
-      const clienteId = (postData as any).clientId;
-      if (clienteId) {
-        const clienteDoc = await getDoc(doc(db, 'clientes', clienteId));
+      // Busca cliente e equipe
+      const cId = (postData as any).clientId;
+      if (cId) {
+        setClientId(cId);
+        const clienteDoc = await getDoc(doc(db, 'clientes', cId));
         if (clienteDoc.exists()) {
           setClientName(clienteDoc.data().name || '');
           setClientEmail(clienteDoc.data().email?.toLowerCase() || '');
+        }
+
+        // Verifica se tem equipe
+        const equipeSnap = await getDocs(query(
+          collection(db, 'clientes'),
+          where('type', '==', 'membro'),
+          where('companyId', '==', cId)
+        ));
+        if (!equipeSnap.empty) {
+          setHasEquipe(true);
+          setEquipeEmails(equipeSnap.docs.map(d => d.data().email?.toLowerCase()).filter(Boolean));
         }
       }
 
@@ -119,10 +126,6 @@ export default function MinhaDemandaDetalhe() {
     }
   };
 
-  // ============================================================
-  // REGISTRAR HISTÓRICO
-  // Salva ação com nome, email, role, data e observação
-  // ============================================================
   const registrarHistorico = async (acao: string, obs?: string) => {
     if (!postId || !post) return;
     const registro = {
@@ -140,10 +143,6 @@ export default function MinhaDemandaDetalhe() {
     });
   };
 
-  // ============================================================
-  // ACEITAR DEMANDA (Editor)
-  // Muda status da task para em_andamento
-  // ============================================================
   const handleAceitar = async () => {
     if (!postId || !post || !userTask) return;
     setSaving(true);
@@ -151,10 +150,7 @@ export default function MinhaDemandaDetalhe() {
       const updatedTasks = (post.tasks || []).map((t: any) =>
         t.id === userTask.id ? { ...t, status: 'em_andamento' } : t
       );
-      await updateDoc(doc(db, 'posts', postId), {
-        tasks: updatedTasks,
-        updatedAt: serverTimestamp()
-      });
+      await updateDoc(doc(db, 'posts', postId), { tasks: updatedTasks, updatedAt: serverTimestamp() });
       await registrarHistorico('Demanda aceita');
       toast.success('Demanda aceita! Mãos à obra!');
       await loadData();
@@ -165,10 +161,6 @@ export default function MinhaDemandaDetalhe() {
     }
   };
 
-  // ============================================================
-  // SELECIONAR ARQUIVO (Editor)
-  // Detecta tipo e inicia upload correspondente
-  // ============================================================
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -182,9 +174,6 @@ export default function MinhaDemandaDetalhe() {
     else uploadImage(file);
   };
 
-  // ============================================================
-  // UPLOAD DE VÍDEO — Cloudflare Stream
-  // ============================================================
   const uploadVideo = async (file: File, isSubstituicao = false) => {
     setUploading(true);
     setUploadProgress(0);
@@ -228,9 +217,6 @@ export default function MinhaDemandaDetalhe() {
     }
   };
 
-  // ============================================================
-  // UPLOAD DE IMAGEM — Firebase Storage
-  // ============================================================
   const uploadImage = async (file: File, isSubstituicao = false) => {
     setUploading(true);
     setUploadProgress(0);
@@ -259,10 +245,6 @@ export default function MinhaDemandaDetalhe() {
     }
   };
 
-  // ============================================================
-  // SALVAR ARQUIVO NA TASK
-  // Atualiza status para arquivo_anexado e notifica redator
-  // ============================================================
   const salvarArquivoNaTask = async (url: string, tipo: 'video' | 'image', thumbnailUrl?: string, isSubstituicao = false) => {
     if (!postId || !post || !userTask) return;
     const updatedTasks = (post.tasks || []).map((t: any) =>
@@ -276,15 +258,9 @@ export default function MinhaDemandaDetalhe() {
         arquivoEnviadoEm: new Date().toISOString()
       } : t
     );
-    await updateDoc(doc(db, 'posts', postId), {
-      tasks: updatedTasks,
-      updatedAt: serverTimestamp()
-    });
-
+    await updateDoc(doc(db, 'posts', postId), { tasks: updatedTasks, updatedAt: serverTimestamp() });
     const acao = isSubstituicao ? 'Arquivo substituído (anterior descartado)' : 'Arquivo enviado para revisão';
     await registrarHistorico(acao);
-
-    // Notifica o redator
     await notificacaoService.criar({
       para: 'boranovfilms@gmail.com',
       tipo: 'arquivo_enviado',
@@ -295,14 +271,9 @@ export default function MinhaDemandaDetalhe() {
       visto: false,
       criadoEm: new Date().toISOString()
     });
-
     await loadData();
   };
 
-  // ============================================================
-  // SALVAR LINK DO DRIVE
-  // Salva link para download em alta qualidade
-  // ============================================================
   const handleSaveDriveLink = async () => {
     if (!postId || !post || !userTask || !driveLink) return;
     setSavingDrive(true);
@@ -310,10 +281,7 @@ export default function MinhaDemandaDetalhe() {
       const updatedTasks = (post.tasks || []).map((t: any) =>
         t.id === userTask.id ? { ...t, driveLink, driveDownloadUrl: driveLink } : t
       );
-      await updateDoc(doc(db, 'posts', postId), {
-        tasks: updatedTasks,
-        updatedAt: serverTimestamp()
-      });
+      await updateDoc(doc(db, 'posts', postId), { tasks: updatedTasks, updatedAt: serverTimestamp() });
       await registrarHistorico('Link do Drive salvo');
       toast.success('Link do Drive salvo!');
       setDriveLink('');
@@ -327,56 +295,107 @@ export default function MinhaDemandaDetalhe() {
   };
 
   // ============================================================
-  // APROVAR ARQUIVO
-  // Redator aprova → vai para cliente (aguardando_aprovacao_cliente)
-  // Cliente aprova → concluído
+  // APROVAR — fluxo completo por role
+  // Redator aprova → Cliente
+  // Cliente aprova → Equipe (se tiver) ou Redator programar
+  // Equipe aprova → Redator programar
   // ============================================================
   const handleAprovar = async (taskId: string) => {
     if (!postId || !post) return;
     setSaving(true);
     try {
       const isRedMaster = ['master', 'admin', 'redator'].includes(userRole);
-      const isClienteEquipeRole = ['cliente', 'equipe'].includes(userRole);
+      const isClienteRole = userRole === 'cliente';
+      const isEquipeRole = userRole === 'equipe';
 
-      let novoStatus = 'concluido';
+      let novoStatus = '';
 
       if (isRedMaster) {
+        // Redator aprova → vai para o cliente
         novoStatus = 'aguardando_aprovacao_cliente';
-      }
+        const updatedTasks = (post.tasks || []).map((t: any) =>
+          t.id === taskId || t.status === 'arquivo_anexado' ? { ...t, status: novoStatus } : t
+        );
+        await updateDoc(doc(db, 'posts', postId), { tasks: updatedTasks, updatedAt: serverTimestamp() });
+        await registrarHistorico('Arquivo aprovado pelo redator — enviado para cliente');
+        if (clientEmail) {
+          await notificacaoService.criar({
+            para: clientEmail,
+            tipo: 'arquivo_enviado',
+            titulo: 'Conteúdo pronto para aprovação',
+            descricao: `Post #${String(post.number).padStart(2, '0')} — ${post.headline?.slice(0, 50)} aguarda sua aprovação`,
+            planId: post.planId,
+            postId,
+            visto: false,
+            criadoEm: new Date().toISOString()
+          });
+        }
+        toast.success('Aprovado! Cliente foi notificado.');
 
-      const updatedTasks = (post.tasks || []).map((t: any) =>
-        t.id === taskId || t.status === 'arquivo_anexado' ? { ...t, status: novoStatus } : t
-      );
+      } else if (isClienteRole) {
+        if (hasEquipe && equipeEmails.length > 0) {
+          // Cliente aprova → vai para equipe
+          novoStatus = 'aguardando_revisao_equipe';
+          const updatedTasks = (post.tasks || []).map((t: any) =>
+            t.id === taskId || t.status === 'aguardando_aprovacao_cliente' ? { ...t, status: novoStatus } : t
+          );
+          await updateDoc(doc(db, 'posts', postId), { tasks: updatedTasks, updatedAt: serverTimestamp() });
+          await registrarHistorico('Arquivo aprovado pelo cliente — enviado para equipe');
+          for (const emailEquipe of equipeEmails) {
+            await notificacaoService.criar({
+              para: emailEquipe,
+              tipo: 'arquivo_enviado',
+              titulo: 'Conteúdo aguardando sua revisão',
+              descricao: `Post #${String(post.number).padStart(2, '0')} — ${post.headline?.slice(0, 50)}`,
+              planId: post.planId,
+              postId,
+              visto: false,
+              criadoEm: new Date().toISOString()
+            });
+          }
+          toast.success('Aprovado! Equipe foi notificada.');
+        } else {
+          // Cliente aprova sem equipe → vai para redator programar
+          novoStatus = 'em_programacao';
+          const updatedTasks = (post.tasks || []).map((t: any) =>
+            t.id === taskId || t.status === 'aguardando_aprovacao_cliente' ? { ...t, status: novoStatus } : t
+          );
+          await updateDoc(doc(db, 'posts', postId), { tasks: updatedTasks, updatedAt: serverTimestamp() });
+          await registrarHistorico('Arquivo aprovado pelo cliente — pronto para programar');
+          await notificacaoService.criar({
+            para: 'boranovfilms@gmail.com',
+            tipo: 'arquivo_enviado',
+            titulo: 'Conteúdo aprovado — pronto para programar',
+            descricao: `Post #${String(post.number).padStart(2, '0')} — ${post.headline?.slice(0, 50)}`,
+            planId: post.planId,
+            postId,
+            visto: false,
+            criadoEm: new Date().toISOString()
+          });
+          toast.success('Aprovado! Redator foi notificado para programar.');
+        }
 
-      const todosConcluidos = updatedTasks.every((t: any) => t.status === 'concluido');
-
-      await updateDoc(doc(db, 'posts', postId), {
-        tasks: updatedTasks,
-        status: todosConcluidos ? 'concluido' : post.status,
-        updatedAt: serverTimestamp()
-      });
-
-      await registrarHistorico(
-        isRedMaster
-          ? 'Arquivo aprovado pelo redator — enviado para cliente'
-          : 'Arquivo aprovado pelo cliente'
-      );
-
-      // Redator aprova → notifica cliente
-      if (isRedMaster && clientEmail) {
+      } else if (isEquipeRole) {
+        // Equipe aprova → vai para redator programar
+        novoStatus = 'em_programacao';
+        const updatedTasks = (post.tasks || []).map((t: any) =>
+          t.id === taskId || t.status === 'aguardando_revisao_equipe' ? { ...t, status: novoStatus } : t
+        );
+        await updateDoc(doc(db, 'posts', postId), { tasks: updatedTasks, updatedAt: serverTimestamp() });
+        await registrarHistorico('Arquivo aprovado pela equipe — pronto para programar');
         await notificacaoService.criar({
-          para: clientEmail,
+          para: 'boranovfilms@gmail.com',
           tipo: 'arquivo_enviado',
-          titulo: 'Conteúdo pronto para aprovação',
-          descricao: `Post #${String(post.number).padStart(2, '0')} — ${post.headline?.slice(0, 50)} aguarda sua aprovação`,
+          titulo: 'Conteúdo aprovado pela equipe — pronto para programar',
+          descricao: `Post #${String(post.number).padStart(2, '0')} — ${post.headline?.slice(0, 50)}`,
           planId: post.planId,
           postId,
           visto: false,
           criadoEm: new Date().toISOString()
         });
+        toast.success('Aprovado! Redator foi notificado para programar.');
       }
 
-      toast.success(isRedMaster ? 'Aprovado! Cliente foi notificado.' : 'Arquivo aprovado!');
       await loadData();
     } catch (error) {
       toast.error('Erro ao aprovar');
@@ -386,21 +405,40 @@ export default function MinhaDemandaDetalhe() {
   };
 
   // ============================================================
-  // PEDIR CORREÇÃO
-  // Notifica o editor com a anotação do que precisa ser corrigido
+  // PROGRAMAR POSTAGEM (Redator/Master)
   // ============================================================
+  const handleProgramar = async () => {
+    if (!postId || !post || !dataPostagem) return;
+    setSaving(true);
+    try {
+      const updatedTasks = (post.tasks || []).map((t: any) =>
+        t.status === 'em_programacao' ? { ...t, status: 'programado', dataPostagem } : t
+      );
+      const todosProgramados = updatedTasks.every((t: any) => t.status === 'programado');
+      await updateDoc(doc(db, 'posts', postId), {
+        tasks: updatedTasks,
+        status: todosProgramados ? 'concluido' : post.status,
+        updatedAt: serverTimestamp()
+      });
+      await registrarHistorico('Postagem programada', `Data: ${dataPostagem}`);
+      toast.success('Postagem programada com sucesso!');
+      await loadData();
+    } catch (error) {
+      toast.error('Erro ao programar');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handlePedirCorrecao = async (taskId: string, responsibleEmail: string) => {
     if (!postId || !post) return;
     if (!anotacao.trim()) { toast.error('Descreva o que precisa ser corrigido'); return; }
     setSaving(true);
     try {
       const updatedTasks = (post.tasks || []).map((t: any) =>
-        t.id === taskId || t.status === 'arquivo_anexado' ? { ...t, status: 'fazer_correcao' } : t
+        t.id === taskId ? { ...t, status: 'fazer_correcao' } : t
       );
-      await updateDoc(doc(db, 'posts', postId), {
-        tasks: updatedTasks,
-        updatedAt: serverTimestamp()
-      });
+      await updateDoc(doc(db, 'posts', postId), { tasks: updatedTasks, updatedAt: serverTimestamp() });
       await registrarHistorico('Correção solicitada', anotacao);
       await notificacaoService.criar({
         para: responsibleEmail,
@@ -423,9 +461,6 @@ export default function MinhaDemandaDetalhe() {
     }
   };
 
-  // ============================================================
-  // UTILITÁRIOS — estilos e badges
-  // ============================================================
   const getTypeStyle = (type: string) => {
     const styles: any = {
       FEED: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
@@ -448,19 +483,20 @@ export default function MinhaDemandaDetalhe() {
       em_andamento: { label: '⚡ Em Andamento', class: 'bg-blue-500/10 text-blue-400 border-blue-500/20' },
       arquivo_anexado: { label: '📎 Arquivo Enviado', class: 'bg-purple-500/10 text-purple-400 border-purple-500/20' },
       aguardando_aprovacao_cliente: { label: '👀 Aguard. Cliente', class: 'bg-amber-500/10 text-amber-400 border-amber-500/20' },
-      concluido: { label: '✅ Aprovado', class: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' },
+      aguardando_revisao_equipe: { label: '👥 Aguard. Equipe', class: 'bg-blue-500/10 text-blue-400 border-blue-500/20' },
+      em_programacao: { label: '📅 Pronto p/ Programar', class: 'bg-purple-500/10 text-purple-400 border-purple-500/20' },
+      programado: { label: '✅ Programado', class: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' },
+      concluido: { label: '✅ Concluído', class: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' },
       fazer_correcao: { label: '🔄 Correção', class: 'bg-red-500/10 text-red-400 border-red-500/20' },
     };
     const config = configs[status] || configs.pendente;
     return <span className={cn('px-3 py-1 rounded-full border text-[9px] font-black uppercase tracking-widest', config.class)}>{config.label}</span>;
   };
 
-  // ============================================================
-  // VARIÁVEIS DE CONTROLE DE ROLE
-  // ============================================================
   const isEditorDesigner = ['editor', 'designer', 'midia_social'].includes(userRole);
   const isRedatorMaster = ['master', 'admin', 'redator'].includes(userRole);
-  const isClienteEquipe = ['cliente', 'equipe'].includes(userRole);
+  const isClienteRole = userRole === 'cliente';
+  const isEquipeRole = userRole === 'equipe';
   const allTasks = post?.tasks || [];
   const historico = post?.historico || [];
 
@@ -474,9 +510,6 @@ export default function MinhaDemandaDetalhe() {
 
   return (
     <div className="space-y-6 pb-8 text-left">
-      {/* ========================================================
-          HEADER — título e status da tarefa
-      ======================================================== */}
       <header className="space-y-3">
         <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-zinc-500 hover:text-white transition-colors text-xs font-black uppercase tracking-widest">
           <ArrowLeft className="w-4 h-4" /> Voltar
@@ -502,9 +535,7 @@ export default function MinhaDemandaDetalhe() {
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
 
-        {/* ========================================================
-            COLUNA ESQUERDA — Conteúdo do post + Histórico
-        ======================================================== */}
+        {/* COLUNA ESQUERDA — Conteúdo + Histórico */}
         <div className="space-y-6">
           <div className="bg-[#1f1f1f] border border-zinc-800 rounded-[24px] overflow-hidden">
             <div className="p-5 border-b border-zinc-800 flex items-center justify-between">
@@ -569,7 +600,6 @@ export default function MinhaDemandaDetalhe() {
             </div>
           </div>
 
-          {/* Histórico de ações */}
           {historico.length > 0 && (
             <div className="bg-[#1f1f1f] border border-zinc-800 rounded-[24px] overflow-hidden">
               <div className="p-5 border-b border-zinc-800">
@@ -600,9 +630,7 @@ export default function MinhaDemandaDetalhe() {
           )}
         </div>
 
-        {/* ========================================================
-            COLUNA DIREITA — Arquivo, preview e botões de ação
-        ======================================================== */}
+        {/* COLUNA DIREITA — Arquivo & Ações */}
         <div className="bg-[#1f1f1f] border border-zinc-800 rounded-[24px] overflow-hidden flex flex-col">
           <div className="p-5 border-b border-zinc-800">
             <h2 className="text-xs font-black uppercase tracking-widest text-white">
@@ -611,7 +639,7 @@ export default function MinhaDemandaDetalhe() {
           </div>
           <div className="p-6 flex flex-col flex-1 gap-4">
 
-            {/* Info do departamento — visível para editor */}
+            {/* Info departamento — Editor */}
             {isEditorDesigner && userTask && (
               <div className="flex items-center gap-4 p-4 bg-[#ff5351]/5 border border-[#ff5351]/10 rounded-2xl">
                 <span className="text-3xl">{getDeptIcon(userTask.dept)}</span>
@@ -642,7 +670,7 @@ export default function MinhaDemandaDetalhe() {
               </div>
             )}
 
-            {/* Preview do arquivo — visível para todos */}
+            {/* Preview — todos veem */}
             {previewUrl && (
               <div>
                 <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-2">Preview</p>
@@ -663,7 +691,7 @@ export default function MinhaDemandaDetalhe() {
               </div>
             )}
 
-            {/* Download em alta qualidade — visível só para Redator/Master */}
+            {/* Download — só Redator/Master */}
             {isRedatorMaster && allTasks.some((t: any) => t.driveDownloadUrl) && (
               <button
                 onClick={() => window.open(allTasks.find((t: any) => t.driveDownloadUrl)?.driveDownloadUrl, '_blank')}
@@ -673,15 +701,12 @@ export default function MinhaDemandaDetalhe() {
               </button>
             )}
 
-            {/* Input de arquivo oculto */}
             <input ref={fileInputRef} type="file" accept="image/*,video/*" onChange={handleFileSelect} className="hidden" />
 
-            {/* ====================================================
-                BOTÕES DE AÇÃO — variam conforme o role e status
-            ==================================================== */}
+            {/* BOTÕES DE AÇÃO */}
             <div className="mt-auto pt-4 border-t border-zinc-800 space-y-2">
 
-              {/* EDITOR: Aceitar demanda */}
+              {/* EDITOR — Aceitar */}
               {isEditorDesigner && userTask?.status === 'pendente' && (
                 <button onClick={handleAceitar} disabled={saving}
                   className="w-full h-12 bg-[#ff5351] text-white rounded-xl font-black uppercase tracking-widest text-[10px] hover:brightness-110 transition-all flex items-center justify-center gap-2 disabled:opacity-50">
@@ -690,7 +715,7 @@ export default function MinhaDemandaDetalhe() {
                 </button>
               )}
 
-              {/* EDITOR: Enviar arquivo + Link Drive */}
+              {/* EDITOR — Enviar arquivo */}
               {isEditorDesigner && userTask?.status === 'em_andamento' && (
                 <div className="space-y-3">
                   <button onClick={() => fileInputRef.current?.click()} disabled={uploading}
@@ -709,14 +734,12 @@ export default function MinhaDemandaDetalhe() {
                         {savingDrive ? <Loader2 className="w-3 h-3 animate-spin" /> : driveSalvo ? '✓' : 'Salvar'}
                       </button>
                     </div>
-                    {driveSalvo && (
-                      <p className="text-emerald-400 text-[9px] font-black uppercase tracking-widest">✓ Link do Drive salvo</p>
-                    )}
+                    {driveSalvo && <p className="text-emerald-400 text-[9px] font-black uppercase tracking-widest">✓ Link do Drive salvo</p>}
                   </div>
                 </div>
               )}
 
-              {/* EDITOR: Arquivo enviado aguardando revisão */}
+              {/* EDITOR — Aguardando revisão */}
               {isEditorDesigner && userTask?.status === 'arquivo_anexado' && (
                 <>
                   <div className="w-full h-10 bg-purple-500/10 border border-purple-500/20 text-purple-400 rounded-xl font-black uppercase tracking-widest text-[10px] flex items-center justify-center gap-2">
@@ -729,7 +752,7 @@ export default function MinhaDemandaDetalhe() {
                 </>
               )}
 
-              {/* EDITOR: Correção solicitada */}
+              {/* EDITOR — Correção */}
               {isEditorDesigner && userTask?.status === 'fazer_correcao' && (
                 <>
                   <div className="w-full h-10 bg-red-500/10 border border-red-500/20 text-red-400 rounded-xl font-black uppercase tracking-widest text-[10px] flex items-center justify-center gap-2">
@@ -742,21 +765,35 @@ export default function MinhaDemandaDetalhe() {
                 </>
               )}
 
-              {/* EDITOR: Aguardando aprovação do cliente */}
+              {/* EDITOR — Aguardando cliente */}
               {isEditorDesigner && userTask?.status === 'aguardando_aprovacao_cliente' && (
                 <div className="w-full h-10 bg-amber-500/10 border border-amber-500/20 text-amber-400 rounded-xl font-black uppercase tracking-widest text-[10px] flex items-center justify-center gap-2">
                   👀 Aguardando Aprovação do Cliente
                 </div>
               )}
 
-              {/* EDITOR: Concluído */}
-              {isEditorDesigner && userTask?.status === 'concluido' && (
-                <div className="w-full h-12 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-xl font-black uppercase tracking-widest text-[10px] flex items-center justify-center gap-2">
-                  <Check className="w-4 h-4" /> Aprovado ✅
+              {/* EDITOR — Aguardando equipe */}
+              {isEditorDesigner && userTask?.status === 'aguardando_revisao_equipe' && (
+                <div className="w-full h-10 bg-blue-500/10 border border-blue-500/20 text-blue-400 rounded-xl font-black uppercase tracking-widest text-[10px] flex items-center justify-center gap-2">
+                  👥 Aguardando Revisão da Equipe
                 </div>
               )}
 
-              {/* REDATOR/MASTER: Revisar arquivo — Aprovar ou Pedir Correção */}
+              {/* EDITOR — Pronto para programar */}
+              {isEditorDesigner && userTask?.status === 'em_programacao' && (
+                <div className="w-full h-10 bg-purple-500/10 border border-purple-500/20 text-purple-400 rounded-xl font-black uppercase tracking-widest text-[10px] flex items-center justify-center gap-2">
+                  📅 Aguardando Programação
+                </div>
+              )}
+
+              {/* EDITOR — Programado/Concluído */}
+              {isEditorDesigner && (userTask?.status === 'programado' || userTask?.status === 'concluido') && (
+                <div className="w-full h-12 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-xl font-black uppercase tracking-widest text-[10px] flex items-center justify-center gap-2">
+                  <Check className="w-4 h-4" /> Concluído ✅
+                </div>
+              )}
+
+              {/* REDATOR — Revisar arquivo */}
               {isRedatorMaster && allTasks.some((t: any) => t.status === 'arquivo_anexado') && (
                 <>
                   {!showAnotacao ? (
@@ -800,15 +837,53 @@ export default function MinhaDemandaDetalhe() {
                 </>
               )}
 
-              {/* REDATOR/MASTER: Aguardando aprovação do cliente */}
+              {/* REDATOR — Aguardando cliente */}
               {isRedatorMaster && allTasks.some((t: any) => t.status === 'aguardando_aprovacao_cliente') && (
                 <div className="w-full h-10 bg-amber-500/10 border border-amber-500/20 text-amber-400 rounded-xl font-black uppercase tracking-widest text-[10px] flex items-center justify-center gap-2">
                   👀 Aguardando Aprovação do Cliente
                 </div>
               )}
 
-              {/* CLIENTE/EQUIPE: Aprovar ou Pedir Correção */}
-              {isClienteEquipe && allTasks.some((t: any) => t.status === 'aguardando_aprovacao_cliente') && (
+              {/* REDATOR — Aguardando equipe */}
+              {isRedatorMaster && allTasks.some((t: any) => t.status === 'aguardando_revisao_equipe') && (
+                <div className="w-full h-10 bg-blue-500/10 border border-blue-500/20 text-blue-400 rounded-xl font-black uppercase tracking-widest text-[10px] flex items-center justify-center gap-2">
+                  👥 Aguardando Revisão da Equipe
+                </div>
+              )}
+
+              {/* REDATOR — Programar postagem */}
+              {isRedatorMaster && allTasks.some((t: any) => t.status === 'em_programacao') && (
+                <div className="space-y-2">
+                  <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500">Data de Postagem</p>
+                  <div className="flex gap-2">
+                    <input type="date" value={dataPostagem} onChange={e => setDataPostagem(e.target.value)}
+                      className="flex-1 h-10 bg-zinc-900 border border-zinc-800 rounded-xl px-3 text-white text-xs focus:border-[#ff5351] outline-none" />
+                    <button onClick={handleProgramar} disabled={!dataPostagem || saving}
+                      className="h-10 px-4 bg-[#ff5351] text-white rounded-xl text-[10px] font-black uppercase hover:brightness-110 transition-all disabled:opacity-50 flex items-center gap-2">
+                      <Calendar className="w-3 h-3" /> Programar
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* REDATOR — Programado */}
+              {isRedatorMaster && allTasks.some((t: any) => t.status === 'programado') && (
+                <div className="w-full h-10 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-xl font-black uppercase tracking-widest text-[10px] flex items-center justify-center gap-2">
+                  ✅ Postagem Programada
+                </div>
+              )}
+
+              {/* REDATOR — Post com botão delegar */}
+              {isRedatorMaster && post?.status === 'aguardando_delegacao' && (
+                <button
+                  onClick={() => navigate(`/planejamento/${post.planId}/tarefas`)}
+                  className="w-full h-12 bg-[#ff5351] text-white rounded-xl font-black uppercase tracking-widest text-[10px] hover:brightness-110 transition-all flex items-center justify-center gap-2 shadow-xl">
+                  ⚡ Delegar Tarefa
+                </button>
+              )}
+
+              {/* CLIENTE — Aprovar ou Pedir Correção */}
+              {isClienteRole && allTasks.some((t: any) => t.status === 'aguardando_aprovacao_cliente') && (
                 <>
                   {!showAnotacao ? (
                     <div className="space-y-2">
@@ -851,8 +926,52 @@ export default function MinhaDemandaDetalhe() {
                 </>
               )}
 
-              {/* Botão de anotação extra para Redator/Master e Cliente/Equipe */}
-              {(isRedatorMaster || isClienteEquipe) && !showAnotacao && (
+              {/* EQUIPE — Aprovar ou Pedir Correção */}
+              {isEquipeRole && allTasks.some((t: any) => t.status === 'aguardando_revisao_equipe') && (
+                <>
+                  {!showAnotacao ? (
+                    <div className="space-y-2">
+                      <button
+                        onClick={() => {
+                          const t = allTasks.find((t: any) => t.status === 'aguardando_revisao_equipe');
+                          if (t) handleAprovar(t.id);
+                        }}
+                        disabled={saving}
+                        className="w-full h-10 bg-emerald-500 text-white rounded-xl font-black uppercase tracking-widest text-[10px] hover:brightness-110 transition-all flex items-center justify-center gap-2">
+                        <Check className="w-3 h-3" /> Aprovar Conteúdo
+                      </button>
+                      <button onClick={() => setShowAnotacao(true)}
+                        className="w-full h-10 bg-zinc-800 border border-zinc-700 text-zinc-400 rounded-xl font-black uppercase tracking-widest text-[10px] hover:text-red-400 hover:border-red-500/20 transition-all flex items-center justify-center gap-2">
+                        <MessageSquare className="w-3 h-3" /> Pedir Correção
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <textarea value={anotacao} onChange={e => setAnotacao(e.target.value)} rows={3}
+                        placeholder="O que precisa ser corrigido?"
+                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-3 text-white text-xs focus:border-[#ff5351] outline-none resize-none" />
+                      <div className="flex gap-2">
+                        <button onClick={() => { setShowAnotacao(false); setAnotacao(''); }}
+                          className="flex-1 h-10 bg-zinc-800 border border-zinc-700 text-zinc-400 rounded-xl font-black uppercase tracking-widest text-[10px]">
+                          Cancelar
+                        </button>
+                        <button
+                          onClick={() => {
+                            const t = allTasks.find((t: any) => t.status === 'aguardando_revisao_equipe');
+                            if (t) handlePedirCorrecao(t.id, t.responsibleEmail);
+                          }}
+                          disabled={saving || !anotacao.trim()}
+                          className="flex-1 h-10 bg-red-500/20 border border-red-500/30 text-red-400 rounded-xl font-black uppercase tracking-widest text-[10px] disabled:opacity-50">
+                          Enviar
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* Botão anotação extra */}
+              {(isRedatorMaster || isClienteRole || isEquipeRole) && !showAnotacao && (
                 <button onClick={() => setShowAnotacao(true)}
                   className="w-full h-9 bg-zinc-900 border border-zinc-800 text-zinc-500 rounded-xl font-black uppercase tracking-widest text-[9px] hover:text-white transition-all flex items-center justify-center gap-2">
                   <MessageSquare className="w-3 h-3" /> Fazer Anotação
