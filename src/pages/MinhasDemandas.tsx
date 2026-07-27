@@ -55,7 +55,6 @@ export default function MinhasDemandas() {
       const isClienteOrEquipe = ['cliente', 'equipe'].includes(role);
 
       if (isMasterOrRedator) {
-        // Listener em tempo real para clientes
         unsubscribe = onSnapshot(
           query(collection(db, 'clientes'), where('role', '==', 'cliente')),
           async (snap) => {
@@ -67,7 +66,7 @@ export default function MinhasDemandas() {
                 ['rascunho', 'aguardando_cliente', 'devolvido', 'aguardando_validacao_equipe', 'aprovado_equipe', 'em_producao'].includes(dd.data().status)
               ).length + postsSnap.docs.filter(pd => {
                 const tasks = pd.data().tasks || [];
-                return tasks.some((t: any) => ['pendente', 'em_andamento', 'arquivo_anexado'].includes(t.status));
+                return tasks.some((t: any) => ['pendente', 'em_andamento', 'arquivo_anexado', 'aguardando_aprovacao_cliente', 'aguardando_revisao_equipe', 'em_programacao'].includes(t.status));
               }).length;
               return {
                 id: cId,
@@ -82,7 +81,6 @@ export default function MinhasDemandas() {
           }
         );
       } else if (isEditorDesigner) {
-        // Listener em tempo real para posts do editor
         unsubscribe = onSnapshot(collection(db, 'posts'), async (snap) => {
           const itens: any[] = [];
           snap.docs.forEach(d => {
@@ -119,7 +117,6 @@ export default function MinhasDemandas() {
           setLoading(false);
         });
       } else if (isClienteOrEquipe && clientId) {
-        // Listener em tempo real para demandas do cliente
         unsubscribe = onSnapshot(
           query(collection(db, 'demandas'), where('clientId', '==', clientId)),
           async (demandasSnap) => {
@@ -163,6 +160,8 @@ export default function MinhasDemandas() {
                 if (postTasks.length === 0) return;
 
                 const taskStatus = postTasks[0].status;
+
+                // Status traduzido para o cliente
                 const statusClienteMap: Record<string, string> = {
                   pendente: 'em_producao',
                   em_andamento: 'em_producao',
@@ -170,18 +169,24 @@ export default function MinhasDemandas() {
                   arquivo_anexado: 'em_producao',
                   fazer_correcao: 'em_producao',
                   aguardando_aprovacao_cliente: 'aguardando_cliente',
-                  aprovado_cliente: 'aprovado',
                   aguardando_revisao_equipe: 'aguardando_validacao_equipe',
-                  em_programacao: 'em_producao',
-                  programado: 'em_producao',
+                  em_programacao: 'em_programacao',
+                  programado: 'programado',
                   concluido: 'concluido',
                 };
+
+                // Progresso para o cliente
                 const progressoClienteMap: Record<string, number> = {
-                  pendente: 10, em_andamento: 20, em_edicao: 35,
-                  arquivo_anexado: 50, fazer_correcao: 40,
-                  aguardando_aprovacao_cliente: 60, aprovado_cliente: 70,
-                  aguardando_revisao_equipe: 80, em_programacao: 90,
-                  programado: 95, concluido: 100,
+                  pendente: 10,
+                  em_andamento: 20,
+                  em_edicao: 35,
+                  arquivo_anexado: 50,
+                  fazer_correcao: 40,
+                  aguardando_aprovacao_cliente: 60,
+                  aguardando_revisao_equipe: 75,
+                  em_programacao: 85,
+                  programado: 95,
+                  concluido: 100,
                 };
 
                 itens.push({
@@ -260,13 +265,15 @@ export default function MinhasDemandas() {
       if (post.status === 'concluido') continue;
       if (post.status === 'aguardando_delegacao') continue;
       const tasks = post.tasks || [];
+      const taskStatus = tasks.length > 0 ? tasks[0].status : post.status;
+
       itens.push({
         id: post.id,
         planId: post.planId,
         postId: post.id,
         name: `#${String(post.number).padStart(2, '0')} ${post.headline}`,
         type: post.type,
-        status: tasks.length > 0 ? tasks[0].status : post.status,
+        status: taskStatus,
         updatedAt: post.updatedAt,
         isPost: true,
         isPlanejamento: false,
@@ -293,20 +300,24 @@ export default function MinhasDemandas() {
 
   const getStatusBadge = (status: string, isCliente = false) => {
     const configs: any = {
+      // Status internos (Redator/Editor)
       pendente: { label: 'Pendente', class: 'bg-amber-500/10 text-amber-400 border-amber-500/20' },
       em_andamento: { label: 'Em Andamento', class: 'bg-blue-500/10 text-blue-400 border-blue-500/20' },
-      concluido: { label: 'Concluído', class: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' },
-      fazer_correcao: { label: 'Correção', class: 'bg-red-500/10 text-red-400 border-red-500/20' },
-      aprovado: { label: 'Aprovado', class: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' },
-      aprovado_equipe: { label: 'Aprovado ✓', class: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' },
-      em_revisao: { label: isCliente ? 'Em Produção' : 'Em Revisão', class: 'bg-purple-500/10 text-purple-400 border-purple-500/20' },
       arquivo_anexado: { label: 'Arquivo Enviado', class: 'bg-purple-500/10 text-purple-400 border-purple-500/20' },
-      aguardando_cliente: { label: 'Aguard. Aprovação', class: 'bg-amber-500/10 text-amber-400 border-amber-500/20' },
-      aguardando_validacao_equipe: { label: 'Aguard. Validação', class: 'bg-blue-500/10 text-blue-400 border-blue-500/20' },
-      aguardando_delegacao: { label: 'Aguard. Delegação', class: 'bg-amber-500/10 text-amber-400 border-amber-500/20' },
-      em_producao: { label: 'Em Produção', class: 'bg-blue-500/10 text-blue-400 border-blue-500/20' },
+      fazer_correcao: { label: 'Correção', class: 'bg-red-500/10 text-red-400 border-red-500/20' },
+      aguardando_aprovacao_cliente: { label: 'Aguard. Cliente', class: 'bg-amber-500/10 text-amber-400 border-amber-500/20' },
+      aguardando_revisao_equipe: { label: 'Aguard. Equipe', class: 'bg-blue-500/10 text-blue-400 border-blue-500/20' },
+      em_programacao: { label: 'Pronto p/ Agendar', class: 'bg-purple-500/10 text-purple-400 border-purple-500/20' },
+      programado: { label: 'Agendado ✓', class: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' },
+      concluido: { label: 'Concluído', class: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' },
+      // Status de planejamento
       rascunho: { label: 'Rascunho', class: 'bg-zinc-800 text-zinc-400 border-zinc-700' },
+      aguardando_cliente: { label: isCliente ? 'Aguard. Aprovação' : 'Aguard. Aprovação', class: 'bg-amber-500/10 text-amber-400 border-amber-500/20' },
+      aguardando_validacao_equipe: { label: isCliente ? 'Aguard. Equipe' : 'Aguard. Validação', class: 'bg-blue-500/10 text-blue-400 border-blue-500/20' },
+      aprovado_equipe: { label: 'Aprovado ✓', class: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' },
+      em_producao: { label: 'Em Produção', class: 'bg-blue-500/10 text-blue-400 border-blue-500/20' },
       devolvido: { label: 'Devolvido', class: 'bg-red-500/10 text-red-400 border-red-500/20' },
+      aguardando_delegacao: { label: 'Aguard. Delegação', class: 'bg-amber-500/10 text-amber-400 border-amber-500/20' },
     };
     const config = configs[status] || configs.rascunho;
     return <span className={cn("px-2 py-1 rounded-full border text-[9px] font-black uppercase tracking-widest whitespace-nowrap", config.class)}>{config.label}</span>;
@@ -319,14 +330,25 @@ export default function MinhasDemandas() {
 
   const calcProgresso = (status: string) => {
     const map: any = {
-      rascunho: 10, aguardando_cliente: 30,
-      aguardando_validacao_equipe: 50, aprovado_equipe: 100,
-      em_producao: 100, concluido: 100, devolvido: 20,
-      pendente: 10, em_andamento: 20, em_edicao: 35,
-      arquivo_anexado: 50, fazer_correcao: 40,
-      aguardando_aprovacao_cliente: 60, aprovado_cliente: 70,
-      aguardando_revisao_equipe: 80, em_programacao: 90,
-      programado: 95, aguardando_delegacao: 0,
+      // Status de task
+      pendente: 10,
+      em_andamento: 20,
+      em_edicao: 35,
+      arquivo_anexado: 50,
+      fazer_correcao: 40,
+      aguardando_aprovacao_cliente: 60,
+      aguardando_revisao_equipe: 75,
+      em_programacao: 85,
+      programado: 95,
+      concluido: 100,
+      // Status de planejamento
+      rascunho: 10,
+      aguardando_cliente: 30,
+      aguardando_validacao_equipe: 50,
+      aprovado_equipe: 100,
+      em_producao: 100,
+      devolvido: 20,
+      aguardando_delegacao: 0,
     };
     return map[status] || 0;
   };
@@ -577,7 +599,7 @@ export default function MinhasDemandas() {
         />
       )}
 
-      {/* TABELA 4 — CLIENTE/EQUIPE: Planejamentos e posts */}
+      {/* TABELA 4 — CLIENTE/EQUIPE */}
       {isClienteOrEquipe && (
         <DataTable
           data={demandas}
