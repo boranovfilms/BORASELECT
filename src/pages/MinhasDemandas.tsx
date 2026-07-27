@@ -235,17 +235,37 @@ export default function MinhasDemandas() {
         if (post.status === 'concluido') return;
         const tasks = post.tasks || [];
         if (tasks.length === 0) return;
-        itens.push({
-          tipo: 'post',
-          postId: post.id,
-          demandaId: d.id,
-          demandaNome: data.name,
-          numero: post.number,
-          headline: post.headline,
-          postTipo: post.type,
-          publishDate: post.publishDate,
-          status: post.status,
-        });
+
+        const tasks = post.tasks || [];
+const taskStatus = tasks.length > 0 ? tasks[0].status : post.status;
+
+// Status visível para o cliente
+const statusClienteMap: Record<string, string> = {
+  pendente: 'em_producao',
+  em_andamento: 'em_producao',
+  em_edicao: 'em_producao',
+  arquivo_anexado: 'em_producao',
+  fazer_correcao: 'em_producao',
+  aguardando_aprovacao_cliente: 'aguardando_cliente',
+  aprovado_cliente: 'aprovado',
+  aguardando_revisao_equipe: 'aguardando_validacao_equipe',
+  em_programacao: 'em_producao',
+  programado: 'em_producao',
+  concluido: 'concluido',
+};
+
+itens.push({
+  tipo: 'post',
+  postId: post.id,
+  demandaId: d.id,
+  demandaNome: data.name,
+  numero: post.number,
+  headline: post.headline,
+  postTipo: post.type,
+  publishDate: post.publishDate,
+  status: statusClienteMap[taskStatus] || 'em_producao',
+  taskStatus,
+});
       });
     }
 
