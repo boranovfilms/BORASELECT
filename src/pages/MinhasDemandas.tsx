@@ -154,8 +154,8 @@ export default function MinhasDemandas() {
                 aprovacaoPct: aprovacaoMap[data.status] || 0,
               });
 
-              postsDoPlano.forEach(post => {
-                if (post.status === 'concluido') return;
+             postsDoPlano.forEach(post => {
+  // mantém concluídos visíveis
                 const postTasks = post.tasks || [];
                 if (postTasks.length === 0) return;
 
@@ -260,8 +260,7 @@ export default function MinhasDemandas() {
     }
 
     for (const post of todosPosts) {
-      if (post.status === 'concluido') continue;
-      if (post.status === 'aguardando_delegacao') continue;
+  if (post.status === 'aguardando_delegacao') continue;
       const tasks = post.tasks || [];
       const taskStatus = tasks.length > 0 ? tasks[0].status : post.status;
 
