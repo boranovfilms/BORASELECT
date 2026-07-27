@@ -88,6 +88,8 @@ export default function MinhasDemandas() {
             const tasks = data.tasks || [];
             tasks.forEach((task: any) => {
               if (task.responsibleEmail?.toLowerCase() === email) {
+                // Se o post está concluído, mostra como concluído para o editor também
+                const statusFinal = data.status === 'concluido' ? 'concluido' : task.status;
                 itens.push({
                   postId: d.id,
                   demandaId: data.planId,
@@ -98,9 +100,9 @@ export default function MinhasDemandas() {
                   tipoPost: data.type,
                   taskTipo: task.dept,
                   taskLabel: task.deptLabel,
-                  taskStatus: task.status,
+                  taskStatus: statusFinal,
                   publishDate: data.publishDate,
-                  status: task.status,
+                  status: statusFinal,
                 });
               }
             });
@@ -154,12 +156,13 @@ export default function MinhasDemandas() {
                 aprovacaoPct: aprovacaoMap[data.status] || 0,
               });
 
-             postsDoPlano.forEach(post => {
-  // mantém concluídos visíveis
+              postsDoPlano.forEach(post => {
                 const postTasks = post.tasks || [];
                 if (postTasks.length === 0) return;
 
                 const taskStatus = postTasks[0].status;
+                // Se o post está concluído usa concluido direto
+                const statusFinal = post.status === 'concluido' ? 'concluido' : taskStatus;
 
                 const statusClienteMap: Record<string, string> = {
                   pendente: 'em_producao',
@@ -196,9 +199,9 @@ export default function MinhasDemandas() {
                   headline: post.headline,
                   postTipo: post.type,
                   publishDate: post.publishDate,
-                  status: statusClienteMap[taskStatus] || 'em_producao',
-                  taskStatus,
-                  progressoCliente: progressoClienteMap[taskStatus] || 10,
+                  status: statusClienteMap[statusFinal] || 'em_producao',
+                  taskStatus: statusFinal,
+                  progressoCliente: progressoClienteMap[statusFinal] || 10,
                 });
               });
             }
@@ -233,7 +236,6 @@ export default function MinhasDemandas() {
       const totalPosts = postsDoPlano.length;
       const postsConcluidos = postsDoPlano.filter(p => p.status === 'concluido').length;
 
-      if (totalPosts > 0 && postsConcluidos === totalPosts) continue;
       if (data.status === 'concluido') continue;
 
       const calcAprovacao = (status: string) => {
@@ -260,9 +262,10 @@ export default function MinhasDemandas() {
     }
 
     for (const post of todosPosts) {
-  if (post.status === 'aguardando_delegacao') continue;
+      if (post.status === 'aguardando_delegacao') continue;
       const tasks = post.tasks || [];
-      const taskStatus = tasks.length > 0 ? tasks[0].status : post.status;
+      // Usa status do post se concluído, senão usa status da task
+      const statusFinal = post.status === 'concluido' ? 'concluido' : (tasks.length > 0 ? tasks[0].status : post.status);
 
       itens.push({
         id: post.id,
@@ -270,7 +273,7 @@ export default function MinhasDemandas() {
         postId: post.id,
         name: `#${String(post.number).padStart(2, '0')} ${post.headline}`,
         type: post.type,
-        status: taskStatus,
+        status: statusFinal,
         updatedAt: post.updatedAt,
         isPost: true,
         isPlanejamento: false,
@@ -297,7 +300,6 @@ export default function MinhasDemandas() {
 
   const getStatusBadge = (status: string, isCliente = false) => {
     const configs: any = {
-      // Status internos
       pendente: { label: 'Pendente', class: 'bg-amber-500/10 text-amber-400 border-amber-500/20' },
       em_andamento: { label: 'Em Andamento', class: 'bg-blue-500/10 text-blue-400 border-blue-500/20' },
       arquivo_anexado: { label: 'Arquivo Enviado', class: 'bg-purple-500/10 text-purple-400 border-purple-500/20' },
@@ -308,8 +310,7 @@ export default function MinhasDemandas() {
       programado: { label: isCliente ? 'Em Finalização' : 'Agendado ✓', class: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' },
       aprovado_editor: { label: 'Aprovado ✅', class: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' },
       em_finalizacao: { label: 'Em Finalização', class: 'bg-purple-500/10 text-purple-400 border-purple-500/20' },
-      concluido: { label: 'Concluído', class: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' },
-      // Status de planejamento
+      concluido: { label: 'Concluído ✅', class: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' },
       rascunho: { label: 'Rascunho', class: 'bg-zinc-800 text-zinc-400 border-zinc-700' },
       aguardando_cliente: { label: 'Aguard. Aprovação', class: 'bg-amber-500/10 text-amber-400 border-amber-500/20' },
       aguardando_validacao_equipe: { label: isCliente ? 'Aguard. Equipe' : 'Aguard. Validação', class: 'bg-blue-500/10 text-blue-400 border-blue-500/20' },
@@ -578,9 +579,9 @@ export default function MinhasDemandas() {
               align: 'center'
             },
             {
-              // Para o editor: em_programacao e programado aparecem como "Aprovado ✅"
               header: 'Status',
               accessor: (item) => getStatusBadge(
+                item.taskStatus === 'concluido' ? 'concluido' :
                 ['em_programacao', 'programado'].includes(item.taskStatus) ? 'aprovado_editor' : item.taskStatus
               ),
               align: 'center'
