@@ -243,8 +243,8 @@ export default function MinhasDemandas() {
     for (const d of demandasSnap.docs) {
       const data = d.data();
       // Só mostra planejamentos aprovados ou em produção
-      const statusVisiveis = ['aprovado_equipe', 'em_producao'];
-      if (!statusVisiveis.includes(data.status)) continue;
+      const statusVisiveis = ['aguardando_cliente', 'aguardando_validacao_equipe', 'aprovado_equipe', 'em_producao'];
+if (!statusVisiveis.includes(data.status)) continue;
 
       const postsDoPlano = todosPosts.filter(p => p.planId === d.id);
       const totalPosts = postsDoPlano.length;
