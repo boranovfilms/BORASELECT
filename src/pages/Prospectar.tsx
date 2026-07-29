@@ -97,11 +97,13 @@ export default function Prospectar() {
     try {
       // Primeiro geocodifica a cidade para obter lat/lng
       const geoUrl = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(cidade)}&key=${import.meta.env.VITE_GOOGLE_PLACES_API_KEY}`;
-      const geoRes = await fetch(geoUrl);
-      const geoData = await geoRes.json();
+const geoRes = await fetch(geoUrl);
+const geoData = await geoRes.json();
 
-      if (!geoData.results || geoData.results.length === 0) {
-        toast.error('Cidade não encontrada');
+console.log('GEO RESPONSE:', JSON.stringify(geoData));
+
+if (!geoData.results || geoData.results.length === 0) {
+  toast.error('Cidade não encontrada');
         setLoading(false);
         return;
       }
