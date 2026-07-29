@@ -36,6 +36,7 @@ import Teleprompter from './pages/Teleprompter';
 import MinhasDemandas from './pages/MinhasDemandas';
 import MinhaDemandaDetalhe from './pages/MinhaDemandaDetalhe';
 import ProcessarPlanejamento from './pages/ProcessarPlanejamento';
+import Prospectar from './pages/Prospectar';
 
 export default function App() {
   const [loading, setLoading] = useState(true);
@@ -148,6 +149,7 @@ export default function App() {
         <Route path="/teleprompter" element={user ? wrapLayout(<Teleprompter />) : <Navigate to="/login" />} />
         <Route path="/diagnostico" element={user && isAdmin ? wrapLayout(<DebugTable />) : <Navigate to="/" />} />
         <Route path="*" element={<Navigate to="/" />} />
+        <Route path="/prospectar" element={user ? wrapLayout(<Prospectar />) : <Navigate to="/login" />} />
         
       </Routes>
     </BrowserRouter>
