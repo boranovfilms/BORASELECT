@@ -1,7 +1,7 @@
 import React from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {
-  LayoutDashboard, Library, Users, Package, LayoutTemplate, CreditCard, Settings, Shield, HelpCircle, LogOut, Bell, X, Loader2, Image as ImageControl, Trash2, Save, CheckSquare, UsersRound, FileText, Database, ChevronRight, ArrowRight, Tv
+  LayoutDashboard, Library, Users, Package, LayoutTemplate, CreditCard, Settings, Shield, HelpCircle, LogOut, Bell, X, Loader2, Image as ImageControl, Trash2, Save, CheckSquare, UsersRound, FileText, Database, ChevronRight, ArrowRight, Tv, TrendingUp
 } from 'lucide-react';
 import { auth, db } from '@/src/lib/firebase';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
@@ -87,7 +87,7 @@ export default function AppLayout({ children, userRole = 'cliente', userName = '
 
       if (notifs.length > 0) {
         const sessionKey = `global_notified_${userEmail}`;
-        const notifiedIds = JSON.parse(sessionStorage.getItem(sessionKey) || '[]');
+        const notifiedIds = JSON.parse(sessionKey ? sessionStorage.getItem(sessionKey) || '[]' : '[]');
         let shouldPlay = false;
 
         notifs.forEach(n => {
@@ -132,6 +132,7 @@ const handleNotificationClick = async (notif: Notificacao) => {
     { id: 'planejamentos', icon: FileText, label: 'Planejamentos', path: '/meus-planejamentos' },
     { id: 'minhas_demandas', icon: FileText, label: 'Minhas Demandas', path: '/minhas-demandas' },
     { id: 'clientes', icon: Users, label: 'Clientes', path: '/clients' },
+    { id: 'prospectar', icon: TrendingUp, label: 'Prospectar', path: '/prospectar', roles: ['master', 'admin', 'redator'] },
     { id: 'equipe', icon: UsersRound, label: 'Equipe', path: '/equipe' },
     { id: 'pacotes', icon: Package, label: 'Serviços', path: '/packages' },
     { id: 'modelos', icon: LayoutTemplate, label: 'Modelos', path: '/modelos' },
@@ -143,6 +144,7 @@ const handleNotificationClick = async (notif: Notificacao) => {
   ];
 
   const navItems = ALL_MODULES.filter(mod => {
+    if ((mod as any).roles) return (mod as any).roles.includes(userRole);
     if (mod.id === 'planejamentos' && userRole === 'cliente') return false;
     if (mod.id === 'painel_master' && userRole === 'master') return true;
     if (mod.id === 'diagnostico' && userRole === 'master') return true;
