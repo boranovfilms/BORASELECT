@@ -455,8 +455,8 @@ export default function Prospectar() {
                 </button>
               )}
               {showSegmentoSugestoes && (
-                <div className="absolute top-full left-0 right-0 mt-1 bg-zinc-900 border border-zinc-700 rounded-xl overflow-hidden z-50 shadow-xl">
-                  {segmentoSugestoes.map(s => (
+               <div className="absolute top-full left-0 right-0 mt-1 bg-zinc-900 border border-zinc-700 rounded-xl overflow-y-auto z-50 shadow-xl" style={{ maxHeight: '240px' }}>
+  {segmentoSugestoes.map(s => (
                     <button key={s} onMouseDown={() => { setSegmento(s); setShowSegmentoSugestoes(false); }}
                       className="w-full px-4 py-2.5 text-left text-xs text-zinc-300 hover:bg-zinc-800 hover:text-white transition-all border-b border-zinc-800 last:border-0">
                       {s}
