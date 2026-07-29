@@ -1,9 +1,65 @@
-import React, { useState, useEffect } from 'react';
-import { Search, MapPin, Phone, Globe, Star, TrendingUp, UserPlus, Loader2, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Search, MapPin, Phone, Globe, Star, TrendingUp, UserPlus, Loader2, AlertCircle, X } from 'lucide-react';
 import { toast } from 'react-hot-toast';
-import { collection, addDoc, getDocs, query, where, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, getDocs, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { cn } from '../lib/utils';
+
+const SEGMENTOS = [
+  // SAÚDE & BEM-ESTAR
+  'Clínicas de estética', 'Clínicas de fisioterapia', 'Clínicas odontológicas',
+  'Clínicas médicas', 'Psicólogos e terapeutas', 'Nutricionistas',
+  'Clínicas de pilates e yoga', 'Clínicas veterinárias e pet shops',
+  'Clínicas de acupuntura', 'Clínicas de dermatologia', 'Clínicas de oftalmologia',
+  'Clínicas de ortopedia', 'Laboratórios de análises clínicas',
+  'Clínicas de quiropraxia', 'Clínicas de fonoaudiologia',
+  // FITNESS & ESPORTE
+  'Academias', 'Personal trainers', 'Escolas de artes marciais',
+  'Escolas de natação e esportes', 'Crossfit e funcional', 'Estúdios de dança',
+  'Campos e quadras esportivas', 'Lojas de artigos esportivos',
+  // BELEZA
+  'Salões de beleza', 'Barbearias', 'Clínicas de bronzeamento',
+  'Spas e centros de relaxamento', 'Clínicas de micropigmentação',
+  'Clínicas de depilação', 'Nail designers e manicures', 'Maquiadoras profissionais',
+  // ALIMENTAÇÃO
+  'Restaurantes', 'Cafeterias e padarias', 'Delivery e dark kitchens',
+  'Buffets e eventos gastronômicos', 'Pizzarias', 'Hamburguerias artesanais',
+  'Sorveterias e açaís', 'Empórios e lojas de produtos naturais',
+  // EDUCAÇÃO
+  'Escolas', 'Cursos e treinamentos', 'Faculdades e cursos técnicos',
+  'Escolas de idiomas', 'Escolas de música', 'Escolas de teatro e artes',
+  'Cursinhos pré-vestibular', 'Escolas de informática',
+  // JURÍDICO & FINANCEIRO
+  'Escritórios de advocacia', 'Contabilidades', 'Consultorias financeiras',
+  'Seguradoras e corretoras', 'Escritórios de cobrança',
+  'Empresas de crédito e financiamento', 'Consultorias de RH',
+  'Escritórios de contabilidade digital',
+  // IMÓVEIS & CONSTRUÇÃO
+  'Imobiliárias', 'Construtoras', 'Arquitetos e designers de interiores',
+  'Empresas de reformas e manutenção', 'Administradoras de condomínios',
+  'Empresas de limpeza e conservação', 'Vidraçarias e esquadrias',
+  'Marmorarias e granitos',
+  // AUTOMOTIVO
+  'Concessionárias', 'Oficinas mecânicas', 'Lava-rápidos e estética automotiva',
+  'Funilarias e pintura automotiva', 'Lojas de pneus e rodas',
+  'Rastreamento e alarmes veiculares', 'Despachantes e documentação',
+  // VAREJO & MODA
+  'Lojas de roupas e calçados', 'Lojas de móveis e decoração',
+  'Farmácias e drogarias', 'Supermercados e mercados', 'Óticas',
+  'Joalherias e relojoarias', 'Lojas de eletrônicos', 'Livrarias e papelarias',
+  // TURISMO & HOSPITALIDADE
+  'Hotéis e pousadas', 'Agências de viagem', 'Resorts e spas',
+  'Parques e atrações turísticas', 'Hostels e albergues',
+  'Locadoras de veículos', 'Guias turísticos', 'Restaurantes temáticos',
+  // EVENTOS
+  'Cerimoniais e casamentos', 'Fotógrafos e videomakers', 'Produtoras de eventos',
+  'DJs e bandas', 'Decoradores de festas', 'Locadoras de equipamentos para eventos',
+  'Buffets infantis', 'Espaços para eventos',
+  // TECNOLOGIA & SERVIÇOS
+  'Empresas de TI e software', 'Gráficas e impressão', 'Agências de publicidade',
+  'Empresas de segurança e monitoramento', 'Empresas de logística e transporte',
+  'Consultorias de marketing digital',
+];
 
 interface Lead {
   id?: string;
@@ -64,6 +120,15 @@ export default function Prospectar() {
   const [abaSelecionada, setAbaSelecionada] = useState<'buscar' | 'salvos'>('buscar');
   const [convertendo, setConvertendo] = useState<string | null>(null);
 
+  // Autocomplete segmento
+  const [segmentoSugestoes, setSegmentoSugestoes] = useState<string[]>([]);
+  const [showSegmentoSugestoes, setShowSegmentoSugestoes] = useState(false);
+
+  // Autocomplete cidade
+  const [cidadeSugestoes, setCidadeSugestoes] = useState<any[]>([]);
+  const [showCidadeSugestoes, setShowCidadeSugestoes] = useState(false);
+  const cidadeTimerRef = useRef<any>(null);
+
   useEffect(() => {
     const count = parseInt(localStorage.getItem(MES_KEY) || '0');
     setBuscasUsadas(count);
@@ -81,6 +146,41 @@ export default function Prospectar() {
     localStorage.setItem(MES_KEY, String(novoCount));
   };
 
+  // Autocomplete segmento
+  const handleSegmentoChange = (value: string) => {
+    setSegmento(value);
+    if (value.length >= 2) {
+      const filtrados = SEGMENTOS.filter(s =>
+        s.toLowerCase().includes(value.toLowerCase())
+      ).slice(0, 8);
+      setSegmentoSugestoes(filtrados);
+      setShowSegmentoSugestoes(filtrados.length > 0);
+    } else {
+      setShowSegmentoSugestoes(false);
+    }
+  };
+
+  // Autocomplete cidade via Google Places
+  const handleCidadeChange = async (value: string) => {
+    setCidade(value);
+    if (cidadeTimerRef.current) clearTimeout(cidadeTimerRef.current);
+    if (value.length < 3) { setShowCidadeSugestoes(false); return; }
+
+    cidadeTimerRef.current = setTimeout(async () => {
+      try {
+        const url = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(value)}&types=(cities)&language=pt-BR&components=country:br&key=${import.meta.env.VITE_GOOGLE_PLACES_API_KEY}`;
+        const res = await fetch(url);
+        const data = await res.json();
+        if (data.predictions) {
+          setCidadeSugestoes(data.predictions.slice(0, 6));
+          setShowCidadeSugestoes(true);
+        }
+      } catch (error) {
+        console.error('Erro autocomplete cidade:', error);
+      }
+    }, 400);
+  };
+
   const buscarEmpresas = async () => {
     if (!segmento.trim() || !cidade.trim()) {
       toast.error('Preencha o segmento e a cidade');
@@ -93,26 +193,23 @@ export default function Prospectar() {
 
     setLoading(true);
     setLeads([]);
+    setShowSegmentoSugestoes(false);
+    setShowCidadeSugestoes(false);
 
     try {
-      // Primeiro geocodifica a cidade para obter lat/lng
       const geoUrl = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(cidade)}&key=${import.meta.env.VITE_GOOGLE_PLACES_API_KEY}`;
-const geoRes = await fetch(geoUrl);
-const geoData = await geoRes.json();
+      const geoRes = await fetch(geoUrl);
+      const geoData = await geoRes.json();
 
-console.log('GEO RESPONSE:', JSON.stringify(geoData));
-
-if (!geoData.results || geoData.results.length === 0) {
-  toast.error('Cidade não encontrada');
+      if (!geoData.results || geoData.results.length === 0) {
+        toast.error('Cidade não encontrada');
         setLoading(false);
         return;
       }
 
       const { lat, lng } = geoData.results[0].geometry.location;
 
-      // Busca empresas via Places API (New)
-      const placesUrl = `https://places.googleapis.com/v1/places:searchText`;
-      const placesRes = await fetch(placesUrl, {
+      const placesRes = await fetch('https://places.googleapis.com/v1/places:searchText', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -136,7 +233,7 @@ if (!geoData.results || geoData.results.length === 0) {
       incrementarContador();
 
       if (!placesData.places || placesData.places.length === 0) {
-        toast('Nenhuma empresa encontrada. Tente outro segmento ou cidade.');
+        toast('Nenhuma empresa encontrada.');
         setLoading(false);
         return;
       }
@@ -156,21 +253,16 @@ if (!geoData.results || geoData.results.length === 0) {
           status: 'novo' as const,
         };
         const score = calcularScore(leadParcial);
-        return {
-          ...leadParcial,
-          score,
-          classificacao: getClassificacao(score),
-        };
+        return { ...leadParcial, score, classificacao: getClassificacao(score) };
       });
 
-      // Ordena por score
       resultados.sort((a, b) => b.score - a.score);
       setLeads(resultados);
       toast.success(`${resultados.length} empresas encontradas!`);
 
     } catch (error: any) {
       console.error(error);
-      toast.error('Erro ao buscar empresas. Verifique a API Key.');
+      toast.error('Erro ao buscar empresas.');
     } finally {
       setLoading(false);
     }
@@ -178,16 +270,9 @@ if (!geoData.results || geoData.results.length === 0) {
 
   const salvarLead = async (lead: Lead) => {
     try {
-      // Verifica se já existe
       const existente = salvos.find(s => s.placeId === lead.placeId);
-      if (existente) {
-        toast('Lead já salvo!');
-        return;
-      }
-      await addDoc(collection(db, 'prospects'), {
-        ...lead,
-        criadoEm: serverTimestamp()
-      });
+      if (existente) { toast('Lead já salvo!'); return; }
+      await addDoc(collection(db, 'prospects'), { ...lead, criadoEm: serverTimestamp() });
       toast.success('Lead salvo!');
       loadLeadsSalvos();
     } catch (error) {
@@ -198,7 +283,6 @@ if (!geoData.results || geoData.results.length === 0) {
   const converterEmCliente = async (lead: Lead) => {
     setConvertendo(lead.placeId);
     try {
-      // Cria o cliente na coleção clientes
       await addDoc(collection(db, 'clientes'), {
         name: lead.nome,
         commercialName: lead.nome,
@@ -213,13 +297,10 @@ if (!geoData.results || geoData.results.length === 0) {
         updatedAt: new Date().toISOString(),
         originLead: lead.placeId,
       });
-
-      // Atualiza status no prospect se estiver salvo
       const existente = salvos.find(s => s.placeId === lead.placeId);
       if (existente?.id) {
         await updateDoc(doc(db, 'prospects', existente.id), { status: 'cliente' });
       }
-
       toast.success(`${lead.nome} convertido em cliente!`);
       loadLeadsSalvos();
     } catch (error) {
@@ -287,23 +368,14 @@ if (!geoData.results || geoData.results.length === 0) {
 
       <div className="flex gap-2 pt-1">
         {!salvo && (
-          <button
-            onClick={() => salvarLead(lead)}
-            className="flex-1 h-8 bg-zinc-800 border border-zinc-700 text-zinc-400 rounded-xl text-[9px] font-black uppercase tracking-widest hover:text-white transition-all"
-          >
+          <button onClick={() => salvarLead(lead)}
+            className="flex-1 h-8 bg-zinc-800 border border-zinc-700 text-zinc-400 rounded-xl text-[9px] font-black uppercase tracking-widest hover:text-white transition-all">
             Salvar Lead
           </button>
         )}
-        <button
-          onClick={() => converterEmCliente(lead)}
-          disabled={convertendo === lead.placeId}
-          className="flex-1 h-8 bg-[#ff5351] text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:brightness-110 transition-all flex items-center justify-center gap-1 disabled:opacity-50"
-        >
-          {convertendo === lead.placeId ? (
-            <Loader2 className="w-3 h-3 animate-spin" />
-          ) : (
-            <><UserPlus className="w-3 h-3" /> Converter</>
-          )}
+        <button onClick={() => converterEmCliente(lead)} disabled={convertendo === lead.placeId}
+          className="flex-1 h-8 bg-[#ff5351] text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:brightness-110 transition-all flex items-center justify-center gap-1 disabled:opacity-50">
+          {convertendo === lead.placeId ? <Loader2 className="w-3 h-3 animate-spin" /> : <><UserPlus className="w-3 h-3" /> Converter</>}
         </button>
       </div>
     </div>
@@ -317,7 +389,7 @@ if (!geoData.results || geoData.results.length === 0) {
         <p className="text-zinc-500 text-sm mt-1">Encontre e qualifique novos clientes potenciais</p>
       </header>
 
-      {/* Contador de buscas */}
+      {/* Contador */}
       <div className="bg-[#1f1f1f] border border-zinc-800 rounded-2xl p-5">
         <div className="flex items-center justify-between mb-2">
           <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Buscas utilizadas este mês</span>
@@ -326,10 +398,8 @@ if (!geoData.results || geoData.results.length === 0) {
           </span>
         </div>
         <div className="w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
-          <div
-            className={cn('h-full rounded-full transition-all', pctBuscas >= 80 ? 'bg-red-500' : pctBuscas >= 50 ? 'bg-amber-500' : 'bg-emerald-500')}
-            style={{ width: `${pctBuscas}%` }}
-          />
+          <div className={cn('h-full rounded-full transition-all', pctBuscas >= 80 ? 'bg-red-500' : pctBuscas >= 50 ? 'bg-amber-500' : 'bg-emerald-500')}
+            style={{ width: `${pctBuscas}%` }} />
         </div>
         {pctBuscas >= 80 && (
           <div className="flex items-center gap-2 mt-2">
@@ -339,62 +409,91 @@ if (!geoData.results || geoData.results.length === 0) {
         )}
       </div>
 
-      {/* Formulário de busca */}
+      {/* Formulário */}
       <div className="bg-[#1f1f1f] border border-zinc-800 rounded-[24px] overflow-hidden">
         <div className="p-6 border-b border-zinc-800">
           <h2 className="text-xs font-black uppercase tracking-widest text-white">Nova Busca</h2>
         </div>
         <div className="p-6 space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
+
+            {/* Segmento com autocomplete */}
+            <div className="relative">
               <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-2">Segmento / Nicho</label>
               <input
                 type="text"
                 value={segmento}
-                onChange={e => setSegmento(e.target.value)}
-                placeholder="Ex: clínicas de fisioterapia, academias..."
+                onChange={e => handleSegmentoChange(e.target.value)}
+                onFocus={() => segmento.length >= 2 && setShowSegmentoSugestoes(true)}
+                onBlur={() => setTimeout(() => setShowSegmentoSugestoes(false), 200)}
+                placeholder="Ex: clínicas de estética..."
                 className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none"
-                onKeyDown={e => e.key === 'Enter' && buscarEmpresas()}
               />
+              {segmento && (
+                <button onClick={() => { setSegmento(''); setShowSegmentoSugestoes(false); }}
+                  className="absolute right-3 top-[38px] text-zinc-500 hover:text-white">
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+              {showSegmentoSugestoes && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-zinc-900 border border-zinc-700 rounded-xl overflow-hidden z-50 shadow-xl">
+                  {segmentoSugestoes.map(s => (
+                    <button key={s} onMouseDown={() => { setSegmento(s); setShowSegmentoSugestoes(false); }}
+                      className="w-full px-4 py-2.5 text-left text-xs text-zinc-300 hover:bg-zinc-800 hover:text-white transition-all border-b border-zinc-800 last:border-0">
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
-            <div>
+
+            {/* Cidade com autocomplete */}
+            <div className="relative">
               <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-2">Cidade</label>
               <input
                 type="text"
                 value={cidade}
-                onChange={e => setCidade(e.target.value)}
+                onChange={e => handleCidadeChange(e.target.value)}
+                onBlur={() => setTimeout(() => setShowCidadeSugestoes(false), 200)}
                 placeholder="Ex: São Paulo, SP"
                 className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none"
-                onKeyDown={e => e.key === 'Enter' && buscarEmpresas()}
               />
+              {cidade && (
+                <button onClick={() => { setCidade(''); setShowCidadeSugestoes(false); }}
+                  className="absolute right-3 top-[38px] text-zinc-500 hover:text-white">
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+              {showCidadeSugestoes && cidadeSugestoes.length > 0 && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-zinc-900 border border-zinc-700 rounded-xl overflow-hidden z-50 shadow-xl">
+                  {cidadeSugestoes.map(s => (
+                    <button key={s.place_id} onMouseDown={() => { setCidade(s.description); setShowCidadeSugestoes(false); }}
+                      className="w-full px-4 py-2.5 text-left text-xs text-zinc-300 hover:bg-zinc-800 hover:text-white transition-all border-b border-zinc-800 last:border-0 flex items-center gap-2">
+                      <MapPin className="w-3 h-3 text-zinc-600 shrink-0" />
+                      {s.description}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
+          {/* Raio */}
           <div>
             <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-2">Raio de Busca</label>
             <div className="flex gap-2">
               {RAIOS.map(r => (
-                <button
-                  key={r.value}
-                  onClick={() => setRaio(r.value)}
-                  className={cn(
-                    'flex-1 h-9 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all',
-                    raio === r.value
-                      ? 'bg-[#ff5351] text-white border-[#ff5351]'
-                      : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:border-zinc-600'
-                  )}
-                >
+                <button key={r.value} onClick={() => setRaio(r.value)}
+                  className={cn('flex-1 h-9 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all',
+                    raio === r.value ? 'bg-[#ff5351] text-white border-[#ff5351]' : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:border-zinc-600')}>
                   {r.label}
                 </button>
               ))}
             </div>
           </div>
 
-          <button
-            onClick={buscarEmpresas}
-            disabled={loading || buscasUsadas >= LIMITE_MENSAL}
-            className="w-full h-12 bg-[#ff5351] text-white rounded-xl font-black uppercase tracking-widest text-[10px] hover:brightness-110 transition-all flex items-center justify-center gap-2 disabled:opacity-50 shadow-xl shadow-[#ff5351]/20"
-          >
+          <button onClick={buscarEmpresas} disabled={loading || buscasUsadas >= LIMITE_MENSAL}
+            className="w-full h-12 bg-[#ff5351] text-white rounded-xl font-black uppercase tracking-widest text-[10px] hover:brightness-110 transition-all flex items-center justify-center gap-2 disabled:opacity-50 shadow-xl shadow-[#ff5351]/20">
             {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Search className="w-5 h-5" />}
             {loading ? 'Buscando empresas...' : 'Buscar Empresas'}
           </button>
@@ -403,18 +502,14 @@ if (!geoData.results || geoData.results.length === 0) {
 
       {/* Abas */}
       <div className="flex gap-1 p-1 bg-zinc-900 border border-zinc-800 rounded-xl w-fit">
-        <button
-          onClick={() => setAbaSelecionada('buscar')}
+        <button onClick={() => setAbaSelecionada('buscar')}
           className={cn('px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all',
-            abaSelecionada === 'buscar' ? 'bg-[#ff5351] text-white' : 'text-zinc-500 hover:text-white')}
-        >
+            abaSelecionada === 'buscar' ? 'bg-[#ff5351] text-white' : 'text-zinc-500 hover:text-white')}>
           Resultados {leads.length > 0 && `(${leads.length})`}
         </button>
-        <button
-          onClick={() => setAbaSelecionada('salvos')}
+        <button onClick={() => setAbaSelecionada('salvos')}
           className={cn('px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all',
-            abaSelecionada === 'salvos' ? 'bg-[#ff5351] text-white' : 'text-zinc-500 hover:text-white')}
-        >
+            abaSelecionada === 'salvos' ? 'bg-[#ff5351] text-white' : 'text-zinc-500 hover:text-white')}>
           Leads Salvos {salvos.length > 0 && `(${salvos.length})`}
         </button>
       </div>
@@ -429,9 +524,7 @@ if (!geoData.results || geoData.results.length === 0) {
             </div>
           )}
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {leads.map(lead => (
-              <LeadCard key={lead.placeId} lead={lead} />
-            ))}
+            {leads.map(lead => <LeadCard key={lead.placeId} lead={lead} />)}
           </div>
         </div>
       )}
@@ -446,9 +539,7 @@ if (!geoData.results || geoData.results.length === 0) {
             </div>
           )}
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {salvos.map(lead => (
-              <LeadCard key={lead.id} lead={lead} salvo />
-            ))}
+            {salvos.map(lead => <LeadCard key={lead.id} lead={lead} salvo />)}
           </div>
         </div>
       )}
