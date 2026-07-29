@@ -15,7 +15,7 @@ const SEGMENTOS = [
   'Clínicas de quiropraxia', 'Clínicas de fonoaudiologia',
   // FITNESS & ESPORTE
   'Academias', 'Personal trainers', 'Escolas de artes marciais',
-  'Escolas de natação e esportes', 'Crossfit e funcional', 'Estúdios de dança',
+  'Escolas de natação e esportes', 'Crossfit e funcional', 'Estúdios de dance',
   'Campos e quadras esportivas', 'Lojas de artigos esportivos',
   // BELEZA
   'Salões de beleza', 'Barbearias', 'Clínicas de bronzeamento',
@@ -119,6 +119,8 @@ export default function Prospectar() {
   const [buscasUsadas, setBuscasUsadas] = useState(0);
   const [abaSelecionada, setAbaSelecionada] = useState<'buscar' | 'salvos'>('buscar');
   const [convertendo, setConvertendo] = useState<string | null>(null);
+  const [loadingGeo, setLoadingGeo] = useState(false);
+  const [coordenadas, setCoordenadas] = useState<{ lat: number; lng: number } | null>(null);
 
   // Autocomplete segmento
   const [segmentoSugestoes, setSegmentoSugestoes] = useState<string[]>([]);
@@ -144,6 +146,38 @@ export default function Prospectar() {
     const novoCount = buscasUsadas + 1;
     setBuscasUsadas(novoCount);
     localStorage.setItem(MES_KEY, String(novoCount));
+  };
+
+  const usarMinhaLocalizacao = () => {
+    if (!navigator.geolocation) {
+      toast.error('Geolocalização não suportada pelo navegador');
+      return;
+    }
+    setLoadingGeo(true);
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords;
+        try {
+          const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&language=pt-BR&key=${import.meta.env.VITE_GOOGLE_PLACES_API_KEY}`;
+          const res = await fetch(url);
+          const data = await res.json();
+          if (data.results && data.results.length > 0) {
+            const endereco = data.results[0].formatted_address;
+            setCidade(endereco);
+            setCoordenadas({ lat: latitude, lng: longitude });
+            toast.success('Localização detectada!');
+          }
+        } catch (error) {
+          toast.error('Erro ao converter localização');
+        } finally {
+          setLoadingGeo(false);
+        }
+      },
+      () => {
+        toast.error('Permissão de localização negada');
+        setLoadingGeo(false);
+      }
+    );
   };
 
   // Autocomplete segmento
@@ -197,17 +231,22 @@ export default function Prospectar() {
     setShowCidadeSugestoes(false);
 
     try {
-      const geoUrl = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(cidade)}&key=${import.meta.env.VITE_GOOGLE_PLACES_API_KEY}`;
-      const geoRes = await fetch(geoUrl);
-      const geoData = await geoRes.json();
-
-      if (!geoData.results || geoData.results.length === 0) {
-        toast.error('Cidade não encontrada');
-        setLoading(false);
-        return;
+      let lat, lng;
+      if (coordenadas) {
+        lat = coordenadas.lat;
+        lng = coordenadas.lng;
+      } else {
+        const geoUrl = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(cidade)}&key=${import.meta.env.VITE_GOOGLE_PLACES_API_KEY}`;
+        const geoRes = await fetch(geoUrl);
+        const geoData = await geoRes.json();
+        if (!geoData.results || geoData.results.length === 0) {
+          toast.error('Cidade não encontrada');
+          setLoading(false);
+          return;
+        }
+        lat = geoData.results[0].geometry.location.lat;
+        lng = geoData.results[0].geometry.location.lng;
       }
-
-      const { lat, lng } = geoData.results[0].geometry.location;
 
       const placesRes = await fetch('https://places.googleapis.com/v1/places:searchText', {
         method: 'POST',
@@ -322,124 +361,124 @@ export default function Prospectar() {
   const pctBuscas = Math.round((buscasUsadas / LIMITE_MENSAL) * 100);
 
   const LeadCard = ({ lead, salvo = false }: { lead: Lead; salvo?: boolean }) => (
-    <div className="bg-[#1f1f1f] border border-zinc-800 rounded-2xl p-5 space-y-4 hover:border-zinc-700 transition-all">
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex-1 min-w-0">
-          <h3 className="text-white font-black uppercase text-sm line-clamp-1">{lead.nome}</h3>
-          {lead.tipo && <p className="text-zinc-500 text-[10px] uppercase mt-0.5">{lead.tipo}</p>}
+    <div className=\"bg-[#1f1f1f] border border-zinc-800 rounded-2xl p-5 space-y-4 hover:border-zinc-700 transition-all\">
+      <div className=\"flex items-start justify-between gap-3\">
+        <div className=\"flex-1 min-w-0\">
+          <h3 className=\"text-white font-black uppercase text-sm line-clamp-1\">{lead.nome}</h3>
+          {lead.tipo && <p className=\"text-zinc-500 text-[10px] uppercase mt-0.5\">{lead.tipo}</p>}
         </div>
-        <div className="flex flex-col items-end gap-1 shrink-0">
+        <div className=\"flex flex-col items-end gap-1 shrink-0\">
           <span className={cn('px-2 py-0.5 rounded-full border text-[9px] font-black uppercase tracking-widest', getClassificacaoConfig(lead.classificacao).class)}>
             {getClassificacaoConfig(lead.classificacao).label}
           </span>
-          <span className="text-[10px] font-black text-[#ff5351]">{lead.score} pts</span>
+          <span className=\"text-[10px] font-black text-[#ff5351]\">{lead.score} pts</span>
         </div>
       </div>
 
-      <div className="space-y-1.5">
+      <div className=\"space-y-1.5\">
         {lead.endereco && (
-          <div className="flex items-start gap-2 text-zinc-400 text-xs">
-            <MapPin className="w-3 h-3 shrink-0 mt-0.5 text-zinc-600" />
-            <span className="line-clamp-1">{lead.endereco}</span>
+          <div className=\"flex items-start gap-2 text-zinc-400 text-xs\">
+            <MapPin className=\"w-3 h-3 shrink-0 mt-0.5 text-zinc-600\" />
+            <span className=\"line-clamp-1\">{lead.endereco}</span>
           </div>
         )}
         {lead.telefone && (
-          <div className="flex items-center gap-2 text-zinc-400 text-xs">
-            <Phone className="w-3 h-3 shrink-0 text-zinc-600" />
+          <div className=\"flex items-center gap-2 text-zinc-400 text-xs\">
+            <Phone className=\"w-3 h-3 shrink-0 text-zinc-600\" />
             <span>{lead.telefone}</span>
           </div>
         )}
         {lead.site && (
-          <div className="flex items-center gap-2 text-xs">
-            <Globe className="w-3 h-3 shrink-0 text-zinc-600" />
-            <a href={lead.site} target="_blank" rel="noopener noreferrer"
-              className="text-blue-400 hover:text-blue-300 truncate transition-colors">
+          <div className=\"flex items-center gap-2 text-xs\">
+            <Globe className=\"w-3 h-3 shrink-0 text-zinc-600\" />
+            <a href={lead.site} target=\"_blank\" rel=\"noopener noreferrer\"
+              className=\"text-blue-400 hover:text-blue-300 truncate transition-colors\">
               {lead.site.replace('https://', '').replace('http://', '')}
             </a>
           </div>
         )}
         {lead.nota > 0 && (
-          <div className="flex items-center gap-2 text-xs text-zinc-400">
-            <Star className="w-3 h-3 shrink-0 text-amber-400" />
-            <span><span className="text-amber-400 font-bold">{lead.nota.toFixed(1)}</span> ({lead.totalAvaliacoes} avaliações)</span>
+          <div className=\"flex items-center gap-2 text-xs text-zinc-400\">
+            <Star className=\"w-3 h-3 shrink-0 text-amber-400\" />
+            <span><span className=\"text-amber-400 font-bold\">{lead.nota.toFixed(1)}</span> ({lead.totalAvaliacoes} avaliações)</span>
           </div>
         )}
       </div>
 
-      <div className="flex gap-2 pt-1">
+      <div className=\"flex gap-2 pt-1\">
         {!salvo && (
           <button onClick={() => salvarLead(lead)}
-            className="flex-1 h-8 bg-zinc-800 border border-zinc-700 text-zinc-400 rounded-xl text-[9px] font-black uppercase tracking-widest hover:text-white transition-all">
+            className=\"flex-1 h-8 bg-zinc-800 border border-zinc-700 text-zinc-400 rounded-xl text-[9px] font-black uppercase tracking-widest hover:text-white transition-all\">
             Salvar Lead
           </button>
         )}
         <button onClick={() => converterEmCliente(lead)} disabled={convertendo === lead.placeId}
-          className="flex-1 h-8 bg-[#ff5351] text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:brightness-110 transition-all flex items-center justify-center gap-1 disabled:opacity-50">
-          {convertendo === lead.placeId ? <Loader2 className="w-3 h-3 animate-spin" /> : <><UserPlus className="w-3 h-3" /> Converter</>}
+          className=\"flex-1 h-8 bg-[#ff5351] text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:brightness-110 transition-all flex items-center justify-center gap-1 disabled:opacity-50\">
+          {convertendo === lead.placeId ? <Loader2 className=\"w-3 h-3 animate-spin\" /> : <><UserPlus className=\"w-3 h-3\" /> Converter</>}
         </button>
       </div>
     </div>
   );
 
   return (
-    <div className="space-y-8 pb-20 text-left">
+    <div className=\"space-y-8 pb-20 text-left\">
       <header>
-        <p className="text-[11px] uppercase tracking-[0.4em] text-[#ff5351] font-black mb-2">Módulo de Crescimento</p>
-        <h1 className="text-5xl font-black text-white uppercase italic tracking-tight">Prospectar</h1>
-        <p className="text-zinc-500 text-sm mt-1">Encontre e qualifique novos clientes potenciais</p>
+        <p className=\"text-[11px] uppercase tracking-[0.4em] text-[#ff5351] font-black mb-2\">Módulo de Crescimento</p>
+        <h1 className=\"text-5xl font-black text-white uppercase italic tracking-tight\">Prospectar</h1>
+        <p className=\"text-zinc-500 text-sm mt-1\">Encontre e qualifique novos clientes potenciais</p>
       </header>
 
       {/* Contador */}
-      <div className="bg-[#1f1f1f] border border-zinc-800 rounded-2xl p-5">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Buscas utilizadas este mês</span>
+      <div className=\"bg-[#1f1f1f] border border-zinc-800 rounded-2xl p-5\">
+        <div className=\"flex items-center justify-between mb-2\">
+          <span className=\"text-[10px] font-black uppercase tracking-widest text-zinc-500\">Buscas utilizadas este mês</span>
           <span className={cn('text-xs font-black', pctBuscas >= 80 ? 'text-red-400' : pctBuscas >= 50 ? 'text-amber-400' : 'text-emerald-400')}>
             {buscasUsadas}/{LIMITE_MENSAL}
           </span>
         </div>
-        <div className="w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+        <div className=\"w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden\">
           <div className={cn('h-full rounded-full transition-all', pctBuscas >= 80 ? 'bg-red-500' : pctBuscas >= 50 ? 'bg-amber-500' : 'bg-emerald-500')}
             style={{ width: `${pctBuscas}%` }} />
         </div>
         {pctBuscas >= 80 && (
-          <div className="flex items-center gap-2 mt-2">
-            <AlertCircle className="w-3 h-3 text-red-400" />
-            <span className="text-red-400 text-[10px] font-black uppercase">Atenção: limite próximo!</span>
+          <div className=\"flex items-center gap-2 mt-2\">
+            <AlertCircle className=\"w-3 h-3 text-red-400\" />
+            <span className=\"text-red-400 text-[10px] font-black uppercase\">Atenção: limite próximo!</span>
           </div>
         )}
       </div>
 
       {/* Formulário */}
-      <div className="bg-[#1f1f1f] border border-zinc-800 rounded-[24px] overflow-hidden">
-        <div className="p-6 border-b border-zinc-800">
-          <h2 className="text-xs font-black uppercase tracking-widest text-white">Nova Busca</h2>
+      <div className=\"bg-[#1f1f1f] border border-zinc-800 rounded-[24px] overflow-hidden\">
+        <div className=\"p-6 border-b border-zinc-800\">
+          <h2 className=\"text-xs font-black uppercase tracking-widest text-white\">Nova Busca</h2>
         </div>
-        <div className="p-6 space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className=\"p-6 space-y-4\">
+          <div className=\"grid grid-cols-1 md:grid-cols-2 gap-4\">
 
             {/* Segmento com autocomplete */}
-            <div className="relative">
-              <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-2">Segmento / Nicho</label>
+            <div className=\"relative\">
+              <label className=\"text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-2\">Segmento / Nicho</label>
               <input
-                type="text"
+                type=\"text\"
                 value={segmento}
                 onChange={e => handleSegmentoChange(e.target.value)}
                 onFocus={() => segmento.length >= 2 && setShowSegmentoSugestoes(true)}
                 onBlur={() => setTimeout(() => setShowSegmentoSugestoes(false), 200)}
-                placeholder="Ex: clínicas de estética..."
-                className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none"
+                placeholder=\"Ex: clínicas de estética...\"
+                className=\"w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none\"
               />
               {segmento && (
                 <button onClick={() => { setSegmento(''); setShowSegmentoSugestoes(false); }}
-                  className="absolute right-3 top-[38px] text-zinc-500 hover:text-white">
-                  <X className="w-3 h-3" />
+                  className=\"absolute right-3 top-[38px] text-zinc-500 hover:text-white\">
+                  <X className=\"w-3 h-3\" />
                 </button>
               )}
               {showSegmentoSugestoes && (
-                <div className="absolute top-full left-0 right-0 mt-1 bg-zinc-900 border border-zinc-700 rounded-xl overflow-hidden z-50 shadow-xl">
+                <div className=\"absolute top-full left-0 right-0 mt-1 bg-zinc-900 border border-zinc-700 rounded-xl overflow-hidden z-50 shadow-xl\">
                   {segmentoSugestoes.map(s => (
                     <button key={s} onMouseDown={() => { setSegmento(s); setShowSegmentoSugestoes(false); }}
-                      className="w-full px-4 py-2.5 text-left text-xs text-zinc-300 hover:bg-zinc-800 hover:text-white transition-all border-b border-zinc-800 last:border-0">
+                      className=\"w-full px-4 py-2.5 text-left text-xs text-zinc-300 hover:bg-zinc-800 hover:text-white transition-all border-b border-zinc-800 last:border-0\">
                       {s}
                     </button>
                   ))}
@@ -447,45 +486,61 @@ export default function Prospectar() {
               )}
             </div>
 
-            {/* Cidade com autocomplete */}
-            <div className="relative">
-              <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-2">Cidade</label>
-              <input
-                type="text"
-                value={cidade}
-                onChange={e => handleCidadeChange(e.target.value)}
-                onBlur={() => setTimeout(() => setShowCidadeSugestoes(false), 200)}
-                placeholder="Ex: São Paulo, SP"
-                className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none"
-              />
-              {cidade && (
-                <button onClick={() => { setCidade(''); setShowCidadeSugestoes(false); }}
-                  className="absolute right-3 top-[38px] text-zinc-500 hover:text-white">
-                  <X className="w-3 h-3" />
-                </button>
-              )}
-              {showCidadeSugestoes && cidadeSugestoes.length > 0 && (
-                <div className="absolute top-full left-0 right-0 mt-1 bg-zinc-900 border border-zinc-700 rounded-xl overflow-hidden z-50 shadow-xl">
-                  {cidadeSugestoes.map(s => (
-                    <button key={s.place_id} onMouseDown={() => { setCidade(s.description); setShowCidadeSugestoes(false); }}
-                      className="w-full px-4 py-2.5 text-left text-xs text-zinc-300 hover:bg-zinc-800 hover:text-white transition-all border-b border-zinc-800 last:border-0 flex items-center gap-2">
-                      <MapPin className="w-3 h-3 text-zinc-600 shrink-0" />
-                      {s.description}
+            {/* Cidade com autocomplete + geolocalização */}
+            <div className=\"relative\">
+              <label className=\"text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-2\">Cidade / Localização</label>
+              <div className=\"flex gap-2\">
+                <div className=\"relative flex-1\">
+                  <input
+                    type=\"text\"
+                    value={cidade}
+                    onChange={e => { handleCidadeChange(e.target.value); setCoordenadas(null); }}
+                    onBlur={() => setTimeout(() => setShowCidadeSugestoes(false), 200)}
+                    placeholder=\"Ex: São Paulo, SP\"
+                    className=\"w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none\"
+                  />
+                  {cidade && (
+                    <button onClick={() => { setCidade(''); setShowCidadeSugestoes(false); setCoordenadas(null); }}
+                      className=\"absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white\">
+                      <X className=\"w-3 h-3\" />
                     </button>
-                  ))}
+                  )}
+                  {showCidadeSugestoes && cidadeSugestoes.length > 0 && (
+                    <div className=\"absolute top-full left-0 right-0 mt-1 bg-zinc-900 border border-zinc-700 rounded-xl overflow-hidden z-50 shadow-xl\">
+                      {cidadeSugestoes.map(s => (
+                        <button key={s.place_id} onMouseDown={() => { setCidade(s.description); setShowCidadeSugestoes(false); }}
+                          className=\"w-full px-4 py-2.5 text-left text-xs text-zinc-300 hover:bg-zinc-800 hover:text-white transition-all border-b border-zinc-800 last:border-0 flex items-center gap-2\">
+                          <MapPin className=\"w-3 h-3 text-zinc-600 shrink-0\" />
+                          {s.description}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
+                <button
+                  onClick={usarMinhaLocalizacao}
+                  disabled={loadingGeo}
+                  title=\"Usar minha localização\"
+                  className=\"h-11 w-11 shrink-0 bg-zinc-900 border border-zinc-800 rounded-xl flex items-center justify-center text-zinc-400 hover:text-[#ff5351] hover:border-[#ff5351] transition-all disabled:opacity-50\"
+                >
+                  {loadingGeo ? <Loader2 className=\"w-4 h-4 animate-spin\" /> : <MapPin className=\"w-4 h-4\" />}
+                </button>
+              </div>
+              {coordenadas && (
+                <p className=\"text-emerald-400 text-[9px] font-black uppercase tracking-widest mt-1.5 flex items-center gap-1\">
+                  📍 Localização detectada com sucesso
+                </p>
               )}
             </div>
           </div>
 
           {/* Raio */}
           <div>
-            <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-2">Raio de Busca</label>
-            <div className="flex gap-2">
+            <label className=\"text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-2\">Raio de Busca</label>
+            <div className=\"flex gap-2\">
               {RAIOS.map(r => (
                 <button key={r.value} onClick={() => setRaio(r.value)}
-                  className={cn('flex-1 h-9 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all',
-                    raio === r.value ? 'bg-[#ff5351] text-white border-[#ff5351]' : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:border-zinc-600')}>
+                  className={cn('flex-1 h-9 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all',\n                    raio === r.value ? 'bg-[#ff5351] text-white border-[#ff5351]' : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:border-zinc-600')}>
                   {r.label}
                 </button>
               ))}
@@ -493,23 +548,21 @@ export default function Prospectar() {
           </div>
 
           <button onClick={buscarEmpresas} disabled={loading || buscasUsadas >= LIMITE_MENSAL}
-            className="w-full h-12 bg-[#ff5351] text-white rounded-xl font-black uppercase tracking-widest text-[10px] hover:brightness-110 transition-all flex items-center justify-center gap-2 disabled:opacity-50 shadow-xl shadow-[#ff5351]/20">
-            {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Search className="w-5 h-5" />}
+            className=\"w-full h-12 bg-[#ff5351] text-white rounded-xl font-black uppercase tracking-widest text-[10px] hover:brightness-110 transition-all flex items-center justify-center gap-2 disabled:opacity-50 shadow-xl shadow-[#ff5351]/20\">
+            {loading ? <Loader2 className=\"w-5 h-5 animate-spin\" /> : <Search className=\"w-5 h-5\" />}
             {loading ? 'Buscando empresas...' : 'Buscar Empresas'}
           </button>
         </div>
       </div>
 
       {/* Abas */}
-      <div className="flex gap-1 p-1 bg-zinc-900 border border-zinc-800 rounded-xl w-fit">
+      <div className=\"flex gap-1 p-1 bg-zinc-900 border border-zinc-800 rounded-xl w-fit\">
         <button onClick={() => setAbaSelecionada('buscar')}
-          className={cn('px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all',
-            abaSelecionada === 'buscar' ? 'bg-[#ff5351] text-white' : 'text-zinc-500 hover:text-white')}>
+          className={cn('px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all',\n            abaSelecionada === 'buscar' ? 'bg-[#ff5351] text-white' : 'text-zinc-500 hover:text-white')}>
           Resultados {leads.length > 0 && `(${leads.length})`}
         </button>
         <button onClick={() => setAbaSelecionada('salvos')}
-          className={cn('px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all',
-            abaSelecionada === 'salvos' ? 'bg-[#ff5351] text-white' : 'text-zinc-500 hover:text-white')}>
+          className={cn('px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all',\n            abaSelecionada === 'salvos' ? 'bg-[#ff5351] text-white' : 'text-zinc-500 hover:text-white')}>
           Leads Salvos {salvos.length > 0 && `(${salvos.length})`}
         </button>
       </div>
@@ -518,12 +571,12 @@ export default function Prospectar() {
       {abaSelecionada === 'buscar' && (
         <div>
           {leads.length === 0 && !loading && (
-            <div className="text-center py-16 text-zinc-600">
-              <TrendingUp className="w-10 h-10 mx-auto mb-3 opacity-30" />
-              <p className="font-black uppercase text-sm">Faça uma busca para encontrar leads</p>
+            <div className=\"text-center py-16 text-zinc-600\">
+              <TrendingUp className=\"w-10 h-10 mx-auto mb-3 opacity-30\" />
+              <p className=\"font-black uppercase text-sm\">Faça uma busca para encontrar leads</p>
             </div>
           )}
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          <div className=\"grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4\">
             {leads.map(lead => <LeadCard key={lead.placeId} lead={lead} />)}
           </div>
         </div>
@@ -533,12 +586,12 @@ export default function Prospectar() {
       {abaSelecionada === 'salvos' && (
         <div>
           {salvos.length === 0 && (
-            <div className="text-center py-16 text-zinc-600">
-              <TrendingUp className="w-10 h-10 mx-auto mb-3 opacity-30" />
-              <p className="font-black uppercase text-sm">Nenhum lead salvo ainda</p>
+            <div className=\"text-center py-16 text-zinc-600\">
+              <TrendingUp className=\"w-10 h-10 mx-auto mb-3 opacity-30\" />
+              <p className=\"font-black uppercase text-sm\">Nenhum lead salvo ainda</p>
             </div>
           )}
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          <div className=\"grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4\">
             {salvos.map(lead => <LeadCard key={lead.id} lead={lead} salvo />)}
           </div>
         </div>
