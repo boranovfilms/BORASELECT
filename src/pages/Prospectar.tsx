@@ -896,7 +896,7 @@ export default function Prospectar() {
         </div>
       )}
 
-      {/* ABA HISTÓRICO */}
+        {/* ABA HISTÓRICO */}
       {abaSelecionada === 'historico' && (
         <div>
           {historicoBuscas.length === 0 ? (
@@ -906,48 +906,67 @@ export default function Prospectar() {
             </div>
           ) : (
             <div className="bg-[#1f1f1f] border border-zinc-800 rounded-[24px] overflow-hidden">
+              <div className="px-5 py-4 border-b border-zinc-800 flex items-center justify-between">
+                <h2 className="text-xs font-black uppercase tracking-widest text-white">
+                  {historicoBuscas.reduce((acc, b) => acc + (b.resultados?.length || 0), 0)} empresas encontradas
+                </h2>
+              </div>
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="border-b border-zinc-800 bg-zinc-900/50">
                     {[
+                      { label: 'Nome', campo: 'nome' },
                       { label: 'Nicho', campo: 'segmento' },
                       { label: 'Cidade', campo: 'cidade' },
-                      { label: 'Resultados', campo: 'totalResultados' },
-                      { label: 'Data', campo: 'criadoEm' },
+                      { label: 'Score', campo: 'score' },
+                      { label: 'Telefone', campo: 'telefone' },
+                      { label: 'Site', campo: 'site' },
                     ].map(col => (
                       <th key={col.campo} onClick={() => toggleOrdenacao('historico', col.campo)}
                         className="px-5 py-3 text-[10px] font-black uppercase tracking-widest text-zinc-500 cursor-pointer hover:text-white transition-all">
                         <div className="flex items-center gap-1">{col.label}<SortIcon campo={col.campo} tipo="historico" /></div>
                       </th>
                     ))}
-                    <th className="px-5 py-3 text-[10px] font-black uppercase tracking-widest text-zinc-500">Ações</th>
+                    <th className="px-5 py-3 text-[10px] font-black uppercase tracking-widest text-zinc-500">Ação</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-800">
-                  {historicoOrdenado.map(busca => (
-                    <tr key={busca.id} className="hover:bg-zinc-800/30 transition-all">
-                      <td className="px-5 py-4 text-white text-sm font-bold uppercase">{busca.segmento}</td>
-                      <td className="px-5 py-4 text-zinc-400 text-sm">{busca.cidade}</td>
-                      <td className="px-5 py-4 text-center">
-                        <span className="px-2 py-1 bg-[#ff5351]/10 border border-[#ff5351]/20 text-[#ff5351] text-[9px] font-black uppercase rounded-full">
-                          {busca.totalResultados} empresas
+                  {ordenar(
+                    historicoBuscas.flatMap(busca =>
+                      (busca.resultados || []).map((r: any) => ({
+                        ...r,
+                        segmento: busca.segmento,
+                        cidade: busca.cidade,
+                      }))
+                    ),
+                    ordenacaoHistorico.campo,
+                    ordenacaoHistorico.dir
+                  ).map((empresa: any, i: number) => (
+                    <tr key={`${empresa.placeId}-${i}`} className="hover:bg-zinc-800/30 transition-all">
+                      <td className="px-5 py-4">
+                        <p className="text-white text-sm font-black uppercase line-clamp-1">{empresa.nome}</p>
+                      </td>
+                      <td className="px-5 py-4 text-zinc-400 text-xs">{empresa.segmento}</td>
+                      <td className="px-5 py-4 text-zinc-400 text-xs">{empresa.cidade}</td>
+                      <td className="px-5 py-4">
+                        <span className={cn('px-2 py-0.5 rounded-full border text-[9px] font-black uppercase tracking-widest', getClassificacaoConfig(empresa.classificacao).class)}>
+                          {empresa.score} pts
                         </span>
                       </td>
-                      <td className="px-5 py-4 text-zinc-500 text-xs">
-                        {busca.criadoEm?.toDate ? new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(busca.criadoEm.toDate()) : '—'}
+                      <td className="px-5 py-4 text-zinc-400 text-xs">{empresa.telefone || '—'}</td>
+                      <td className="px-5 py-4 text-xs">
+                        {empresa.site ? (
+                          <a href={empresa.site} target="_blank" rel="noopener noreferrer"
+                            className="text-blue-400 hover:text-blue-300 truncate max-w-[120px] block transition-colors">
+                            {empresa.site.replace('https://', '').replace('http://', '')}
+                          </a>
+                        ) : <span className="text-zinc-600">—</span>}
                       </td>
                       <td className="px-5 py-4">
-                        <div className="flex gap-2 flex-wrap">
-                          {busca.resultados?.slice(0, 3).map((r: any) => (
-                            <button key={r.placeId} onClick={() => adicionarComoLead(r)}
-                              className="flex items-center gap-1 px-2 py-1 bg-zinc-800 border border-zinc-700 text-zinc-400 rounded-lg text-[9px] font-black uppercase hover:text-white hover:border-[#ff5351] transition-all">
-                              <UserPlus className="w-2.5 h-2.5" /> {r.nome?.slice(0, 20)}...
-                            </button>
-                          ))}
-                          {busca.resultados?.length > 3 && (
-                            <span className="text-zinc-600 text-[9px] flex items-center">+{busca.resultados.length - 3} mais</span>
-                          )}
-                        </div>
+                        <button onClick={() => adicionarComoLead(empresa)}
+                          className="flex items-center gap-1 px-3 py-1.5 bg-[#ff5351] text-white rounded-lg text-[9px] font-black uppercase tracking-widest hover:brightness-110 transition-all">
+                          <UserPlus className="w-2.5 h-2.5" /> Lead
+                        </button>
                       </td>
                     </tr>
                   ))}
