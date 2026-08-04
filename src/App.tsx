@@ -37,6 +37,10 @@ import MinhasDemandas from './pages/MinhasDemandas';
 import MinhaDemandaDetalhe from './pages/MinhaDemandaDetalhe';
 import ProcessarPlanejamento from './pages/ProcessarPlanejamento';
 import Prospectar from './pages/Prospectar';
+import Orcamentos from './pages/orcamentos/Orcamentos';
+import OrcamentoDetalhe from './pages/orcamentos/OrcamentoDetalhe';
+import OrcamentoTemplates from './pages/orcamentos/OrcamentoTemplates';
+import OrcamentoEquipamentos from './pages/orcamentos/OrcamentoEquipamentos';
 
 export default function App() {
   const [loading, setLoading] = useState(true);
@@ -150,6 +154,11 @@ export default function App() {
         <Route path="/diagnostico" element={user && isAdmin ? wrapLayout(<DebugTable />) : <Navigate to="/" />} />
         <Route path="*" element={<Navigate to="/" />} />
         <Route path="/prospectar" element={user ? wrapLayout(<Prospectar />) : <Navigate to="/login" />} />
+        <Route path="/orcamentos" element={user ? wrapLayout(<Orcamentos />) : <Navigate to="/login" />} />
+        <Route path="/orcamentos/novo" element={user ? wrapLayout(<OrcamentoDetalhe />) : <Navigate to="/login" />} />
+        <Route path="/orcamentos/:id" element={user ? wrapLayout(<OrcamentoDetalhe />) : <Navigate to="/login" />} />
+        <Route path="/orcamentos/templates" element={user ? wrapLayout(<OrcamentoTemplates />) : <Navigate to="/login" />} />
+        <Route path="/orcamentos/equipamentos" element={user ? wrapLayout(<OrcamentoEquipamentos />) : <Navigate to="/login" />} />
         
       </Routes>
     </BrowserRouter>
