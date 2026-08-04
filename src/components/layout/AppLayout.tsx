@@ -133,6 +133,7 @@ const handleNotificationClick = async (notif: Notificacao) => {
     { id: 'minhas_demandas', icon: FileText, label: 'Minhas Demandas', path: '/minhas-demandas' },
     { id: 'clientes', icon: Users, label: 'Clientes', path: '/clients' },
     { id: 'prospectar', icon: TrendingUp, label: 'Prospectar', path: '/prospectar', roles: ['master', 'admin', 'redator'] },
+    { id: 'orcamentos', icon: FileText, label: 'Orçamentos', path: '/orcamentos', roles: ['master', 'admin'] },
     { id: 'equipe', icon: UsersRound, label: 'Equipe', path: '/equipe' },
     { id: 'pacotes', icon: Package, label: 'Serviços', path: '/packages' },
     { id: 'modelos', icon: LayoutTemplate, label: 'Modelos', path: '/modelos' },
