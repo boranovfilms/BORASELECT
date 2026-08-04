@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Shield, Save, LayoutDashboard, Library, Users, Package, LayoutTemplate, CreditCard, Settings, Check, Loader2, CheckSquare, UsersRound } from 'lucide-react';
+import { Shield, Save, LayoutDashboard, Library, Users, Package, LayoutTemplate, CreditCard, Settings, Check, Loader2, CheckSquare, UsersRound, FileText } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { toast } from 'react-hot-toast';
 import { permissionsService, PermissionsMatrix } from '../services/permissionsService';
@@ -24,7 +24,8 @@ const MODULES = [
   { id: 'modelos', label: 'Modelos', icon: LayoutTemplate },
   { id: 'creditos', label: 'Créditos', icon: CreditCard },
   { id: 'configuracoes', label: 'Configurações', icon: Settings },
-  { id: 'tarefas', label: 'Tarefas Diárias', icon: CheckSquare }
+  { id: 'tarefas', label: 'Tarefas Diárias', icon: CheckSquare },
+  { id: 'orcamentos', label: 'Orçamentos', icon: FileText }
 ];
 
 export default function PainelMaster() {
