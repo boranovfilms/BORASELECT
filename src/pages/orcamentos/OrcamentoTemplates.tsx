@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, getDocs, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
-import { Plus, Loader2, Edit2, Trash2, Save, X, ChevronDown, ChevronUp, Package } from 'lucide-react';
+import { Plus, Loader2, Edit2, Trash2, Save, X, ChevronDown, ChevronUp, Package, Info } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { cn } from '../../lib/utils';
 
@@ -9,11 +9,9 @@ interface ItemTemplate {
   equipamentoId: string;
   nome: string;
   quantidade: number;
-  diarias: number;
-  valorUnitario: number;
-  valorTotal: number;
+  valorDia: number;
+  valorTotalDia: number;
   exibirNoPdf: boolean;
-  descricaoPersonalizada?: string;
 }
 
 interface Template {
@@ -21,6 +19,7 @@ interface Template {
   nome: string;
   tipo: string;
   descricao: string;
+  observacoes: string;
   itens: ItemTemplate[];
   condicaoPagamento: string;
   criadoEm?: any;
@@ -61,13 +60,17 @@ export default function OrcamentoTemplates() {
   const [editando, setEditando] = useState<Template | null>(null);
   const [salvando, setSalvando] = useState(false);
   const [expandido, setExpandido] = useState<string | null>(null);
-  const [buscaEquip, setBuscaEquip] = useState('');
-  const [showEquipamentos, setShowEquipamentos] = useState(false);
+
+  // Seleção de item
+  const [equipSelecionado, setEquipSelecionado] = useState('');
+  const [qtdSelecionada, setQtdSelecionada] = useState(1);
+  const [previewValor, setPreviewValor] = useState('');
 
   const [form, setForm] = useState<Partial<Template>>({
     nome: '',
     tipo: 'Proposta Audiovisual',
     descricao: '',
+    observacoes: '',
     itens: [],
     condicaoPagamento: '50% entrada + 50% na entrega',
   });
@@ -90,41 +93,58 @@ export default function OrcamentoTemplates() {
     });
   }, []);
 
-  const adicionarItem = (eq: Equipamento) => {
+  // Agrupa equipamentos por categoria para o select
+  const equipamentosPorCategoria = equipamentos.reduce((acc, eq) => {
+    if (!acc[eq.categoria]) acc[eq.categoria] = [];
+    acc[eq.categoria].push(eq);
+    return acc;
+  }, {} as Record<string, Equipamento[]>);
+
+  const handleEquipChange = (value: string) => {
+    setEquipSelecionado(value);
+    if (!value) { setPreviewValor(''); return; }
+    const eq = equipamentos.find(e => e.id === value);
+    if (eq) {
+      const subtotal = eq.valorDia * qtdSelecionada;
+      setPreviewValor(`R$ ${eq.valorDia.toLocaleString('pt-BR')}/dia × ${qtdSelecionada} un. = R$ ${subtotal.toLocaleString('pt-BR')},00/dia`);
+    }
+  };
+
+  const handleQtdChange = (qtd: number) => {
+    setQtdSelecionada(qtd);
+    if (!equipSelecionado) return;
+    const eq = equipamentos.find(e => e.id === equipSelecionado);
+    if (eq) {
+      const subtotal = eq.valorDia * qtd;
+      setPreviewValor(`R$ ${eq.valorDia.toLocaleString('pt-BR')}/dia × ${qtd} un. = R$ ${subtotal.toLocaleString('pt-BR')},00/dia`);
+    }
+  };
+
+  const adicionarItem = () => {
+    if (!equipSelecionado) { toast.error('Selecione um equipamento'); return; }
+    const eq = equipamentos.find(e => e.id === equipSelecionado);
+    if (!eq) return;
     const jaExiste = (form.itens || []).find(i => i.equipamentoId === eq.id);
     if (jaExiste) { toast('Item já adicionado!'); return; }
     const novoItem: ItemTemplate = {
       equipamentoId: eq.id,
       nome: eq.nome,
-      quantidade: 1,
-      diarias: 1,
-      valorUnitario: eq.valorDia,
-      valorTotal: eq.valorDia,
+      quantidade: qtdSelecionada,
+      valorDia: eq.valorDia,
+      valorTotalDia: eq.valorDia * qtdSelecionada,
       exibirNoPdf: true,
-      descricaoPersonalizada: '',
     };
     setForm(prev => ({ ...prev, itens: [...(prev.itens || []), novoItem] }));
-    setShowEquipamentos(false);
-    setBuscaEquip('');
-  };
-
-  const atualizarItem = (index: number, campo: string, valor: any) => {
-    const novosItens = [...(form.itens || [])];
-    novosItens[index] = { ...novosItens[index], [campo]: valor };
-    // Recalcula valor total
-    if (campo === 'quantidade' || campo === 'diarias' || campo === 'valorUnitario') {
-      const item = novosItens[index];
-      novosItens[index].valorTotal = item.quantidade * item.diarias * item.valorUnitario;
-    }
-    setForm(prev => ({ ...prev, itens: novosItens }));
+    setEquipSelecionado('');
+    setQtdSelecionada(1);
+    setPreviewValor('');
   };
 
   const removerItem = (index: number) => {
-    const novosItens = (form.itens || []).filter((_, i) => i !== index);
-    setForm(prev => ({ ...prev, itens: novosItens }));
+    setForm(prev => ({ ...prev, itens: (prev.itens || []).filter((_, i) => i !== index) }));
   };
 
-  const totalTemplate = (form.itens || []).reduce((acc, item) => acc + item.valorTotal, 0);
+  const totalDiaTemplate = (form.itens || []).reduce((acc, item) => acc + item.valorTotalDia, 0);
 
   const handleSalvar = async () => {
     if (!form.nome?.trim()) { toast.error('Nome é obrigatório'); return; }
@@ -140,12 +160,19 @@ export default function OrcamentoTemplates() {
       }
       setShowForm(false);
       setEditando(null);
-      setForm({ nome: '', tipo: 'Proposta Audiovisual', descricao: '', itens: [], condicaoPagamento: '50% entrada + 50% na entrega' });
+      resetForm();
     } catch {
       toast.error('Erro ao salvar');
     } finally {
       setSalvando(false);
     }
+  };
+
+  const resetForm = () => {
+    setForm({ nome: '', tipo: 'Proposta Audiovisual', descricao: '', observacoes: '', itens: [], condicaoPagamento: '50% entrada + 50% na entrega' });
+    setEquipSelecionado('');
+    setQtdSelecionada(1);
+    setPreviewValor('');
   };
 
   const handleEditar = (t: Template) => {
@@ -165,11 +192,6 @@ export default function OrcamentoTemplates() {
     }
   };
 
-  const equipamentosFiltrados = equipamentos.filter(eq =>
-    eq.nome.toLowerCase().includes(buscaEquip.toLowerCase()) ||
-    eq.categoria.toLowerCase().includes(buscaEquip.toLowerCase())
-  );
-
   return (
     <div className="space-y-8 pb-20 text-left">
       <header className="flex items-start justify-between gap-4">
@@ -179,7 +201,7 @@ export default function OrcamentoTemplates() {
           <p className="text-zinc-500 text-sm mt-1">Modelos de orçamento reutilizáveis</p>
         </div>
         <button
-          onClick={() => { setShowForm(true); setEditando(null); setForm({ nome: '', tipo: 'Proposta Audiovisual', descricao: '', itens: [], condicaoPagamento: '50% entrada + 50% na entrega' }); }}
+          onClick={() => { setShowForm(true); setEditando(null); resetForm(); }}
           className="h-10 px-5 bg-[#ff5351] text-white rounded-xl font-black uppercase text-[9px] tracking-widest hover:brightness-110 transition-all flex items-center gap-2 shrink-0">
           <Plus className="w-4 h-4" /> Novo Template
         </button>
@@ -202,7 +224,7 @@ export default function OrcamentoTemplates() {
             <div className="md:col-span-2">
               <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Nome do Template *</label>
               <input type="text" value={form.nome || ''} onChange={e => setForm({ ...form, nome: e.target.value })}
-                placeholder="Ex: Transmissão ao Vivo - Padrão"
+                placeholder="Ex: Transmissão ao Vivo — 2 Câmeras"
                 className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none" />
             </div>
             <div>
@@ -219,120 +241,117 @@ export default function OrcamentoTemplates() {
                 {CONDICOES_PAGAMENTO.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
-            <div className="md:col-span-2">
-              <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Descrição</label>
-              <textarea value={form.descricao || ''} onChange={e => setForm({ ...form, descricao: e.target.value })}
-                rows={2} placeholder="Descrição do template..."
-                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-white text-sm focus:border-[#ff5351] outline-none resize-none" />
-            </div>
           </div>
 
-          {/* Itens */}
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500">Itens do Template</label>
-              <button onClick={() => setShowEquipamentos(!showEquipamentos)}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-800 border border-zinc-700 text-zinc-400 rounded-lg text-[9px] font-black uppercase tracking-widest hover:text-white transition-all">
-                <Plus className="w-3 h-3" /> Adicionar Item
+          {/* Adicionar item */}
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 space-y-4">
+            <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Adicionar item ao template</p>
+
+            <div className="grid grid-cols-1 md:grid-cols-[1fr_120px_auto] gap-3 items-end">
+              <div>
+                <label className="text-[9px] font-black uppercase tracking-widest text-zinc-600 block mb-1">Equipamento / Serviço</label>
+                <select value={equipSelecionado} onChange={e => handleEquipChange(e.target.value)}
+                  className="w-full h-10 bg-zinc-800 border border-zinc-700 rounded-xl px-3 text-white text-sm focus:border-[#ff5351] outline-none appearance-none">
+                  <option value="">Selecionar...</option>
+                  {Object.entries(equipamentosPorCategoria).map(([categoria, eqs]) => (
+                    <optgroup key={categoria} label={categoria}>
+                      {eqs.map(eq => (
+                        <option key={eq.id} value={eq.id}>
+                          {eq.nome} — R$ {eq.valorDia.toLocaleString('pt-BR')}/dia
+                        </option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-[9px] font-black uppercase tracking-widest text-zinc-600 block mb-1">Quantidade</label>
+                <input type="number" value={qtdSelecionada} min={1}
+                  onChange={e => handleQtdChange(Number(e.target.value))}
+                  className="w-full h-10 bg-zinc-800 border border-zinc-700 rounded-xl px-3 text-white text-sm focus:border-[#ff5351] outline-none" />
+              </div>
+              <button onClick={adicionarItem}
+                className="h-10 px-5 bg-[#ff5351] text-white rounded-xl font-black uppercase text-[9px] tracking-widest hover:brightness-110 transition-all flex items-center gap-2 shrink-0">
+                <Plus className="w-3.5 h-3.5" /> Adicionar
               </button>
             </div>
 
-            {/* Busca de equipamentos */}
-            {showEquipamentos && (
-              <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-4 mb-4 space-y-3">
-                <input type="text" value={buscaEquip} onChange={e => setBuscaEquip(e.target.value)}
-                  placeholder="Buscar equipamento ou serviço..."
-                  className="w-full h-9 bg-zinc-800 border border-zinc-700 rounded-xl px-3 text-white text-xs focus:border-[#ff5351] outline-none" />
-                <div className="max-h-48 overflow-y-auto space-y-1">
-                  {equipamentosFiltrados.map(eq => (
-                    <button key={eq.id} onClick={() => adicionarItem(eq)}
-                      className="w-full flex items-center justify-between px-3 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-xl transition-all text-left">
-                      <div>
-                        <p className="text-white text-xs font-bold">{eq.nome}</p>
-                        <p className="text-zinc-500 text-[10px]">{eq.categoria}</p>
-                      </div>
-                      <span className="text-emerald-400 text-xs font-black shrink-0 ml-2">
-                        {eq.valorDia.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}/dia
-                      </span>
-                    </button>
+            {previewValor && (
+              <p className="text-xs text-zinc-400">{previewValor}</p>
+            )}
+          </div>
+
+          {/* Lista de itens */}
+          {(form.itens || []).length === 0 ? (
+            <div className="text-center py-8 text-zinc-600 border border-dashed border-zinc-800 rounded-2xl">
+              <Package className="w-8 h-8 mx-auto mb-2 opacity-30" />
+              <p className="text-xs font-black uppercase">Nenhum item adicionado</p>
+            </div>
+          ) : (
+            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
+              <div className="px-5 py-3 border-b border-zinc-800 flex items-center justify-between">
+                <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Estrutura do template</p>
+                <span className="text-[10px] font-black text-zinc-500">
+                  Referência/dia: <span className="text-emerald-400">R$ {totalDiaTemplate.toLocaleString('pt-BR')},00</span>
+                </span>
+              </div>
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-zinc-800 bg-zinc-900/50">
+                    <th className="px-5 py-2 text-[9px] font-black uppercase tracking-widest text-zinc-600">Item</th>
+                    <th className="px-5 py-2 text-[9px] font-black uppercase tracking-widest text-zinc-600 text-center">Qtd</th>
+                    <th className="px-5 py-2 text-[9px] font-black uppercase tracking-widest text-zinc-600 text-right">Valor/dia</th>
+                    <th className="px-5 py-2 text-[9px] font-black uppercase tracking-widest text-zinc-600 text-right">Total/dia</th>
+                    <th className="px-5 py-2 text-[9px] font-black uppercase tracking-widest text-zinc-600 text-center">PDF</th>
+                    <th className="px-5 py-2"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-800">
+                  {(form.itens || []).map((item, i) => (
+                    <tr key={i} className="hover:bg-zinc-800/30 transition-all">
+                      <td className="px-5 py-3 text-white text-sm font-bold">{item.nome}</td>
+                      <td className="px-5 py-3 text-zinc-400 text-sm text-center">{item.quantidade}</td>
+                      <td className="px-5 py-3 text-zinc-400 text-sm text-right">
+                        R$ {item.valorDia.toLocaleString('pt-BR')},00
+                      </td>
+                      <td className="px-5 py-3 text-emerald-400 font-black text-sm text-right">
+                        R$ {item.valorTotalDia.toLocaleString('pt-BR')},00
+                      </td>
+                      <td className="px-5 py-3 text-center">
+                        <input type="checkbox" checked={item.exibirNoPdf}
+                          onChange={e => {
+                            const novos = [...(form.itens || [])];
+                            novos[i] = { ...novos[i], exibirNoPdf: e.target.checked };
+                            setForm(prev => ({ ...prev, itens: novos }));
+                          }}
+                          className="w-3.5 h-3.5 cursor-pointer" />
+                      </td>
+                      <td className="px-5 py-3 text-right">
+                        <button onClick={() => removerItem(i)} className="text-zinc-600 hover:text-red-400 transition-all">
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </td>
+                    </tr>
                   ))}
-                </div>
-              </div>
-            )}
+                </tbody>
+              </table>
+            </div>
+          )}
 
-            {/* Lista de itens adicionados */}
-            {(form.itens || []).length === 0 ? (
-              <div className="text-center py-8 text-zinc-600 border border-dashed border-zinc-800 rounded-2xl">
-                <Package className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                <p className="text-xs font-black uppercase">Nenhum item adicionado</p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {(form.itens || []).map((item, i) => (
-                  <div key={i} className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 space-y-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex-1">
-                        <p className="text-white text-sm font-black uppercase">{item.nome}</p>
-                        <div className="flex items-center gap-2 mt-1">
-                          <label className="flex items-center gap-1.5 cursor-pointer">
-                            <input type="checkbox" checked={item.exibirNoPdf}
-                              onChange={e => atualizarItem(i, 'exibirNoPdf', e.target.checked)}
-                              className="w-3 h-3" />
-                            <span className="text-zinc-500 text-[9px] font-black uppercase">Exibir no PDF</span>
-                          </label>
-                        </div>
-                      </div>
-                      <button onClick={() => removerItem(i)} className="text-zinc-600 hover:text-red-400 transition-all shrink-0">
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
-                    <div className="grid grid-cols-4 gap-2">
-                      <div>
-                        <label className="text-[9px] font-black uppercase tracking-widest text-zinc-600 block mb-1">Qtd</label>
-                        <input type="number" value={item.quantidade} min={1}
-                          onChange={e => atualizarItem(i, 'quantidade', Number(e.target.value))}
-                          className="w-full h-8 bg-zinc-800 border border-zinc-700 rounded-lg px-2 text-white text-xs focus:border-[#ff5351] outline-none" />
-                      </div>
-                      <div>
-                        <label className="text-[9px] font-black uppercase tracking-widest text-zinc-600 block mb-1">Diárias</label>
-                        <input type="number" value={item.diarias} min={1}
-                          onChange={e => atualizarItem(i, 'diarias', Number(e.target.value))}
-                          className="w-full h-8 bg-zinc-800 border border-zinc-700 rounded-lg px-2 text-white text-xs focus:border-[#ff5351] outline-none" />
-                      </div>
-                      <div>
-                        <label className="text-[9px] font-black uppercase tracking-widest text-zinc-600 block mb-1">Valor/Dia</label>
-                        <input type="number" value={item.valorUnitario}
-                          onChange={e => atualizarItem(i, 'valorUnitario', Number(e.target.value))}
-                          className="w-full h-8 bg-zinc-800 border border-zinc-700 rounded-lg px-2 text-white text-xs focus:border-[#ff5351] outline-none" />
-                      </div>
-                      <div>
-                        <label className="text-[9px] font-black uppercase tracking-widest text-zinc-600 block mb-1">Total</label>
-                        <div className="h-8 bg-zinc-800 border border-zinc-700 rounded-lg px-2 flex items-center">
-                          <span className="text-emerald-400 text-xs font-black">
-                            {item.valorTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                    <div>
-                      <label className="text-[9px] font-black uppercase tracking-widest text-zinc-600 block mb-1">Descrição no PDF (opcional)</label>
-                      <input type="text" value={item.descricaoPersonalizada || ''}
-                        onChange={e => atualizarItem(i, 'descricaoPersonalizada', e.target.value)}
-                        placeholder="Descrição que aparecerá no PDF..."
-                        className="w-full h-8 bg-zinc-800 border border-zinc-700 rounded-lg px-2 text-white text-xs focus:border-[#ff5351] outline-none" />
-                    </div>
-                  </div>
-                ))}
+          {/* Aviso sobre diárias */}
+          <div className="flex items-start gap-3 p-4 bg-blue-500/5 border border-blue-500/20 rounded-2xl">
+            <Info className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
+            <p className="text-blue-400 text-xs font-black uppercase tracking-widest">
+              Diárias, deslocamento, alimentação e margem de lucro são definidos na hora de montar o orçamento.
+            </p>
+          </div>
 
-                {/* Total */}
-                <div className="flex items-center justify-between px-4 py-3 bg-zinc-900 border border-zinc-800 rounded-2xl">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Total do Template</span>
-                  <span className="text-emerald-400 font-black text-lg">
-                    {totalTemplate.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                  </span>
-                </div>
-              </div>
-            )}
+          {/* Observações gerais */}
+          <div>
+            <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Observações gerais (aparece no PDF)</label>
+            <textarea value={form.observacoes || ''} onChange={e => setForm({ ...form, observacoes: e.target.value })}
+              rows={2} placeholder="Ex: Material entregue via Google Drive ou HD fornecida pelo cliente no dia do evento."
+              className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-white text-sm focus:border-[#ff5351] outline-none resize-none" />
           </div>
 
           <div className="flex justify-end gap-3">
@@ -375,7 +394,7 @@ export default function OrcamentoTemplates() {
                     <span className="text-zinc-500 text-xs">{t.itens?.length || 0} itens</span>
                     <span className="text-zinc-700">•</span>
                     <span className="text-emerald-400 text-xs font-black">
-                      {(t.itens || []).reduce((acc, item) => acc + item.valorTotal, 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                      R$ {(t.itens || []).reduce((acc, item) => acc + item.valorTotalDia, 0).toLocaleString('pt-BR')},00/dia
                     </span>
                     <span className="text-zinc-700">•</span>
                     <span className="text-zinc-500 text-xs">{t.condicaoPagamento}</span>
@@ -386,52 +405,49 @@ export default function OrcamentoTemplates() {
                     className="p-1.5 text-zinc-500 hover:text-white transition-all">
                     {expandido === t.id ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                   </button>
-                  <button onClick={() => handleEditar(t)}
-                    className="p-1.5 text-zinc-500 hover:text-white transition-all">
+                  <button onClick={() => handleEditar(t)} className="p-1.5 text-zinc-500 hover:text-white transition-all">
                     <Edit2 className="w-3.5 h-3.5" />
                   </button>
-                  <button onClick={() => t.id && handleExcluir(t.id)}
-                    className="p-1.5 text-zinc-500 hover:text-red-400 transition-all">
+                  <button onClick={() => t.id && handleExcluir(t.id)} className="p-1.5 text-zinc-500 hover:text-red-400 transition-all">
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 </div>
               </div>
 
-              {/* Itens expandidos */}
               {expandido === t.id && t.itens && t.itens.length > 0 && (
-                <div className="border-t border-zinc-800 px-5 py-4">
+                <div className="border-t border-zinc-800">
                   <table className="w-full text-left border-collapse">
                     <thead>
-                      <tr className="border-b border-zinc-800">
-                        <th className="pb-2 text-[9px] font-black uppercase tracking-widest text-zinc-600">Item</th>
-                        <th className="pb-2 text-[9px] font-black uppercase tracking-widest text-zinc-600 text-center">Qtd</th>
-                        <th className="pb-2 text-[9px] font-black uppercase tracking-widest text-zinc-600 text-center">Diárias</th>
-                        <th className="pb-2 text-[9px] font-black uppercase tracking-widest text-zinc-600 text-right">Valor/Dia</th>
-                        <th className="pb-2 text-[9px] font-black uppercase tracking-widest text-zinc-600 text-right">Total</th>
-                        <th className="pb-2 text-[9px] font-black uppercase tracking-widest text-zinc-600 text-center">PDF</th>
+                      <tr className="border-b border-zinc-800 bg-zinc-900/50">
+                        <th className="px-5 py-2 text-[9px] font-black uppercase tracking-widest text-zinc-600">Item</th>
+                        <th className="px-5 py-2 text-[9px] font-black uppercase tracking-widest text-zinc-600 text-center">Qtd</th>
+                        <th className="px-5 py-2 text-[9px] font-black uppercase tracking-widest text-zinc-600 text-right">Valor/dia</th>
+                        <th className="px-5 py-2 text-[9px] font-black uppercase tracking-widest text-zinc-600 text-right">Total/dia</th>
+                        <th className="px-5 py-2 text-[9px] font-black uppercase tracking-widest text-zinc-600 text-center">PDF</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-zinc-800/50">
                       {t.itens.map((item, i) => (
                         <tr key={i}>
-                          <td className="py-2 text-white text-xs font-bold">{item.nome}</td>
-                          <td className="py-2 text-zinc-400 text-xs text-center">{item.quantidade}</td>
-                          <td className="py-2 text-zinc-400 text-xs text-center">{item.diarias}</td>
-                          <td className="py-2 text-zinc-400 text-xs text-right">
-                            {item.valorUnitario.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                          </td>
-                          <td className="py-2 text-emerald-400 text-xs font-black text-right">
-                            {item.valorTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                          </td>
-                          <td className="py-2 text-center">
-                            <span className={cn('text-[9px] font-black uppercase', item.exibirNoPdf ? 'text-emerald-400' : 'text-zinc-600')}>
-                              {item.exibirNoPdf ? '✓' : '—'}
+                          <td className="px-5 py-2.5 text-white text-sm font-bold">{item.nome}</td>
+                          <td className="px-5 py-2.5 text-zinc-400 text-sm text-center">{item.quantidade}</td>
+                          <td className="px-5 py-2.5 text-zinc-400 text-sm text-right">R$ {item.valorDia.toLocaleString('pt-BR')},00</td>
+                          <td className="px-5 py-2.5 text-emerald-400 font-black text-sm text-right">R$ {item.valorTotalDia.toLocaleString('pt-BR')},00</td>
+                          <td className="px-5 py-2.5 text-center">
+                            <span className={cn('text-[10px] font-black uppercase', item.exibirNoPdf ? 'text-emerald-400' : 'text-zinc-600')}>
+                              {item.exibirNoPdf ? '✓ sim' : '— não'}
                             </span>
                           </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
+                  {t.observacoes && (
+                    <div className="px-5 py-3 border-t border-zinc-800 bg-zinc-900/30">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-zinc-600 mb-1">Observações</p>
+                      <p className="text-zinc-400 text-xs">{t.observacoes}</p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
