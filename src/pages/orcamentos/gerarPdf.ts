@@ -80,6 +80,7 @@ export async function gerarOrcamentoPdf(
       const capaDoc = await PDFDocument.load(capaBytes);
       const [capaPage] = await finalPdf.copyPages(capaDoc, [0]);
       const { width, height } = capaPage.getSize();
+      alert(`Capa: ${width} x ${height}`);
 
      // Número do orçamento — posição baseada no Photoshop
 const numText = orcamento.numero;
