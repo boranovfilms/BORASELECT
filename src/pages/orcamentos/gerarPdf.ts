@@ -7,12 +7,14 @@ interface ItemBloco {
 }
 
 interface BlocoServico {
+  id: string;
   nome: string;
   itens: ItemBloco[];
   valorManual: number;
 }
 
 interface Extra {
+  id: string;
   nome: string;
   valorDia: number;
   diarias: number;
@@ -56,6 +58,11 @@ async function fetchPdfBytes(url: string): Promise<Uint8Array> {
   return new Uint8Array(buffer);
 }
 
+function centralizarTexto(texto: string, fontSize: number, pageWidth: number): number {
+  const charWidth = fontSize * 0.5;
+  return (pageWidth - texto.length * charWidth) / 2;
+}
+
 export async function gerarOrcamentoPdf(
   orcamento: OrcamentoParaPdf,
   config: ConfiguracaoOrcamento
@@ -72,26 +79,42 @@ export async function gerarOrcamentoPdf(
       const capaBytes = await fetchPdfBytes(config.capaPdfUrl);
       const capaDoc = await PDFDocument.load(capaBytes);
       const [capaPage] = await finalPdf.copyPages(capaDoc, [0]);
-
-      // Escreve número do orçamento na capa
       const { width, height } = capaPage.getSize();
-      capaPage.drawText(orcamento.numero, {
-        x: width - 120,
-        y: height - 45,
-        size: 14,
+
+      // Número do orçamento — canto superior direito no fundo vermelho
+      const numText = orcamento.numero;
+      const numWidth = helveticaBold.widthOfTextAtSize(numText, 13);
+      capaPage.drawText(numText, {
+        x: width - numWidth - 18,
+        y: height - 38,
+        size: 13,
         font: helveticaBold,
         color: rgb(1, 1, 1),
       });
 
-      // Escreve nome do cliente/evento
-      const tituloEvento = orcamento.nomeEvento || orcamento.nomeCliente;
-      capaPage.drawText(tituloEvento.toUpperCase(), {
-        x: width / 2 - (tituloEvento.length * 5),
-        y: height * 0.42,
-        size: 16,
-        font: helveticaBold,
-        color: rgb(0.2, 0.2, 0.2),
+      // Nome do cliente — acima da foto, centralizado, cinza
+      const nomeCliente = orcamento.nomeCliente.toUpperCase();
+      const nomeWidth = helvetica.widthOfTextAtSize(nomeCliente, 13);
+      capaPage.drawText(nomeCliente, {
+        x: (width - nomeWidth) / 2,
+        y: height * 0.455,
+        size: 13,
+        font: helvetica,
+        color: rgb(0.3, 0.3, 0.3),
       });
+
+      // Nome do evento — abaixo do cliente, vermelho
+      if (orcamento.nomeEvento) {
+        const nomeEvento = orcamento.nomeEvento.toUpperCase();
+        const eventoWidth = helveticaBold.widthOfTextAtSize(nomeEvento, 13);
+        capaPage.drawText(nomeEvento, {
+          x: (width - eventoWidth) / 2,
+          y: height * 0.432,
+          size: 13,
+          font: helveticaBold,
+          color: rgb(1, 0.33, 0.32),
+        });
+      }
 
       finalPdf.addPage(capaPage);
     }
@@ -103,128 +126,131 @@ export async function gerarOrcamentoPdf(
       ? await fetchPdfBytes(config.timbradoPdfUrl)
       : null;
 
-    const adicionarPaginaComTimbrado = async (): Promise<{
-      page: any;
-      width: number;
-      height: number;
-      marginLeft: number;
-      marginRight: number;
-      marginTop: number;
-      contentWidth: number;
-    }> => {
+    let page: any;
+    let pageWidth = 595;
+    let pageHeight = 842;
+    const marginLeft = 75;
+    const marginRight = 75;
+    const contentWidth = pageWidth - marginLeft - marginRight;
+    const startY = pageHeight - 75; // começa bem no topo da área útil
+    const bottomLimit = 110; // espaço para o rodapé do timbrado
+    let y = startY;
+
+    const adicionarPagina = async () => {
       if (timbradoBytes) {
         const timbradoDoc = await PDFDocument.load(timbradoBytes);
         const [timbradoPage] = await finalPdf.copyPages(timbradoDoc, [0]);
         finalPdf.addPage(timbradoPage);
-        const page = finalPdf.getPages()[finalPdf.getPageCount() - 1];
-        const { width, height } = page.getSize();
-        const marginLeft = 70;
-        const marginRight = 70;
-        const marginTop = 60;
-        const contentWidth = width - marginLeft - marginRight;
-        return { page, width, height, marginLeft, marginRight, marginTop, contentWidth };
+        page = finalPdf.getPages()[finalPdf.getPageCount() - 1];
+        pageWidth = page.getSize().width;
+        pageHeight = page.getSize().height;
       } else {
-        const page = finalPdf.addPage([595, 842]);
-        const { width, height } = page.getSize();
-        return { page, width, height, marginLeft: 60, marginRight: 60, marginTop: 60, contentWidth: width - 120 };
+        page = finalPdf.addPage([595, 842]);
+        pageWidth = 595;
+        pageHeight = 842;
       }
+      y = pageHeight - 75;
     };
-
-    // ============================================================
-    // PÁGINA 2 — DADOS DO CLIENTE + BLOCOS
-    // ============================================================
-    let { page, width, height, marginLeft, contentWidth } = await adicionarPaginaComTimbrado();
-    let y = height - 80;
-    const lineHeight = 18;
-    const sectionGap = 24;
-    const vermelho = rgb(1, 0.33, 0.32);
-    const preto = rgb(0.1, 0.1, 0.1);
-    const cinza = rgb(0.5, 0.5, 0.5);
-    const cinzaClaro = rgb(0.9, 0.9, 0.9);
 
     const checkNovaPage = async (espacoNecessario: number) => {
-      if (y - espacoNecessario < 100) {
-        const nova = await adicionarPaginaComTimbrado();
-        page = nova.page;
-        y = nova.height - 80;
+      if (y - espacoNecessario < bottomLimit) {
+        await adicionarPagina();
       }
     };
 
-    const drawLinha = (cor = cinzaClaro) => {
+    await adicionarPagina();
+
+    const vermelho = rgb(1, 0.33, 0.32);
+    const preto = rgb(0.12, 0.12, 0.12);
+    const cinza = rgb(0.45, 0.45, 0.45);
+    const cinzaClaro = rgb(0.85, 0.85, 0.85);
+    const lineHeight = 18;
+    const sectionGap = 16;
+
+    const drawLinha = (cor = cinzaClaro, espessura = 0.5) => {
       page.drawLine({
         start: { x: marginLeft, y },
         end: { x: marginLeft + contentWidth, y },
-        thickness: 0.5,
+        thickness: espessura,
         color: cor,
       });
       y -= 8;
     };
 
-    const drawTitulo = (texto: string) => {
+    const drawSecaoTitulo = (texto: string) => {
       page.drawRectangle({
         x: marginLeft,
-        y: y - 4,
+        y: y - 6,
         width: contentWidth,
-        height: 20,
+        height: 22,
         color: vermelho,
       });
       page.drawText(texto.toUpperCase(), {
-        x: marginLeft + 8,
+        x: marginLeft + 10,
         y: y,
         size: 10,
         font: helveticaBold,
         color: rgb(1, 1, 1),
       });
-      y -= 28;
+      y -= 30;
     };
 
-    // Número do orçamento
+    // ============================================================
+    // CABEÇALHO DA PÁGINA DE CONTEÚDO
+    // ============================================================
+    page.drawText('PROPOSTA AUDIOVISUAL', {
+      x: marginLeft,
+      y,
+      size: 16,
+      font: helveticaBold,
+      color: preto,
+    });
+
+    // Número no lado direito
+    const numW = helveticaBold.widthOfTextAtSize(orcamento.numero, 12);
     page.drawText(orcamento.numero, {
-      x: marginLeft + contentWidth - 80,
+      x: marginLeft + contentWidth - numW,
       y,
       size: 12,
       font: helveticaBold,
       color: vermelho,
     });
+    y -= 18;
 
-    // Título da proposta
-    page.drawText('PROPOSTA AUDIOVISUAL', {
-      x: marginLeft,
-      y,
-      size: 14,
-      font: helveticaBold,
-      color: preto,
-    });
-    y -= 20;
-
-    if (orcamento.nomeEvento) {
-      page.drawText(orcamento.nomeEvento, {
+    if (orcamento.nomeCliente) {
+      page.drawText(orcamento.nomeCliente.toUpperCase(), {
         x: marginLeft,
         y,
         size: 10,
         font: helvetica,
         color: cinza,
       });
-      y -= 16;
+      y -= 14;
     }
 
     if (orcamento.localEvento) {
       page.drawText(`Local: ${orcamento.localEvento}`, {
         x: marginLeft,
         y,
-        size: 10,
+        size: 9,
         font: helvetica,
         color: cinza,
       });
-      y -= 16;
+      y -= 14;
     }
 
     y -= sectionGap;
-    drawLinha(vermelho);
+    page.drawLine({
+      start: { x: marginLeft, y },
+      end: { x: marginLeft + contentWidth, y },
+      thickness: 1,
+      color: vermelho,
+    });
+    y -= sectionGap;
 
-    // Dados do cliente
-    drawTitulo('Dados do Cliente');
-
+    // ============================================================
+    // DADOS DO CLIENTE
+    // ============================================================
     const dadosCliente = [
       { label: 'Cliente', valor: orcamento.nomeCliente },
       { label: 'CNPJ/CPF', valor: orcamento.cnpjCpf },
@@ -233,36 +259,43 @@ export async function gerarOrcamentoPdf(
       { label: 'Responsável', valor: orcamento.responsavel },
     ].filter(d => d.valor);
 
-    for (const dado of dadosCliente) {
-      await checkNovaPage(lineHeight + 4);
-      page.drawText(`${dado.label}:`, {
-        x: marginLeft,
-        y,
-        size: 9,
-        font: helveticaBold,
-        color: cinza,
-      });
-      page.drawText(dado.valor, {
-        x: marginLeft + 80,
-        y,
-        size: 9,
-        font: helvetica,
-        color: preto,
-      });
-      y -= lineHeight;
+    if (dadosCliente.length > 0) {
+      await checkNovaPage(40 + dadosCliente.length * lineHeight);
+      drawSecaoTitulo('Dados do Cliente');
+
+      for (const dado of dadosCliente) {
+        await checkNovaPage(lineHeight + 4);
+        page.drawText(`${dado.label}:`, {
+          x: marginLeft + 8,
+          y,
+          size: 9,
+          font: helveticaBold,
+          color: cinza,
+        });
+        page.drawText(dado.valor, {
+          x: marginLeft + 90,
+          y,
+          size: 9,
+          font: helvetica,
+          color: preto,
+        });
+        y -= lineHeight;
+      }
+      y -= sectionGap;
     }
 
-    y -= sectionGap;
-
-    // Blocos de serviço
+    // ============================================================
+    // BLOCOS DE SERVIÇO
+    // ============================================================
     for (const bloco of orcamento.blocos) {
       if (!bloco.nome) continue;
-      await checkNovaPage(60);
-      drawTitulo(bloco.nome);
 
       const itensPdf = bloco.itens.filter(i => i.exibirNoPdf !== false);
+      await checkNovaPage(50 + itensPdf.length * (lineHeight + 8));
+      drawSecaoTitulo(bloco.nome);
+
       for (const item of itensPdf) {
-        await checkNovaPage(lineHeight + 4);
+        await checkNovaPage(lineHeight + 8);
         const nomeItem = `${String(item.quantidade).padStart(2, '0')} — ${item.nome}`;
         page.drawText(nomeItem, {
           x: marginLeft + 8,
@@ -271,20 +304,20 @@ export async function gerarOrcamentoPdf(
           font: helvetica,
           color: preto,
         });
+        y -= lineHeight;
         drawLinha();
       }
 
       // Valor do bloco
-      await checkNovaPage(30);
-      const totalBloco = bloco.valorManual > 0
-        ? bloco.valorManual
-        : 0;
-
-      if (totalBloco > 0) {
-        page.drawText(fmt(totalBloco), {
-          x: marginLeft + contentWidth - 80,
+      if (bloco.valorManual > 0) {
+        await checkNovaPage(30);
+        y -= 4;
+        const valorText = fmt(bloco.valorManual);
+        const valorW = helveticaBold.widthOfTextAtSize(valorText, 13);
+        page.drawText(valorText, {
+          x: marginLeft + contentWidth - valorW,
           y,
-          size: 11,
+          size: 13,
           font: helveticaBold,
           color: vermelho,
         });
@@ -294,13 +327,18 @@ export async function gerarOrcamentoPdf(
       y -= sectionGap;
     }
 
-    // Extras
-    const extrasComValor = orcamento.extras.filter(e => e.nome && (e.valorDia * e.diarias) > 0);
-    if (extrasComValor.length > 0) {
-      await checkNovaPage(40);
-      drawTitulo('Extras');
-      for (const extra of extrasComValor) {
+    // ============================================================
+    // EXTRAS
+    // ============================================================
+    const extrasValidos = orcamento.extras.filter(e => e.nome && (e.valorDia * e.diarias) > 0);
+    if (extrasValidos.length > 0) {
+      await checkNovaPage(50 + extrasValidos.length * lineHeight);
+      drawSecaoTitulo('Extras');
+
+      for (const extra of extrasValidos) {
         await checkNovaPage(lineHeight + 8);
+        const valorExtra = fmt(extra.valorDia * extra.diarias);
+        const valorW = helveticaBold.widthOfTextAtSize(valorExtra, 9);
         page.drawText(extra.nome, {
           x: marginLeft + 8,
           y,
@@ -308,29 +346,33 @@ export async function gerarOrcamentoPdf(
           font: helvetica,
           color: preto,
         });
-        page.drawText(fmt(extra.valorDia * extra.diarias), {
-          x: marginLeft + contentWidth - 80,
+        page.drawText(valorExtra, {
+          x: marginLeft + contentWidth - valorW,
           y,
           size: 9,
           font: helveticaBold,
           color: preto,
         });
+        y -= lineHeight;
         drawLinha();
       }
       y -= sectionGap;
     }
 
-    // Despesas de deslocamento
-    await checkNovaPage(40);
+    // ============================================================
+    // DESPESAS DE DESLOCAMENTO
+    // ============================================================
+    await checkNovaPage(30);
     page.drawText('Despesas de deslocamento', {
-      x: marginLeft,
+      x: marginLeft + 8,
       y,
       size: 9,
       font: helvetica,
       color: cinza,
     });
+    const inclW = helvetica.widthOfTextAtSize('incluso', 9);
     page.drawText('incluso', {
-      x: marginLeft + contentWidth - 50,
+      x: marginLeft + contentWidth - inclW,
       y,
       size: 9,
       font: helvetica,
@@ -340,78 +382,91 @@ export async function gerarOrcamentoPdf(
     drawLinha();
     y -= sectionGap;
 
-    // Proposta final
-    await checkNovaPage(80);
-    drawTitulo('Proposta Final');
+    // ============================================================
+    // PROPOSTA FINAL
+    // ============================================================
+    const totalBlocos = orcamento.blocos.filter(b => b.nome);
+    await checkNovaPage(60 + (totalBlocos.length + extrasValidos.length) * lineHeight + 50);
+    drawSecaoTitulo('Proposta Final');
 
-    for (const bloco of orcamento.blocos) {
-      if (!bloco.nome) continue;
-      await checkNovaPage(lineHeight + 4);
-      page.drawText(bloco.nome.toUpperCase(), {
+    for (const bloco of totalBlocos) {
+      await checkNovaPage(lineHeight + 8);
+      const nomeBloco = bloco.nome.toUpperCase();
+      const valorBloco = bloco.valorManual > 0 ? fmt(bloco.valorManual) : '';
+      page.drawText(nomeBloco, {
         x: marginLeft + 8,
         y,
         size: 9,
         font: helveticaBold,
         color: preto,
       });
-      if (bloco.valorManual > 0) {
-        page.drawText(fmt(bloco.valorManual), {
-          x: marginLeft + contentWidth - 80,
+      if (valorBloco) {
+        const vW = helveticaBold.widthOfTextAtSize(valorBloco, 9);
+        page.drawText(valorBloco, {
+          x: marginLeft + contentWidth - vW,
           y,
           size: 9,
           font: helveticaBold,
           color: preto,
         });
       }
+      y -= lineHeight;
       drawLinha();
     }
 
-    for (const extra of extrasComValor) {
-      await checkNovaPage(lineHeight + 4);
+    for (const extra of extrasValidos) {
+      await checkNovaPage(lineHeight + 8);
+      const valorExtra = fmt(extra.valorDia * extra.diarias);
+      const vW = helvetica.widthOfTextAtSize(valorExtra, 9);
       page.drawText(extra.nome, {
         x: marginLeft + 8,
         y,
         size: 9,
         font: helvetica,
-        color: preto,
+        color: cinza,
       });
-      page.drawText(fmt(extra.valorDia * extra.diarias), {
-        x: marginLeft + contentWidth - 80,
+      page.drawText(valorExtra, {
+        x: marginLeft + contentWidth - vW,
         y,
         size: 9,
         font: helvetica,
-        color: preto,
+        color: cinza,
       });
+      y -= lineHeight;
       drawLinha();
     }
 
-    // Total
-    await checkNovaPage(50);
+    // TOTAL
+    await checkNovaPage(40);
     y -= 8;
     page.drawRectangle({
       x: marginLeft,
-      y: y - 4,
+      y: y - 6,
       width: contentWidth,
-      height: 24,
+      height: 26,
       color: rgb(0.1, 0.1, 0.1),
     });
     page.drawText('TOTAL', {
-      x: marginLeft + 8,
-      y: y + 2,
+      x: marginLeft + 10,
+      y: y,
       size: 11,
       font: helveticaBold,
       color: rgb(1, 1, 1),
     });
-    page.drawText(fmt(orcamento.valorCliente), {
-      x: marginLeft + contentWidth - 90,
-      y: y + 2,
-      size: 11,
+    const totalText = fmt(orcamento.valorCliente);
+    const totalW = helveticaBold.widthOfTextAtSize(totalText, 13);
+    page.drawText(totalText, {
+      x: marginLeft + contentWidth - totalW,
+      y,
+      size: 13,
       font: helveticaBold,
       color: vermelho,
     });
-    y -= 36;
+    y -= 40;
 
-    // Pagamento
+    // ============================================================
+    // PAGAMENTO
+    // ============================================================
     await checkNovaPage(40);
     page.drawText('PAGAMENTO', {
       x: marginLeft,
@@ -430,7 +485,9 @@ export async function gerarOrcamentoPdf(
     });
     y -= lineHeight;
 
-    // Observações
+    // ============================================================
+    // OBSERVAÇÕES
+    // ============================================================
     if (orcamento.observacoes) {
       await checkNovaPage(40);
       y -= sectionGap;
@@ -442,16 +499,22 @@ export async function gerarOrcamentoPdf(
         color: preto,
       });
       y -= 14;
-      const linhasObs = orcamento.observacoes.match(/.{1,80}/g) || [];
-      for (const linha of linhasObs) {
-        await checkNovaPage(14);
-        page.drawText(linha, {
-          x: marginLeft,
-          y,
-          size: 8,
-          font: helvetica,
-          color: cinza,
-        });
+      const palavras = orcamento.observacoes.split(' ');
+      let linha = '';
+      for (const palavra of palavras) {
+        const teste = linha ? `${linha} ${palavra}` : palavra;
+        if (helvetica.widthOfTextAtSize(teste, 8) > contentWidth) {
+          await checkNovaPage(12);
+          page.drawText(linha, { x: marginLeft, y, size: 8, font: helvetica, color: cinza });
+          y -= 12;
+          linha = palavra;
+        } else {
+          linha = teste;
+        }
+      }
+      if (linha) {
+        await checkNovaPage(12);
+        page.drawText(linha, { x: marginLeft, y, size: 8, font: helvetica, color: cinza });
         y -= 12;
       }
     }
