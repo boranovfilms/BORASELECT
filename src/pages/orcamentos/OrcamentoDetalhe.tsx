@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { collection, addDoc, updateDoc, deleteDoc, doc, getDoc, getDocs, serverTimestamp, query, orderBy } from 'firebase/firestore';
+import { collection, addDoc, updateDoc, doc, getDoc, getDocs, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
-import { ArrowLeft, Plus, Loader2, Save, FileText, Trash2, X, Info, ChevronDown, ChevronUp } from 'lucide-react';
+import { ArrowLeft, Plus, Loader2, Save, FileText, Trash2, X, Search, ChevronDown, ChevronUp } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { cn } from '../../lib/utils';
 
@@ -36,7 +36,6 @@ interface Extra {
 interface Orcamento {
   id?: string;
   numero: string;
-  // Dados do cliente
   nomeCliente: string;
   nomeEvento: string;
   cnpjCpf: string;
@@ -53,21 +52,17 @@ interface Orcamento {
   bairro: string;
   cidade: string;
   estado: string;
-  // Dados do orçamento
   localEvento: string;
   diarias: number;
   condicaoPagamento: string;
-  // Blocos e extras
   blocos: BlocoServico[];
   extras: Extra[];
-  // Calculadora interna
   despAlimentacao: number;
   despTransporte: number;
   despHospedagem: number;
   despPedagio: number;
   pctNota: number;
   pctMargem: number;
-  // Valores finais
   totalCustoEquipe: number;
   totalCustoLocacao: number;
   totalCustoDesp: number;
@@ -78,7 +73,6 @@ interface Orcamento {
   totalSugerido: number;
   valorCliente: number;
   lucroReal: number;
-  // Status
   status: 'rascunho' | 'enviado' | 'aprovado' | 'rejeitado';
   observacoes: string;
   criadoEm?: any;
@@ -118,6 +112,10 @@ function fmt(v: number) {
   return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
+function isCnpj(v: string) {
+  return v.replace(/\D/g, '').length === 14;
+}
+
 // ============================================================
 // COMPONENTE PRINCIPAL
 // ============================================================
@@ -128,9 +126,10 @@ export default function OrcamentoDetalhe() {
 
   const [loading, setLoading] = useState(true);
   const [salvando, setSalvando] = useState(false);
+  const [buscandoCnpj, setBuscandoCnpj] = useState(false);
+  const [dadosExpandidos, setDadosExpandidos] = useState(false);
   const [equipamentos, setEquipamentos] = useState<Equipamento[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
-  const [expandidoBloco, setExpandidoBloco] = useState<string | null>(null);
 
   const [form, setForm] = useState<Partial<Orcamento>>({
     numero: '',
@@ -153,31 +152,27 @@ export default function OrcamentoDetalhe() {
   useEffect(() => {
     const loadData = async () => {
       try {
-        // Carrega equipamentos
         const eqSnap = await getDocs(collection(db, 'orcamentoEquipamentos'));
         const eqData = eqSnap.docs.map(d => ({ id: d.id, ...d.data() })) as Equipamento[];
         eqData.sort((a, b) => a.categoria.localeCompare(b.categoria) || a.nome.localeCompare(b.nome));
         setEquipamentos(eqData);
 
-        // Carrega templates
         const tSnap = await getDocs(collection(db, 'orcamentoTemplates'));
         const tData = tSnap.docs.map(d => ({ id: d.id, ...d.data() })) as Template[];
         setTemplates(tData);
 
-        // Se editando, carrega orçamento
         if (!isNovo && id) {
           const docSnap = await getDoc(doc(db, 'orcamentos', id));
           if (docSnap.exists()) {
             setForm({ id: docSnap.id, ...docSnap.data() } as Orcamento);
           }
         } else {
-          // Gera número automático
           const orcSnap = await getDocs(collection(db, 'orcamentos'));
           const ano = new Date().getFullYear();
           const proximo = (orcSnap.docs.length + 1).toString().padStart(3, '0');
           setForm(prev => ({ ...prev, numero: `${proximo}-${ano}` }));
         }
-      } catch (error) {
+      } catch {
         toast.error('Erro ao carregar dados');
       } finally {
         setLoading(false);
@@ -187,33 +182,74 @@ export default function OrcamentoDetalhe() {
   }, [id]);
 
   // ============================================================
-  // CALCULADORA
+  // BUSCA CNPJ — BrasilAPI
+  // ============================================================
+  const buscarCnpj = async () => {
+    const cnpjLimpo = (form.cnpjCpf || '').replace(/\D/g, '');
+    if (cnpjLimpo.length !== 14) { toast.error('CNPJ inválido'); return; }
+    setBuscandoCnpj(true);
+    try {
+      const res = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpjLimpo}`);
+      if (!res.ok) { toast.error('CNPJ não encontrado'); return; }
+      const data = await res.json();
+      updateForm({
+        razaoSocial: data.razao_social || '',
+        nomeComercial: data.nome_fantasia || '',
+        telefone: data.ddd_telefone_1 ? `(${data.ddd_telefone_1.slice(0,2)}) ${data.ddd_telefone_1.slice(2)}` : '',
+        cep: data.cep?.replace(/\D/g, '') || '',
+        endereco: data.logradouro || '',
+        numero_end: data.numero || '',
+        complemento: data.complemento || '',
+        bairro: data.bairro || '',
+        cidade: data.municipio || '',
+        estado: data.uf || '',
+      });
+      setDadosExpandidos(true);
+      toast.success('Dados preenchidos automaticamente!');
+    } catch {
+      toast.error('Erro ao buscar CNPJ');
+    } finally {
+      setBuscandoCnpj(false);
+    }
+  };
+
+  // ============================================================
+  // CALCULADORA — margem sobre equip + locação + freelance + despesas (sem nota)
   // ============================================================
   const calcular = (f: Partial<Orcamento>) => {
     const diarias = f.diarias || 1;
     let custoEquipe = 0, custoLocacao = 0, valorProprio = 0;
 
     (f.blocos || []).forEach(bloco => {
+      let blocoEquipe = 0, blocoLocacao = 0, blocoProprio = 0;
       bloco.itens.forEach(item => {
         const v = item.valorDia * item.quantidade * diarias;
-        if (item.tipo === 'equipe') custoEquipe += v;
-        else if (item.tipo === 'locacao') custoLocacao += v;
-        else valorProprio += v;
+        if (item.tipo === 'equipe') blocoEquipe += v;
+        else if (item.tipo === 'locacao') blocoLocacao += v;
+        else blocoProprio += v;
       });
-      // Se tem valor manual, usa ele no lugar
       if (bloco.valorManual > 0) {
-        const autoTotal = bloco.itens.reduce((acc, i) => acc + i.valorDia * i.quantidade * diarias, 0);
+        const autoTotal = blocoEquipe + blocoLocacao + blocoProprio;
         const diff = bloco.valorManual - autoTotal;
-        valorProprio += diff;
+        blocoProprio += diff;
       }
+      custoEquipe += blocoEquipe;
+      custoLocacao += blocoLocacao;
+      valorProprio += blocoProprio;
     });
 
     const totalDesp = (f.despAlimentacao || 0) + (f.despTransporte || 0) + (f.despHospedagem || 0) + (f.despPedagio || 0);
     const totalExtras = (f.extras || []).reduce((acc, e) => acc + e.valor, 0);
+
+    // Nota fiscal sobre custo base (equipe + locação + despesas)
     const custoBase = custoEquipe + custoLocacao + totalDesp;
     const valorNota = custoBase * ((f.pctNota || 0) / 100);
     const custoTotal = custoBase + valorNota;
-    const valorMargem = custoTotal * ((f.pctMargem || 0) / 100);
+
+    // Margem sobre equip próprio + locação + equipe + despesas (SEM nota)
+    const baseMargemCalculo = valorProprio + custoEquipe + custoLocacao + totalDesp;
+    const valorMargem = baseMargemCalculo * ((f.pctMargem || 0) / 100);
+
     const sugerido = custoTotal + valorProprio + valorMargem + totalExtras;
 
     return {
@@ -242,13 +278,7 @@ export default function OrcamentoDetalhe() {
   // BLOCOS
   // ============================================================
   const adicionarBloco = () => {
-    const novoBloco: BlocoServico = {
-      id: Date.now().toString(),
-      nome: '',
-      templateId: '',
-      valorManual: 0,
-      itens: [],
-    };
+    const novoBloco: BlocoServico = { id: Date.now().toString(), nome: '', templateId: '', valorManual: 0, itens: [] };
     updateForm({ blocos: [...(form.blocos || []), novoBloco] });
   };
 
@@ -267,7 +297,6 @@ export default function OrcamentoDetalhe() {
       tipo: tipoAutomatico(item.categoria || ''),
       exibirNoPdf: item.exibirNoPdf !== false,
     })) : [];
-
     updateForm({
       blocos: (form.blocos || []).map(b =>
         b.id === blocoId ? { ...b, templateId, itens: novosItens, valorManual: 0 } : b
@@ -294,8 +323,7 @@ export default function OrcamentoDetalhe() {
   // EXTRAS
   // ============================================================
   const adicionarExtra = () => {
-    const novoExtra: Extra = { id: Date.now().toString(), nome: '', valor: 0 };
-    updateForm({ extras: [...(form.extras || []), novoExtra] });
+    updateForm({ extras: [...(form.extras || []), { id: Date.now().toString(), nome: '', valor: 0 }] });
   };
 
   const removerExtra = (extraId: string) => {
@@ -303,11 +331,7 @@ export default function OrcamentoDetalhe() {
   };
 
   const atualizarExtra = (extraId: string, campo: string, valor: any) => {
-    updateForm({
-      extras: (form.extras || []).map(e =>
-        e.id === extraId ? { ...e, [campo]: valor } : e
-      )
-    });
+    updateForm({ extras: (form.extras || []).map(e => e.id === extraId ? { ...e, [campo]: valor } : e) });
   };
 
   // ============================================================
@@ -333,15 +357,6 @@ export default function OrcamentoDetalhe() {
       setSalvando(false);
     }
   };
-
-  // ============================================================
-  // EQUIPAMENTOS POR CATEGORIA
-  // ============================================================
-  const equipsPorCategoria = equipamentos.reduce((acc, eq) => {
-    if (!acc[eq.categoria]) acc[eq.categoria] = [];
-    acc[eq.categoria].push(eq);
-    return acc;
-  }, {} as Record<string, Equipamento[]>);
 
   const calcularTotalBloco = (bloco: BlocoServico) => {
     if (bloco.valorManual > 0) return bloco.valorManual;
@@ -376,7 +391,7 @@ export default function OrcamentoDetalhe() {
             {salvando ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />} Salvar Rascunho
           </button>
           <button onClick={() => handleSalvar('enviado')} disabled={salvando}
-            className="h-10 px-5 bg-[#ff5351] text-white rounded-xl font-black uppercase text-[9px] tracking-widest hover:brightness-110 transition-all flex items-center gap-2 disabled:opacity-50">
+            className="h-10 px-5 bg-[#ff5351] text-white rounded-xl font-black uppercase text-[9px] tracking-widest hover:brightness-110 transition-all flex items-center gap-2 disabled:opacity-50 shadow-xl shadow-[#ff5351]/20">
             <FileText className="w-4 h-4" /> Gerar PDF
           </button>
         </div>
@@ -388,6 +403,8 @@ export default function OrcamentoDetalhe() {
           <h2 className="text-xs font-black uppercase tracking-widest text-white">Dados do Cliente</h2>
         </div>
         <div className="p-6 space-y-4">
+
+          {/* Campos mínimos */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Nome do Cliente *</label>
@@ -403,9 +420,18 @@ export default function OrcamentoDetalhe() {
             </div>
             <div>
               <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">CNPJ / CPF *</label>
-              <input type="text" value={form.cnpjCpf || ''} onChange={e => updateForm({ cnpjCpf: e.target.value })}
-                placeholder="00.000.000/0000-00"
-                className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none" />
+              <div className="flex gap-2">
+                <input type="text" value={form.cnpjCpf || ''} onChange={e => updateForm({ cnpjCpf: e.target.value })}
+                  placeholder="00.000.000/0000-00 ou 000.000.000-00"
+                  className="flex-1 h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none" />
+                {isCnpj(form.cnpjCpf || '') && (
+                  <button onClick={buscarCnpj} disabled={buscandoCnpj}
+                    title="Buscar dados do CNPJ"
+                    className="h-11 w-11 shrink-0 bg-zinc-800 border border-zinc-700 rounded-xl flex items-center justify-center text-zinc-400 hover:text-[#ff5351] hover:border-[#ff5351] transition-all disabled:opacity-50">
+                    {buscandoCnpj ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                  </button>
+                )}
+              </div>
             </div>
             <div>
               <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">E-mail Principal</label>
@@ -414,78 +440,93 @@ export default function OrcamentoDetalhe() {
                 className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none" />
             </div>
             <div>
-              <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Razão Social</label>
-              <input type="text" value={form.razaoSocial || ''} onChange={e => updateForm({ razaoSocial: e.target.value })}
-                className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none" />
-            </div>
-            <div>
               <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Telefone</label>
               <input type="text" value={form.telefone || ''} onChange={e => updateForm({ telefone: e.target.value })}
                 placeholder="(00) 00000-0000"
                 className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none" />
             </div>
-            <div>
-              <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Nome Comercial</label>
-              <input type="text" value={form.nomeComercial || ''} onChange={e => updateForm({ nomeComercial: e.target.value })}
-                className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none" />
-            </div>
-            <div>
-              <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Website</label>
-              <input type="text" value={form.website || ''} onChange={e => updateForm({ website: e.target.value })}
-                className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none" />
-            </div>
-            <div className="md:col-span-2">
-              <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Responsável</label>
-              <input type="text" value={form.responsavel || ''} onChange={e => updateForm({ responsavel: e.target.value })}
-                className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none" />
-            </div>
           </div>
 
-          {/* Endereço */}
-          <div className="pt-4 border-t border-zinc-800">
-            <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-3">Endereço</p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">CEP</label>
-                <input type="text" value={form.cep || ''} onChange={e => updateForm({ cep: e.target.value })}
-                  placeholder="00000-000"
-                  className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none" />
-              </div>
-              <div>
-                <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Endereço</label>
-                <input type="text" value={form.endereco || ''} onChange={e => updateForm({ endereco: e.target.value })}
-                  className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none" />
-              </div>
-              <div>
-                <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Número</label>
-                <input type="text" value={form.numero_end || ''} onChange={e => updateForm({ numero_end: e.target.value })}
-                  className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none" />
-              </div>
-              <div>
-                <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Complemento</label>
-                <input type="text" value={form.complemento || ''} onChange={e => updateForm({ complemento: e.target.value })}
-                  className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none" />
-              </div>
-              <div>
-                <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Bairro</label>
-                <input type="text" value={form.bairro || ''} onChange={e => updateForm({ bairro: e.target.value })}
-                  className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none" />
-              </div>
-              <div className="grid grid-cols-[1fr_100px] gap-3">
+          {/* Botão expandir */}
+          <button onClick={() => setDadosExpandidos(!dadosExpandidos)}
+            className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-zinc-500 hover:text-white transition-all">
+            {dadosExpandidos ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+            {dadosExpandidos ? 'Ocultar dados completos' : '+ Dados completos'}
+          </button>
+
+          {/* Campos expandidos */}
+          {dadosExpandidos && (
+            <div className="space-y-4 pt-2 border-t border-zinc-800">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Cidade</label>
-                  <input type="text" value={form.cidade || ''} onChange={e => updateForm({ cidade: e.target.value })}
+                  <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Razão Social</label>
+                  <input type="text" value={form.razaoSocial || ''} onChange={e => updateForm({ razaoSocial: e.target.value })}
                     className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none" />
                 </div>
                 <div>
-                  <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Estado</label>
-                  <input type="text" value={form.estado || ''} onChange={e => updateForm({ estado: e.target.value })}
-                    placeholder="SP"
+                  <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Nome Comercial</label>
+                  <input type="text" value={form.nomeComercial || ''} onChange={e => updateForm({ nomeComercial: e.target.value })}
                     className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none" />
+                </div>
+                <div>
+                  <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Website</label>
+                  <input type="text" value={form.website || ''} onChange={e => updateForm({ website: e.target.value })}
+                    className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none" />
+                </div>
+                <div>
+                  <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Responsável</label>
+                  <input type="text" value={form.responsavel || ''} onChange={e => updateForm({ responsavel: e.target.value })}
+                    className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none" />
+                </div>
+              </div>
+
+              {/* Endereço */}
+              <div>
+                <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-3">Endereço</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">CEP</label>
+                    <input type="text" value={form.cep || ''} onChange={e => updateForm({ cep: e.target.value })}
+                      placeholder="00000-000"
+                      className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none" />
+                  </div>
+                  <div>
+                    <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Endereço</label>
+                    <input type="text" value={form.endereco || ''} onChange={e => updateForm({ endereco: e.target.value })}
+                      className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none" />
+                  </div>
+                  <div>
+                    <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Número</label>
+                    <input type="text" value={form.numero_end || ''} onChange={e => updateForm({ numero_end: e.target.value })}
+                      className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none" />
+                  </div>
+                  <div>
+                    <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Complemento</label>
+                    <input type="text" value={form.complemento || ''} onChange={e => updateForm({ complemento: e.target.value })}
+                      className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none" />
+                  </div>
+                  <div>
+                    <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Bairro</label>
+                    <input type="text" value={form.bairro || ''} onChange={e => updateForm({ bairro: e.target.value })}
+                      className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none" />
+                  </div>
+                  <div className="grid grid-cols-[1fr_100px] gap-3">
+                    <div>
+                      <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Cidade</label>
+                      <input type="text" value={form.cidade || ''} onChange={e => updateForm({ cidade: e.target.value })}
+                        className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none" />
+                    </div>
+                    <div>
+                      <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Estado</label>
+                      <input type="text" value={form.estado || ''} onChange={e => updateForm({ estado: e.target.value })}
+                        placeholder="SP"
+                        className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none" />
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
+          )}
 
           {/* Dados do orçamento */}
           <div className="pt-4 border-t border-zinc-800">
@@ -525,10 +566,6 @@ export default function OrcamentoDetalhe() {
               })}
                 placeholder="Nome do bloco (ex: Cobertura do Evento)"
                 className="flex-1 h-9 bg-transparent text-white text-sm font-black uppercase outline-none placeholder:text-zinc-600" />
-              <button onClick={() => setExpandidoBloco(expandidoBloco === bloco.id ? null : bloco.id)}
-                className="p-1.5 text-zinc-500 hover:text-white transition-all">
-                {expandidoBloco === bloco.id ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-              </button>
               <button onClick={() => removerBloco(bloco.id)} className="p-1.5 text-zinc-500 hover:text-red-400 transition-all">
                 <Trash2 className="w-4 h-4" />
               </button>
@@ -554,7 +591,6 @@ export default function OrcamentoDetalhe() {
                 </div>
               </div>
 
-              {/* Itens do bloco */}
               {bloco.itens.length > 0 && (
                 <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
                   <table className="w-full text-left border-collapse">
@@ -763,7 +799,6 @@ export default function OrcamentoDetalhe() {
           <h2 className="text-xs font-black uppercase tracking-widest text-white">Proposta Final</h2>
         </div>
         <div className="p-5 space-y-4">
-          {/* Resumo blocos */}
           <div className="space-y-1">
             {(form.blocos || []).map(bloco => (
               <div key={bloco.id} className="flex items-center justify-between py-2 border-b border-zinc-800">
@@ -779,7 +814,6 @@ export default function OrcamentoDetalhe() {
             ))}
           </div>
 
-          {/* Valor final */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-zinc-800">
             <div>
               <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">
@@ -788,8 +822,7 @@ export default function OrcamentoDetalhe() {
               <input type="number" value={form.valorCliente || 0}
                 onChange={e => {
                   const v = Number(e.target.value);
-                  const custoTotal = form.totalCustoReal || 0;
-                  setForm(prev => ({ ...prev, valorCliente: v, lucroReal: v - custoTotal }));
+                  setForm(prev => ({ ...prev, valorCliente: v, lucroReal: v - (prev.totalCustoReal || 0) }));
                 }}
                 className="w-full h-14 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-2xl font-black focus:border-[#ff5351] outline-none" />
               <p className="text-[10px] text-zinc-600 mt-1">Você pode ajustar o valor sugerido</p>
@@ -808,7 +841,6 @@ export default function OrcamentoDetalhe() {
             </div>
           </div>
 
-          {/* Observações */}
           <div>
             <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Observações (aparecem no PDF)</label>
             <textarea value={form.observacoes || ''} onChange={e => updateForm({ observacoes: e.target.value })}
