@@ -85,13 +85,13 @@ export async function gerarOrcamentoPdf(
      // Número do orçamento — posição baseada no Photoshop
 const numText = orcamento.numero;
 const escala = width / 2481;
-const fonteSizeNum = 22 * escala * 0.75;
 const numX = 1920.72 * escala;
-const numY = height - (177.46 * escala) - (103.03 * escala / 2);
+const numY = height - (177.46 * (height / 3509)) - 8;
+const numSize = 22 * (height / 3509) * (300 / 72);
 capaPage.drawText(numText, {
   x: numX,
   y: numY,
-  size: fonteSizeNum,
+  size: numSize,
   font: helveticaBold,
   color: rgb(1, 1, 1),
 });
