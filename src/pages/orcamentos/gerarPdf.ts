@@ -86,7 +86,7 @@ export async function gerarOrcamentoPdf(
 const numText = orcamento.numero;                           // texto do número ex: "001-2026"
 const escala = width / 2481;                               // fator de escala horizontal (pdf_width / photoshop_width)
 const numX = 1920.72 * escala;                             // posição X: coordenada do Photoshop convertida para PDF
-const numY = height - (178.46 * (height / 3509)) - 8;     // posição Y: inverte eixo (PDF começa de baixo), -8 ajuste fino
+const numY = height - (177.46 * (height / 3509)) - 3;     // posição Y: inverte eixo (PDF começa de baixo), -8 ajuste fino
 const numSize = 22 * (height / 3509) * (300 / 72);        // tamanho da fonte: 22pt Photoshop → convertido para pontos PDF (300dpi→72dpi)
 capaPage.drawText(numText, {
   x: numX,                                                 // posição horizontal
