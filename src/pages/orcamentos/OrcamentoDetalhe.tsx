@@ -5,6 +5,7 @@ import { db } from '../../lib/firebase';
 import { ArrowLeft, Plus, Loader2, Save, FileText, Trash2, X, Search, ChevronDown, ChevronUp } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { cn } from '../../lib/utils';
+import { gerarOrcamentoPdf } from './gerarPdf';
 
 interface ItemBloco {
   equipamentoId: string;
@@ -122,6 +123,7 @@ export default function OrcamentoDetalhe() {
 
   const [loading, setLoading] = useState(true);
   const [salvando, setSalvando] = useState(false);
+  const [gerandoPdf, setGerandoPdf] = useState(false);
   const [buscandoCnpj, setBuscandoCnpj] = useState(false);
   const [dadosExpandidos, setDadosExpandidos] = useState(false);
   const [equipamentos, setEquipamentos] = useState<Equipamento[]>([]);
@@ -346,6 +348,43 @@ export default function OrcamentoDetalhe() {
     }
   };
 
+  const handleGerarPdf = async () => {
+    if (!form.nomeCliente?.trim()) { toast.error('Preencha o nome do cliente'); return; }
+    setGerandoPdf(true);
+    try {
+      const configSnap = await getDoc(doc(db, 'configuracoes', 'orcamento'));
+      const config = configSnap.exists() ? configSnap.data() : {};
+      await gerarOrcamentoPdf({
+        numero: form.numero || '000-2026',
+        nomeCliente: form.nomeCliente || '',
+        nomeEvento: form.nomeEvento || '',
+        cnpjCpf: form.cnpjCpf || '',
+        emailPrincipal: form.emailPrincipal || '',
+        telefone: form.telefone || '',
+        responsavel: form.responsavel || '',
+        localEvento: form.localEvento || '',
+        diarias: form.diarias || 1,
+        condicaoPagamento: form.condicaoPagamento || '',
+        blocos: (form.blocos || []) as any,
+        extras: (form.extras || []) as any,
+        valorCliente: form.valorCliente || 0,
+        observacoes: form.observacoes || '',
+      }, {
+        capaPdfUrl: config.capaPdfUrl || '',
+        timbradoPdfUrl: config.timbradoPdfUrl || '',
+        nomeEmpresa: config.nomeEmpresa || 'BORNOV',
+        telefone: config.telefone || '',
+        email: config.email || '',
+        site: config.site || '',
+      });
+      toast.success('PDF gerado com sucesso!');
+    } catch (error: any) {
+      toast.error(`Erro ao gerar PDF: ${error.message}`);
+    } finally {
+      setGerandoPdf(false);
+    }
+  };
+
   const calcularTotalBloco = (bloco: BlocoServico) => {
     if (bloco.valorManual > 0) return bloco.valorManual;
     const diarias = form.diarias || 1;
@@ -378,9 +417,10 @@ export default function OrcamentoDetalhe() {
             className="h-10 px-4 bg-zinc-800 border border-zinc-700 text-zinc-400 rounded-xl font-black uppercase text-[9px] tracking-widest hover:text-white transition-all flex items-center gap-2 disabled:opacity-50">
             {salvando ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />} Salvar Rascunho
           </button>
-          <button onClick={() => handleSalvar('enviado')} disabled={salvando}
+          <button onClick={handleGerarPdf} disabled={gerandoPdf}
             className="h-10 px-5 bg-[#ff5351] text-white rounded-xl font-black uppercase text-[9px] tracking-widest hover:brightness-110 transition-all flex items-center gap-2 disabled:opacity-50 shadow-xl shadow-[#ff5351]/20">
-            <FileText className="w-4 h-4" /> Gerar PDF
+            {gerandoPdf ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
+            {gerandoPdf ? 'Gerando...' : 'Gerar PDF'}
           </button>
         </div>
       </header>
@@ -749,7 +789,6 @@ export default function OrcamentoDetalhe() {
             <p className="text-zinc-600 text-sm text-center py-4">Nenhum extra adicionado</p>
           ) : (
             <div className="space-y-3">
-              {/* Header */}
               <div className="grid grid-cols-[1fr_140px_80px_100px_auto] gap-3 items-center px-1">
                 <span className="text-[9px] font-black uppercase tracking-widest text-zinc-600">Nome</span>
                 <span className="text-[9px] font-black uppercase tracking-widest text-zinc-600">Valor / dia</span>
@@ -859,9 +898,10 @@ export default function OrcamentoDetalhe() {
           className="h-10 px-6 bg-zinc-800 border border-zinc-700 text-zinc-400 rounded-xl font-black uppercase text-[9px] tracking-widest hover:text-white transition-all flex items-center gap-2 disabled:opacity-50">
           {salvando ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />} Salvar Rascunho
         </button>
-        <button onClick={() => handleSalvar('enviado')} disabled={salvando}
+        <button onClick={handleGerarPdf} disabled={gerandoPdf}
           className="h-10 px-6 bg-[#ff5351] text-white rounded-xl font-black uppercase text-[9px] tracking-widest hover:brightness-110 transition-all flex items-center gap-2 disabled:opacity-50 shadow-xl shadow-[#ff5351]/20">
-          <FileText className="w-4 h-4" /> Gerar PDF
+          {gerandoPdf ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
+          {gerandoPdf ? 'Gerando...' : 'Gerar PDF'}
         </button>
       </div>
     </div>
