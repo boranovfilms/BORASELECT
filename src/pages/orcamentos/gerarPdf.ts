@@ -81,16 +81,19 @@ export async function gerarOrcamentoPdf(
       const [capaPage] = await finalPdf.copyPages(capaDoc, [0]);
       const { width, height } = capaPage.getSize();
 
-      // Número do orçamento — canto superior direito no fundo vermelho
-      const numText = orcamento.numero;
-      const numWidth = helveticaBold.widthOfTextAtSize(numText, 13);
-      capaPage.drawText(numText, {
-        x: width - numWidth - 18,
-        y: height - 38,
-        size: 13,
-        font: helveticaBold,
-        color: rgb(1, 1, 1),
-      });
+     // Número do orçamento — posição baseada no Photoshop
+const numText = orcamento.numero;
+const escala = width / 2481;
+const numX = 1794 * escala;
+const numY = height - (144 * escala) - (154 * escala / 2);
+const numSize = Math.round(28 * escala);
+capaPage.drawText(numText, {
+  x: numX,
+  y: numY,
+  size: numSize,
+  font: helveticaBold,
+  color: rgb(1, 1, 1),
+});
 
       // Nome do cliente — acima da foto, centralizado, cinza
       const nomeCliente = orcamento.nomeCliente.toUpperCase();
