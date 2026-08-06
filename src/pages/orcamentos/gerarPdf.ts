@@ -51,16 +51,18 @@ function fmt(v: number): string {
   return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
+function hexToRgb(hex: string) {
+  const r = parseInt(hex.slice(1, 3), 16) / 255;
+  const g = parseInt(hex.slice(3, 5), 16) / 255;
+  const b = parseInt(hex.slice(5, 7), 16) / 255;
+  return rgb(r, g, b);
+}
+
 async function fetchPdfBytes(url: string): Promise<Uint8Array> {
   const response = await fetch(url);
   if (!response.ok) throw new Error(`Erro ao baixar PDF: ${url}`);
   const buffer = await response.arrayBuffer();
   return new Uint8Array(buffer);
-}
-
-function centralizarTexto(texto: string, fontSize: number, pageWidth: number): number {
-  const charWidth = fontSize * 0.5;
-  return (pageWidth - texto.length * charWidth) / 2;
 }
 
 export async function gerarOrcamentoPdf(
@@ -69,8 +71,14 @@ export async function gerarOrcamentoPdf(
 ): Promise<void> {
   try {
     const finalPdf = await PDFDocument.create();
-    const helvetica = await finalPdf.embedFont(StandardFonts.Helvetica);
-    const helveticaBold = await finalPdf.embedFont(StandardFonts.HelveticaBold);
+    const fontBold = await finalPdf.embedFont(StandardFonts.HelveticaBold);       // trocar por TT Chocolates Bold
+    const fontMedium = await finalPdf.embedFont(StandardFonts.Helvetica);         // trocar por TT Chocolates Medium
+    const fontRegular = await finalPdf.embedFont(StandardFonts.Helvetica);        // trocar por TT Chocolates Regular
+
+    const corVermelha = hexToRgb('#dd4d4c');                                       // cor padrão vermelha Bornov
+    const corPreta = hexToRgb('#535353');                                           // cor texto escuro
+    const corCinza = hexToRgb('#888888');                                           // cor texto secundário
+    const corBranca = rgb(1, 1, 1);                                                // cor branca
 
     // ============================================================
     // PÁGINA 1 — CAPA
@@ -80,45 +88,56 @@ export async function gerarOrcamentoPdf(
       const capaDoc = await PDFDocument.load(capaBytes);
       const [capaPage] = await finalPdf.copyPages(capaDoc, [0]);
       const { width, height } = capaPage.getSize();
-      alert(`Capa: ${width} x ${height}`);
 
-     // Número do orçamento — posição baseada no Photoshop
-const numText = orcamento.numero;                           // texto do número ex: "001-2026"
-const escala = width / 2481;                               // fator de escala horizontal (pdf_width / photoshop_width)
-const numX = 1920.72 * escala;                             // posição X: coordenada do Photoshop convertida para PDF
-const numY = height - (177.46 * (height / 3509)) - 10;     // posição Y: inverte eixo (PDF começa de baixo), -8 ajuste fino
-const numSize = 22 * (height / 3509) * (300 / 72);        // tamanho da fonte: 22pt Photoshop → convertido para pontos PDF (300dpi→72dpi)
-capaPage.drawText(numText, {
-  x: numX,                                                 // posição horizontal
-  y: numY,                                                 // posição vertical (de baixo para cima no PDF)
-  size: numSize,                                           // tamanho da fonte em pontos
-  font: helveticaBold,                                     // fonte usada (trocar para TT Chocolates quando embedar)
-  color: rgb(1, 1, 1),                                     // cor branca (1,1,1 = RGB máximo)
-});
-
-      // Nome do cliente — acima da foto, centralizado, cinza
-      const nomeCliente = orcamento.nomeCliente.toUpperCase();
-      const nomeWidth = helvetica.widthOfTextAtSize(nomeCliente, 13);
-      capaPage.drawText(nomeCliente, {
-        x: (width - nomeWidth) / 2,
-        y: height * 0.455,
-        size: 13,
-        font: helvetica,
-        color: rgb(0.3, 0.3, 0.3),
+      // ── NÚMERO DO ORÇAMENTO ──────────────────────────────────
+      const numText = orcamento.numero;
+      const escala = width / 2481;                                                 // fator escala horizontal
+      const numX = 1920.72 * escala;                                              // X do Photoshop convertido
+      const numY = height - (177.46 * (height / 3509)) - 10;                     // Y invertido + ajuste fino
+      const numSize = 22 * (height / 3509) * (300 / 72);                         // fonte 22pt Photoshop → PDF
+      capaPage.drawText(numText, {
+        x: numX,
+        y: numY,
+        size: numSize,
+        font: fontBold,
+        color: corBranca,
       });
 
-      // Nome do evento — abaixo do cliente, vermelho
-      if (orcamento.nomeEvento) {
-        const nomeEvento = orcamento.nomeEvento.toUpperCase();
-        const eventoWidth = helveticaBold.widthOfTextAtSize(nomeEvento, 13);
-        capaPage.drawText(nomeEvento, {
-          x: (width - eventoWidth) / 2,
-          y: height * 0.432,
-          size: 13,
-          font: helveticaBold,
-          color: rgb(1, 0.33, 0.32),
-        });
-      }
+      // ── NOME DO CLIENTE ──────────────────────────────────────
+      // Usa primeiro nome ou nome comercial (máx 2 palavras)
+      const nomeCompleto = orcamento.nomeCliente.toUpperCase();
+      const palavras = nomeCompleto.split(' ');
+      const nomeExibir = palavras.slice(0, 2).join(' ');                          // máx 2 palavras
+      const clienteSize = 22 * (height / 3509) * (300 / 72);                     // fonte 22pt Photoshop → PDF
+      const clienteTextWidth = fontMedium.widthOfTextAtSize(nomeExibir, clienteSize);
+      const caixaClienteW = 453.93 * escala;                                      // largura da caixa no Photoshop
+      const clienteX = (1012.44 * escala) + (caixaClienteW / 2) - (clienteTextWidth / 2); // centralizado na caixa
+      const clienteY = height - (1444.46 * (height / 3509)) - 5;                 // Y invertido
+      capaPage.drawText(nomeExibir, {
+        x: clienteX,
+        y: clienteY,
+        size: clienteSize,
+        font: fontMedium,
+        color: corPreta,
+      });
+
+      // ── DATA DO ORÇAMENTO ────────────────────────────────────
+      const hoje = new Date();
+      const dataText = hoje.toLocaleDateString('pt-BR', {                          // formato dd/mm/aa
+        day: '2-digit',
+        month: '2-digit',
+        year: '2-digit',
+      });
+      const dataSize = 15 * (height / 3509) * (300 / 72);                        // fonte 15pt Photoshop → PDF
+      const dataX = 1873.53 * escala;                                             // X do Photoshop convertido
+      const dataY = height - (3282.81 * (height / 3509)) - 5;                    // Y invertido
+      capaPage.drawText(dataText, {
+        x: dataX,
+        y: dataY,
+        size: dataSize,
+        font: fontBold,
+        color: corVermelha,
+      });
 
       finalPdf.addPage(capaPage);
     }
@@ -136,9 +155,8 @@ capaPage.drawText(numText, {
     const marginLeft = 75;
     const marginRight = 75;
     const contentWidth = pageWidth - marginLeft - marginRight;
-    const startY = pageHeight - 75; // começa bem no topo da área útil
-    const bottomLimit = 110; // espaço para o rodapé do timbrado
-    let y = startY;
+    const bottomLimit = 110;
+    let y = 0;
 
     const adicionarPagina = async () => {
       if (timbradoBytes) {
@@ -153,7 +171,7 @@ capaPage.drawText(numText, {
         pageWidth = 595;
         pageHeight = 842;
       }
-      y = pageHeight - 75;
+      y = pageHeight - 75;                                                         // começa 75pt abaixo do topo
     };
 
     const checkNovaPage = async (espacoNecessario: number) => {
@@ -164,14 +182,10 @@ capaPage.drawText(numText, {
 
     await adicionarPagina();
 
-    const vermelho = rgb(1, 0.33, 0.32);
-    const preto = rgb(0.12, 0.12, 0.12);
-    const cinza = rgb(0.45, 0.45, 0.45);
-    const cinzaClaro = rgb(0.85, 0.85, 0.85);
     const lineHeight = 18;
     const sectionGap = 16;
 
-    const drawLinha = (cor = cinzaClaro, espessura = 0.5) => {
+    const drawLinha = (cor = hexToRgb('#dddddd'), espessura = 0.5) => {
       page.drawLine({
         start: { x: marginLeft, y },
         end: { x: marginLeft + contentWidth, y },
@@ -187,37 +201,33 @@ capaPage.drawText(numText, {
         y: y - 6,
         width: contentWidth,
         height: 22,
-        color: vermelho,
+        color: corVermelha,                                                        // #dd4d4c
       });
       page.drawText(texto.toUpperCase(), {
         x: marginLeft + 10,
         y: y,
         size: 10,
-        font: helveticaBold,
-        color: rgb(1, 1, 1),
+        font: fontBold,
+        color: corBranca,
       });
       y -= 30;
     };
 
-    // ============================================================
-    // CABEÇALHO DA PÁGINA DE CONTEÚDO
-    // ============================================================
+    // ── CABEÇALHO DA PÁGINA DE CONTEÚDO ─────────────────────────
     page.drawText('PROPOSTA AUDIOVISUAL', {
       x: marginLeft,
       y,
       size: 16,
-      font: helveticaBold,
-      color: preto,
+      font: fontBold,
+      color: corPreta,
     });
-
-    // Número no lado direito
-    const numW = helveticaBold.widthOfTextAtSize(orcamento.numero, 12);
+    const numW = fontBold.widthOfTextAtSize(orcamento.numero, 12);
     page.drawText(orcamento.numero, {
       x: marginLeft + contentWidth - numW,
       y,
       size: 12,
-      font: helveticaBold,
-      color: vermelho,
+      font: fontBold,
+      color: corVermelha,
     });
     y -= 18;
 
@@ -226,8 +236,8 @@ capaPage.drawText(numText, {
         x: marginLeft,
         y,
         size: 10,
-        font: helvetica,
-        color: cinza,
+        font: fontMedium,
+        color: corCinza,
       });
       y -= 14;
     }
@@ -237,8 +247,8 @@ capaPage.drawText(numText, {
         x: marginLeft,
         y,
         size: 9,
-        font: helvetica,
-        color: cinza,
+        font: fontRegular,
+        color: corCinza,
       });
       y -= 14;
     }
@@ -248,13 +258,11 @@ capaPage.drawText(numText, {
       start: { x: marginLeft, y },
       end: { x: marginLeft + contentWidth, y },
       thickness: 1,
-      color: vermelho,
+      color: corVermelha,
     });
     y -= sectionGap;
 
-    // ============================================================
-    // DADOS DO CLIENTE
-    // ============================================================
+    // ── DADOS DO CLIENTE ─────────────────────────────────────────
     const dadosCliente = [
       { label: 'Cliente', valor: orcamento.nomeCliente },
       { label: 'CNPJ/CPF', valor: orcamento.cnpjCpf },
@@ -266,34 +274,30 @@ capaPage.drawText(numText, {
     if (dadosCliente.length > 0) {
       await checkNovaPage(40 + dadosCliente.length * lineHeight);
       drawSecaoTitulo('Dados do Cliente');
-
       for (const dado of dadosCliente) {
         await checkNovaPage(lineHeight + 4);
         page.drawText(`${dado.label}:`, {
           x: marginLeft + 8,
           y,
           size: 9,
-          font: helveticaBold,
-          color: cinza,
+          font: fontBold,
+          color: corCinza,
         });
         page.drawText(dado.valor, {
           x: marginLeft + 90,
           y,
           size: 9,
-          font: helvetica,
-          color: preto,
+          font: fontRegular,
+          color: corPreta,
         });
         y -= lineHeight;
       }
       y -= sectionGap;
     }
 
-    // ============================================================
-    // BLOCOS DE SERVIÇO
-    // ============================================================
+    // ── BLOCOS DE SERVIÇO ────────────────────────────────────────
     for (const bloco of orcamento.blocos) {
       if (!bloco.nome) continue;
-
       const itensPdf = bloco.itens.filter(i => i.exibirNoPdf !== false);
       await checkNovaPage(50 + itensPdf.length * (lineHeight + 8));
       drawSecaoTitulo(bloco.nome);
@@ -305,57 +309,52 @@ capaPage.drawText(numText, {
           x: marginLeft + 8,
           y,
           size: 9,
-          font: helvetica,
-          color: preto,
+          font: fontRegular,
+          color: corPreta,
         });
         y -= lineHeight;
         drawLinha();
       }
 
-      // Valor do bloco
       if (bloco.valorManual > 0) {
         await checkNovaPage(30);
         y -= 4;
         const valorText = fmt(bloco.valorManual);
-        const valorW = helveticaBold.widthOfTextAtSize(valorText, 13);
+        const valorW = fontBold.widthOfTextAtSize(valorText, 13);
         page.drawText(valorText, {
           x: marginLeft + contentWidth - valorW,
           y,
           size: 13,
-          font: helveticaBold,
-          color: vermelho,
+          font: fontBold,
+          color: corVermelha,
         });
         y -= 20;
       }
-
       y -= sectionGap;
     }
 
-    // ============================================================
-    // EXTRAS
-    // ============================================================
+    // ── EXTRAS ───────────────────────────────────────────────────
     const extrasValidos = orcamento.extras.filter(e => e.nome && (e.valorDia * e.diarias) > 0);
     if (extrasValidos.length > 0) {
       await checkNovaPage(50 + extrasValidos.length * lineHeight);
       drawSecaoTitulo('Extras');
-
       for (const extra of extrasValidos) {
         await checkNovaPage(lineHeight + 8);
         const valorExtra = fmt(extra.valorDia * extra.diarias);
-        const valorW = helveticaBold.widthOfTextAtSize(valorExtra, 9);
+        const vW = fontBold.widthOfTextAtSize(valorExtra, 9);
         page.drawText(extra.nome, {
           x: marginLeft + 8,
           y,
           size: 9,
-          font: helvetica,
-          color: preto,
+          font: fontRegular,
+          color: corPreta,
         });
         page.drawText(valorExtra, {
-          x: marginLeft + contentWidth - valorW,
+          x: marginLeft + contentWidth - vW,
           y,
           size: 9,
-          font: helveticaBold,
-          color: preto,
+          font: fontBold,
+          color: corPreta,
         });
         y -= lineHeight;
         drawLinha();
@@ -363,55 +362,50 @@ capaPage.drawText(numText, {
       y -= sectionGap;
     }
 
-    // ============================================================
-    // DESPESAS DE DESLOCAMENTO
-    // ============================================================
+    // ── DESPESAS DE DESLOCAMENTO ─────────────────────────────────
     await checkNovaPage(30);
     page.drawText('Despesas de deslocamento', {
       x: marginLeft + 8,
       y,
       size: 9,
-      font: helvetica,
-      color: cinza,
+      font: fontRegular,
+      color: corCinza,
     });
-    const inclW = helvetica.widthOfTextAtSize('incluso', 9);
+    const inclW = fontRegular.widthOfTextAtSize('incluso', 9);
     page.drawText('incluso', {
       x: marginLeft + contentWidth - inclW,
       y,
       size: 9,
-      font: helvetica,
-      color: cinza,
+      font: fontRegular,
+      color: corCinza,
     });
     y -= lineHeight;
     drawLinha();
     y -= sectionGap;
 
-    // ============================================================
-    // PROPOSTA FINAL
-    // ============================================================
+    // ── PROPOSTA FINAL ───────────────────────────────────────────
     const totalBlocos = orcamento.blocos.filter(b => b.nome);
     await checkNovaPage(60 + (totalBlocos.length + extrasValidos.length) * lineHeight + 50);
     drawSecaoTitulo('Proposta Final');
 
     for (const bloco of totalBlocos) {
       await checkNovaPage(lineHeight + 8);
-      const nomeBloco = bloco.nome.toUpperCase();
       const valorBloco = bloco.valorManual > 0 ? fmt(bloco.valorManual) : '';
-      page.drawText(nomeBloco, {
+      page.drawText(bloco.nome.toUpperCase(), {
         x: marginLeft + 8,
         y,
         size: 9,
-        font: helveticaBold,
-        color: preto,
+        font: fontBold,
+        color: corPreta,
       });
       if (valorBloco) {
-        const vW = helveticaBold.widthOfTextAtSize(valorBloco, 9);
+        const vW = fontBold.widthOfTextAtSize(valorBloco, 9);
         page.drawText(valorBloco, {
           x: marginLeft + contentWidth - vW,
           y,
           size: 9,
-          font: helveticaBold,
-          color: preto,
+          font: fontBold,
+          color: corPreta,
         });
       }
       y -= lineHeight;
@@ -421,26 +415,26 @@ capaPage.drawText(numText, {
     for (const extra of extrasValidos) {
       await checkNovaPage(lineHeight + 8);
       const valorExtra = fmt(extra.valorDia * extra.diarias);
-      const vW = helvetica.widthOfTextAtSize(valorExtra, 9);
+      const vW = fontRegular.widthOfTextAtSize(valorExtra, 9);
       page.drawText(extra.nome, {
         x: marginLeft + 8,
         y,
         size: 9,
-        font: helvetica,
-        color: cinza,
+        font: fontRegular,
+        color: corCinza,
       });
       page.drawText(valorExtra, {
         x: marginLeft + contentWidth - vW,
         y,
         size: 9,
-        font: helvetica,
-        color: cinza,
+        font: fontRegular,
+        color: corCinza,
       });
       y -= lineHeight;
       drawLinha();
     }
 
-    // TOTAL
+    // ── TOTAL ────────────────────────────────────────────────────
     await checkNovaPage(40);
     y -= 8;
     page.drawRectangle({
@@ -448,50 +442,46 @@ capaPage.drawText(numText, {
       y: y - 6,
       width: contentWidth,
       height: 26,
-      color: rgb(0.1, 0.1, 0.1),
+      color: hexToRgb('#222222'),
     });
     page.drawText('TOTAL', {
       x: marginLeft + 10,
       y: y,
       size: 11,
-      font: helveticaBold,
-      color: rgb(1, 1, 1),
+      font: fontBold,
+      color: corBranca,
     });
     const totalText = fmt(orcamento.valorCliente);
-    const totalW = helveticaBold.widthOfTextAtSize(totalText, 13);
+    const totalW = fontBold.widthOfTextAtSize(totalText, 13);
     page.drawText(totalText, {
       x: marginLeft + contentWidth - totalW,
-      y,
+      y: y,
       size: 13,
-      font: helveticaBold,
-      color: vermelho,
+      font: fontBold,
+      color: corVermelha,
     });
     y -= 40;
 
-    // ============================================================
-    // PAGAMENTO
-    // ============================================================
+    // ── PAGAMENTO ────────────────────────────────────────────────
     await checkNovaPage(40);
     page.drawText('PAGAMENTO', {
       x: marginLeft,
       y,
       size: 10,
-      font: helveticaBold,
-      color: preto,
+      font: fontBold,
+      color: corPreta,
     });
     y -= 16;
     page.drawText(orcamento.condicaoPagamento, {
       x: marginLeft,
       y,
       size: 9,
-      font: helvetica,
-      color: cinza,
+      font: fontRegular,
+      color: corCinza,
     });
     y -= lineHeight;
 
-    // ============================================================
-    // OBSERVAÇÕES
-    // ============================================================
+    // ── OBSERVAÇÕES ──────────────────────────────────────────────
     if (orcamento.observacoes) {
       await checkNovaPage(40);
       y -= sectionGap;
@@ -499,17 +489,17 @@ capaPage.drawText(numText, {
         x: marginLeft,
         y,
         size: 9,
-        font: helveticaBold,
-        color: preto,
+        font: fontBold,
+        color: corPreta,
       });
       y -= 14;
-      const palavras = orcamento.observacoes.split(' ');
+      const palavrasObs = orcamento.observacoes.split(' ');
       let linha = '';
-      for (const palavra of palavras) {
+      for (const palavra of palavrasObs) {
         const teste = linha ? `${linha} ${palavra}` : palavra;
-        if (helvetica.widthOfTextAtSize(teste, 8) > contentWidth) {
+        if (fontRegular.widthOfTextAtSize(teste, 8) > contentWidth) {
           await checkNovaPage(12);
-          page.drawText(linha, { x: marginLeft, y, size: 8, font: helvetica, color: cinza });
+          page.drawText(linha, { x: marginLeft, y, size: 8, font: fontRegular, color: corCinza });
           y -= 12;
           linha = palavra;
         } else {
@@ -518,14 +508,12 @@ capaPage.drawText(numText, {
       }
       if (linha) {
         await checkNovaPage(12);
-        page.drawText(linha, { x: marginLeft, y, size: 8, font: helvetica, color: cinza });
+        page.drawText(linha, { x: marginLeft, y, size: 8, font: fontRegular, color: corCinza });
         y -= 12;
       }
     }
 
-    // ============================================================
-    // DOWNLOAD
-    // ============================================================
+    // ── DOWNLOAD ─────────────────────────────────────────────────
     const pdfBytes = await finalPdf.save();
     const blob = new Blob([pdfBytes], { type: 'application/pdf' });
     const url = URL.createObjectURL(blob);
