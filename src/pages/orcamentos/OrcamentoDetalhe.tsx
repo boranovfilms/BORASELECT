@@ -6,9 +6,6 @@ import { ArrowLeft, Plus, Loader2, Save, FileText, Trash2, X, Search, ChevronDow
 import { toast } from 'react-hot-toast';
 import { cn } from '../../lib/utils';
 
-// ============================================================
-// TIPOS
-// ============================================================
 interface ItemBloco {
   equipamentoId: string;
   nome: string;
@@ -30,6 +27,8 @@ interface BlocoServico {
 interface Extra {
   id: string;
   nome: string;
+  valorDia: number;
+  diarias: number;
   valor: number;
 }
 
@@ -116,9 +115,6 @@ function isCnpj(v: string) {
   return v.replace(/\D/g, '').length === 14;
 }
 
-// ============================================================
-// COMPONENTE PRINCIPAL
-// ============================================================
 export default function OrcamentoDetalhe() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -146,9 +142,6 @@ export default function OrcamentoDetalhe() {
     status: 'rascunho', observacoes: '',
   });
 
-  // ============================================================
-  // CARREGAR DADOS
-  // ============================================================
   useEffect(() => {
     const loadData = async () => {
       try {
@@ -181,9 +174,6 @@ export default function OrcamentoDetalhe() {
     loadData();
   }, [id]);
 
-  // ============================================================
-  // BUSCA CNPJ — BrasilAPI
-  // ============================================================
   const buscarCnpj = async () => {
     const cnpjLimpo = (form.cnpjCpf || '').replace(/\D/g, '');
     if (cnpjLimpo.length !== 14) { toast.error('CNPJ inválido'); return; }
@@ -195,7 +185,7 @@ export default function OrcamentoDetalhe() {
       updateForm({
         razaoSocial: data.razao_social || '',
         nomeComercial: data.nome_fantasia || '',
-        telefone: data.ddd_telefone_1 ? `(${data.ddd_telefone_1.slice(0,2)}) ${data.ddd_telefone_1.slice(2)}` : '',
+        telefone: data.ddd_telefone_1 ? `(${data.ddd_telefone_1.slice(0, 2)}) ${data.ddd_telefone_1.slice(2)}` : '',
         cep: data.cep?.replace(/\D/g, '') || '',
         endereco: data.logradouro || '',
         numero_end: data.numero || '',
@@ -213,9 +203,6 @@ export default function OrcamentoDetalhe() {
     }
   };
 
-  // ============================================================
-  // CALCULADORA — margem sobre equip + locação + freelance + despesas (sem nota)
-  // ============================================================
   const calcular = (f: Partial<Orcamento>) => {
     const diarias = f.diarias || 1;
     let custoEquipe = 0, custoLocacao = 0, valorProprio = 0;
@@ -239,17 +226,12 @@ export default function OrcamentoDetalhe() {
     });
 
     const totalDesp = (f.despAlimentacao || 0) + (f.despTransporte || 0) + (f.despHospedagem || 0) + (f.despPedagio || 0);
-    const totalExtras = (f.extras || []).reduce((acc, e) => acc + e.valor, 0);
-
-    // Nota fiscal sobre custo base (equipe + locação + despesas)
+    const totalExtras = (f.extras || []).reduce((acc, e) => acc + (e.valorDia || 0) * (e.diarias || 1), 0);
     const custoBase = custoEquipe + custoLocacao + totalDesp;
     const valorNota = custoBase * ((f.pctNota || 0) / 100);
     const custoTotal = custoBase + valorNota;
-
-    // Margem sobre equip próprio + locação + equipe + despesas (SEM nota)
     const baseMargemCalculo = valorProprio + custoEquipe + custoLocacao + totalDesp;
     const valorMargem = baseMargemCalculo * ((f.pctMargem || 0) / 100);
-
     const sugerido = custoTotal + valorProprio + valorMargem + totalExtras;
 
     return {
@@ -274,9 +256,6 @@ export default function OrcamentoDetalhe() {
     });
   };
 
-  // ============================================================
-  // BLOCOS
-  // ============================================================
   const adicionarBloco = () => {
     const novoBloco: BlocoServico = { id: Date.now().toString(), nome: '', templateId: '', valorManual: 0, itens: [] };
     updateForm({ blocos: [...(form.blocos || []), novoBloco] });
@@ -319,11 +298,16 @@ export default function OrcamentoDetalhe() {
     });
   };
 
-  // ============================================================
-  // EXTRAS
-  // ============================================================
   const adicionarExtra = () => {
-    updateForm({ extras: [...(form.extras || []), { id: Date.now().toString(), nome: '', valor: 0 }] });
+    updateForm({
+      extras: [...(form.extras || []), {
+        id: Date.now().toString(),
+        nome: '',
+        valorDia: 0,
+        diarias: 1,
+        valor: 0,
+      }]
+    });
   };
 
   const removerExtra = (extraId: string) => {
@@ -331,12 +315,16 @@ export default function OrcamentoDetalhe() {
   };
 
   const atualizarExtra = (extraId: string, campo: string, valor: any) => {
-    updateForm({ extras: (form.extras || []).map(e => e.id === extraId ? { ...e, [campo]: valor } : e) });
+    updateForm({
+      extras: (form.extras || []).map(e => {
+        if (e.id !== extraId) return e;
+        const atualizado = { ...e, [campo]: valor };
+        atualizado.valor = (atualizado.valorDia || 0) * (atualizado.diarias || 1);
+        return atualizado;
+      })
+    });
   };
 
-  // ============================================================
-  // SALVAR
-  // ============================================================
   const handleSalvar = async (novoStatus?: string) => {
     if (!form.nomeCliente?.trim()) { toast.error('Nome do cliente é obrigatório'); return; }
     if (!form.cnpjCpf?.trim()) { toast.error('CNPJ/CPF é obrigatório'); return; }
@@ -403,8 +391,6 @@ export default function OrcamentoDetalhe() {
           <h2 className="text-xs font-black uppercase tracking-widest text-white">Dados do Cliente</h2>
         </div>
         <div className="p-6 space-y-4">
-
-          {/* Campos mínimos */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Nome do Cliente *</label>
@@ -447,14 +433,12 @@ export default function OrcamentoDetalhe() {
             </div>
           </div>
 
-          {/* Botão expandir */}
           <button onClick={() => setDadosExpandidos(!dadosExpandidos)}
             className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-zinc-500 hover:text-white transition-all">
             {dadosExpandidos ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
             {dadosExpandidos ? 'Ocultar dados completos' : '+ Dados completos'}
           </button>
 
-          {/* Campos expandidos */}
           {dadosExpandidos && (
             <div className="space-y-4 pt-2 border-t border-zinc-800">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -479,8 +463,6 @@ export default function OrcamentoDetalhe() {
                     className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none" />
                 </div>
               </div>
-
-              {/* Endereço */}
               <div>
                 <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-3">Endereço</p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -528,7 +510,6 @@ export default function OrcamentoDetalhe() {
             </div>
           )}
 
-          {/* Dados do orçamento */}
           <div className="pt-4 border-t border-zinc-800">
             <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-3">Dados do Orçamento</p>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -570,7 +551,6 @@ export default function OrcamentoDetalhe() {
                 <Trash2 className="w-4 h-4" />
               </button>
             </div>
-
             <div className="p-5 space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
@@ -611,9 +591,7 @@ export default function OrcamentoDetalhe() {
                             {fmt(item.valorDia * item.quantidade * (form.diarias || 1))}
                           </td>
                           <td className="px-4 py-2.5 text-center">
-                            <button
-                              onClick={() => toggleTipoItem(bloco.id, idx)}
-                              disabled={item.tipo === 'equipe'}
+                            <button onClick={() => toggleTipoItem(bloco.id, idx)} disabled={item.tipo === 'equipe'}
                               className={cn(
                                 'px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border transition-all',
                                 item.tipo === 'proprio' && 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20 cursor-pointer',
@@ -724,7 +702,6 @@ export default function OrcamentoDetalhe() {
                 <span className="text-zinc-500 text-sm">%</span>
               </div>
             </div>
-
             <div className="pt-3 border-t border-zinc-800 space-y-2">
               {[
                 { label: '👥 Equipe/freelance', value: form.totalCustoEquipe || 0, color: 'text-amber-400' },
@@ -771,23 +748,45 @@ export default function OrcamentoDetalhe() {
           {(form.extras || []).length === 0 ? (
             <p className="text-zinc-600 text-sm text-center py-4">Nenhum extra adicionado</p>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-3">
+              {/* Header */}
+              <div className="grid grid-cols-[1fr_140px_80px_100px_auto] gap-3 items-center px-1">
+                <span className="text-[9px] font-black uppercase tracking-widest text-zinc-600">Nome</span>
+                <span className="text-[9px] font-black uppercase tracking-widest text-zinc-600">Valor / dia</span>
+                <span className="text-[9px] font-black uppercase tracking-widest text-zinc-600 text-center">Diárias</span>
+                <span className="text-[9px] font-black uppercase tracking-widest text-zinc-600 text-right">Total</span>
+                <span></span>
+              </div>
               {(form.extras || []).map(extra => (
-                <div key={extra.id} className="grid grid-cols-[1fr_160px_auto] gap-3 items-center">
+                <div key={extra.id} className="grid grid-cols-[1fr_140px_80px_100px_auto] gap-3 items-center">
                   <input type="text" value={extra.nome} onChange={e => atualizarExtra(extra.id, 'nome', e.target.value)}
                     placeholder="Nome do extra"
                     className="h-10 bg-zinc-900 border border-zinc-800 rounded-xl px-3 text-white text-sm focus:border-[#ff5351] outline-none" />
                   <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm">R$</span>
-                    <input type="number" value={extra.valor || ''} onChange={e => atualizarExtra(extra.id, 'valor', Number(e.target.value))}
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-xs">R$</span>
+                    <input type="number" value={extra.valorDia || ''} onChange={e => atualizarExtra(extra.id, 'valorDia', Number(e.target.value))}
                       placeholder="0,00"
                       className="w-full h-10 bg-zinc-900 border border-zinc-800 rounded-xl pl-8 pr-3 text-white text-sm focus:border-[#ff5351] outline-none" />
+                  </div>
+                  <input type="number" value={extra.diarias || 1} min={1}
+                    onChange={e => atualizarExtra(extra.id, 'diarias', Number(e.target.value))}
+                    className="h-10 bg-zinc-900 border border-zinc-800 rounded-xl px-3 text-white text-sm focus:border-[#ff5351] outline-none text-center" />
+                  <div className="h-10 bg-zinc-900/50 border border-zinc-800 rounded-xl px-3 flex items-center justify-end">
+                    <span className="text-emerald-400 text-sm font-black">
+                      {fmt((extra.valorDia || 0) * (extra.diarias || 1))}
+                    </span>
                   </div>
                   <button onClick={() => removerExtra(extra.id)} className="p-2 text-zinc-500 hover:text-red-400 transition-all">
                     <X className="w-4 h-4" />
                   </button>
                 </div>
               ))}
+              <div className="flex items-center justify-between pt-2 border-t border-zinc-800">
+                <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Total extras</span>
+                <span className="text-sm font-black text-white">
+                  {fmt((form.extras || []).reduce((acc, e) => acc + (e.valorDia || 0) * (e.diarias || 1), 0))}
+                </span>
+              </div>
             </div>
           )}
         </div>
@@ -809,7 +808,7 @@ export default function OrcamentoDetalhe() {
             {(form.extras || []).map(extra => (
               <div key={extra.id} className="flex items-center justify-between py-2 border-b border-zinc-800">
                 <span className="text-sm text-zinc-400">{extra.nome || 'Extra'}</span>
-                <span className="text-sm text-zinc-400">{fmt(extra.valor)}</span>
+                <span className="text-sm text-zinc-400">{fmt((extra.valorDia || 0) * (extra.diarias || 1))}</span>
               </div>
             ))}
           </div>
