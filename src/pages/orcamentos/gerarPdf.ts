@@ -83,17 +83,17 @@ export async function gerarOrcamentoPdf(
       alert(`Capa: ${width} x ${height}`);
 
      // Número do orçamento — posição baseada no Photoshop
-const numText = orcamento.numero;
-const escala = width / 2481;
-const numX = 1920.72 * escala;
-const numY = height - (177.46 * (height / 3509)) - 8;
-const numSize = 22 * (height / 3509) * (300 / 72);
+const numText = orcamento.numero;                           // texto do número ex: "001-2026"
+const escala = width / 2481;                               // fator de escala horizontal (pdf_width / photoshop_width)
+const numX = 1920.72 * escala;                             // posição X: coordenada do Photoshop convertida para PDF
+const numY = height - (178.46 * (height / 3509)) - 8;     // posição Y: inverte eixo (PDF começa de baixo), -8 ajuste fino
+const numSize = 22 * (height / 3509) * (300 / 72);        // tamanho da fonte: 22pt Photoshop → convertido para pontos PDF (300dpi→72dpi)
 capaPage.drawText(numText, {
-  x: numX,
-  y: numY,
-  size: numSize,
-  font: helveticaBold,
-  color: rgb(1, 1, 1),
+  x: numX,                                                 // posição horizontal
+  y: numY,                                                 // posição vertical (de baixo para cima no PDF)
+  size: numSize,                                           // tamanho da fonte em pontos
+  font: helveticaBold,                                     // fonte usada (trocar para TT Chocolates quando embedar)
+  color: rgb(1, 1, 1),                                     // cor branca (1,1,1 = RGB máximo)
 });
 
       // Nome do cliente — acima da foto, centralizado, cinza
