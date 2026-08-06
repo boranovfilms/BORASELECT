@@ -1,3 +1,838 @@
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { collection, addDoc, updateDoc, deleteDoc, doc, getDoc, getDocs, serverTimestamp, query, orderBy } from 'firebase/firestore';
+import { db } from '../../lib/firebase';
+import { ArrowLeft, Plus, Loader2, Save, FileText, Trash2, X, Info, ChevronDown, ChevronUp } from 'lucide-react';
+import { toast } from 'react-hot-toast';
+import { cn } from '../../lib/utils';
+
+// ============================================================
+// TIPOS
+// ============================================================
+interface ItemBloco {
+  equipamentoId: string;
+  nome: string;
+  quantidade: number;
+  valorDia: number;
+  valorTotal: number;
+  tipo: 'proprio' | 'equipe' | 'locacao';
+  exibirNoPdf: boolean;
+}
+
+interface BlocoServico {
+  id: string;
+  nome: string;
+  templateId: string;
+  valorManual: number;
+  itens: ItemBloco[];
+}
+
+interface Extra {
+  id: string;
+  nome: string;
+  valor: number;
+}
+
+interface Orcamento {
+  id?: string;
+  numero: string;
+  // Dados do cliente
+  nomeCliente: string;
+  nomeEvento: string;
+  cnpjCpf: string;
+  emailPrincipal: string;
+  razaoSocial: string;
+  telefone: string;
+  nomeComercial: string;
+  website: string;
+  responsavel: string;
+  cep: string;
+  endereco: string;
+  numero_end: string;
+  complemento: string;
+  bairro: string;
+  cidade: string;
+  estado: string;
+  // Dados do orçamento
+  localEvento: string;
+  diarias: number;
+  condicaoPagamento: string;
+  // Blocos e extras
+  blocos: BlocoServico[];
+  extras: Extra[];
+  // Calculadora interna
+  despAlimentacao: number;
+  despTransporte: number;
+  despHospedagem: number;
+  despPedagio: number;
+  pctNota: number;
+  pctMargem: number;
+  // Valores finais
+  totalCustoEquipe: number;
+  totalCustoLocacao: number;
+  totalCustoDesp: number;
+  totalCustoNota: number;
+  totalCustoReal: number;
+  totalProprio: number;
+  totalMargem: number;
+  totalSugerido: number;
+  valorCliente: number;
+  lucroReal: number;
+  // Status
+  status: 'rascunho' | 'enviado' | 'aprovado' | 'rejeitado';
+  observacoes: string;
+  criadoEm?: any;
+  updatedAt?: any;
+}
+
+interface Equipamento {
+  id: string;
+  nome: string;
+  categoria: string;
+  valorDia: number;
+}
+
+interface Template {
+  id: string;
+  nome: string;
+  tipo: string;
+  itens: any[];
+  condicaoPagamento: string;
+}
+
+const CONDICOES_PAGAMENTO = [
+  '50% entrada + 50% na entrega',
+  '100% antecipado',
+  '30% entrada + 70% na entrega',
+  'Dia 10 de cada mês',
+  'À combinar',
+];
+
+const CATS_EQUIPE = ['Equipe/Freelance'];
+
+function tipoAutomatico(categoria: string): 'proprio' | 'equipe' | 'locacao' {
+  return CATS_EQUIPE.includes(categoria) ? 'equipe' : 'proprio';
+}
+
+function fmt(v: number) {
+  return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+
+// ============================================================
+// COMPONENTE PRINCIPAL
+// ============================================================
 export default function OrcamentoDetalhe() {
-  return <div>Orçamento Detalhe</div>;
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const isNovo = id === 'novo';
+
+  const [loading, setLoading] = useState(true);
+  const [salvando, setSalvando] = useState(false);
+  const [equipamentos, setEquipamentos] = useState<Equipamento[]>([]);
+  const [templates, setTemplates] = useState<Template[]>([]);
+  const [expandidoBloco, setExpandidoBloco] = useState<string | null>(null);
+
+  const [form, setForm] = useState<Partial<Orcamento>>({
+    numero: '',
+    nomeCliente: '', nomeEvento: '', cnpjCpf: '', emailPrincipal: '',
+    razaoSocial: '', telefone: '', nomeComercial: '', website: '', responsavel: '',
+    cep: '', endereco: '', numero_end: '', complemento: '', bairro: '', cidade: '', estado: '',
+    localEvento: '', diarias: 1, condicaoPagamento: '50% entrada + 50% na entrega',
+    blocos: [], extras: [],
+    despAlimentacao: 0, despTransporte: 0, despHospedagem: 0, despPedagio: 0,
+    pctNota: 0, pctMargem: 20,
+    totalCustoEquipe: 0, totalCustoLocacao: 0, totalCustoDesp: 0,
+    totalCustoNota: 0, totalCustoReal: 0, totalProprio: 0,
+    totalMargem: 0, totalSugerido: 0, valorCliente: 0, lucroReal: 0,
+    status: 'rascunho', observacoes: '',
+  });
+
+  // ============================================================
+  // CARREGAR DADOS
+  // ============================================================
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        // Carrega equipamentos
+        const eqSnap = await getDocs(collection(db, 'orcamentoEquipamentos'));
+        const eqData = eqSnap.docs.map(d => ({ id: d.id, ...d.data() })) as Equipamento[];
+        eqData.sort((a, b) => a.categoria.localeCompare(b.categoria) || a.nome.localeCompare(b.nome));
+        setEquipamentos(eqData);
+
+        // Carrega templates
+        const tSnap = await getDocs(collection(db, 'orcamentoTemplates'));
+        const tData = tSnap.docs.map(d => ({ id: d.id, ...d.data() })) as Template[];
+        setTemplates(tData);
+
+        // Se editando, carrega orçamento
+        if (!isNovo && id) {
+          const docSnap = await getDoc(doc(db, 'orcamentos', id));
+          if (docSnap.exists()) {
+            setForm({ id: docSnap.id, ...docSnap.data() } as Orcamento);
+          }
+        } else {
+          // Gera número automático
+          const orcSnap = await getDocs(collection(db, 'orcamentos'));
+          const ano = new Date().getFullYear();
+          const proximo = (orcSnap.docs.length + 1).toString().padStart(3, '0');
+          setForm(prev => ({ ...prev, numero: `${proximo}-${ano}` }));
+        }
+      } catch (error) {
+        toast.error('Erro ao carregar dados');
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadData();
+  }, [id]);
+
+  // ============================================================
+  // CALCULADORA
+  // ============================================================
+  const calcular = (f: Partial<Orcamento>) => {
+    const diarias = f.diarias || 1;
+    let custoEquipe = 0, custoLocacao = 0, valorProprio = 0;
+
+    (f.blocos || []).forEach(bloco => {
+      bloco.itens.forEach(item => {
+        const v = item.valorDia * item.quantidade * diarias;
+        if (item.tipo === 'equipe') custoEquipe += v;
+        else if (item.tipo === 'locacao') custoLocacao += v;
+        else valorProprio += v;
+      });
+      // Se tem valor manual, usa ele no lugar
+      if (bloco.valorManual > 0) {
+        const autoTotal = bloco.itens.reduce((acc, i) => acc + i.valorDia * i.quantidade * diarias, 0);
+        const diff = bloco.valorManual - autoTotal;
+        valorProprio += diff;
+      }
+    });
+
+    const totalDesp = (f.despAlimentacao || 0) + (f.despTransporte || 0) + (f.despHospedagem || 0) + (f.despPedagio || 0);
+    const totalExtras = (f.extras || []).reduce((acc, e) => acc + e.valor, 0);
+    const custoBase = custoEquipe + custoLocacao + totalDesp;
+    const valorNota = custoBase * ((f.pctNota || 0) / 100);
+    const custoTotal = custoBase + valorNota;
+    const valorMargem = custoTotal * ((f.pctMargem || 0) / 100);
+    const sugerido = custoTotal + valorProprio + valorMargem + totalExtras;
+
+    return {
+      totalCustoEquipe: custoEquipe,
+      totalCustoLocacao: custoLocacao,
+      totalCustoDesp: totalDesp,
+      totalCustoNota: valorNota,
+      totalCustoReal: custoTotal,
+      totalProprio: valorProprio,
+      totalMargem: valorMargem,
+      totalSugerido: sugerido,
+      valorCliente: sugerido,
+      lucroReal: sugerido - custoTotal,
+    };
+  };
+
+  const updateForm = (updates: Partial<Orcamento>) => {
+    setForm(prev => {
+      const novo = { ...prev, ...updates };
+      const calc = calcular(novo);
+      return { ...novo, ...calc };
+    });
+  };
+
+  // ============================================================
+  // BLOCOS
+  // ============================================================
+  const adicionarBloco = () => {
+    const novoBloco: BlocoServico = {
+      id: Date.now().toString(),
+      nome: '',
+      templateId: '',
+      valorManual: 0,
+      itens: [],
+    };
+    updateForm({ blocos: [...(form.blocos || []), novoBloco] });
+  };
+
+  const removerBloco = (blocoId: string) => {
+    updateForm({ blocos: (form.blocos || []).filter(b => b.id !== blocoId) });
+  };
+
+  const carregarTemplate = (blocoId: string, templateId: string) => {
+    const template = templates.find(t => t.id === templateId);
+    const novosItens: ItemBloco[] = template ? template.itens.map((item: any) => ({
+      equipamentoId: item.equipamentoId || '',
+      nome: item.nome,
+      quantidade: item.quantidade || 1,
+      valorDia: item.valorDia,
+      valorTotal: item.valorDia * (item.quantidade || 1),
+      tipo: tipoAutomatico(item.categoria || ''),
+      exibirNoPdf: item.exibirNoPdf !== false,
+    })) : [];
+
+    updateForm({
+      blocos: (form.blocos || []).map(b =>
+        b.id === blocoId ? { ...b, templateId, itens: novosItens, valorManual: 0 } : b
+      )
+    });
+  };
+
+  const toggleTipoItem = (blocoId: string, itemIdx: number) => {
+    updateForm({
+      blocos: (form.blocos || []).map(b => {
+        if (b.id !== blocoId) return b;
+        const novosItens = b.itens.map((item, i) => {
+          if (i !== itemIdx) return item;
+          if (item.tipo === 'proprio') return { ...item, tipo: 'locacao' as const };
+          if (item.tipo === 'locacao') return { ...item, tipo: 'proprio' as const };
+          return item;
+        });
+        return { ...b, itens: novosItens };
+      })
+    });
+  };
+
+  // ============================================================
+  // EXTRAS
+  // ============================================================
+  const adicionarExtra = () => {
+    const novoExtra: Extra = { id: Date.now().toString(), nome: '', valor: 0 };
+    updateForm({ extras: [...(form.extras || []), novoExtra] });
+  };
+
+  const removerExtra = (extraId: string) => {
+    updateForm({ extras: (form.extras || []).filter(e => e.id !== extraId) });
+  };
+
+  const atualizarExtra = (extraId: string, campo: string, valor: any) => {
+    updateForm({
+      extras: (form.extras || []).map(e =>
+        e.id === extraId ? { ...e, [campo]: valor } : e
+      )
+    });
+  };
+
+  // ============================================================
+  // SALVAR
+  // ============================================================
+  const handleSalvar = async (novoStatus?: string) => {
+    if (!form.nomeCliente?.trim()) { toast.error('Nome do cliente é obrigatório'); return; }
+    if (!form.cnpjCpf?.trim()) { toast.error('CNPJ/CPF é obrigatório'); return; }
+    setSalvando(true);
+    try {
+      const dados = { ...form, status: novoStatus || form.status, updatedAt: serverTimestamp() };
+      if (isNovo) {
+        const ref = await addDoc(collection(db, 'orcamentos'), { ...dados, criadoEm: serverTimestamp() });
+        toast.success('Orçamento criado!');
+        navigate(`/orcamentos/${ref.id}`);
+      } else if (id) {
+        await updateDoc(doc(db, 'orcamentos', id), dados);
+        toast.success('Orçamento salvo!');
+      }
+    } catch {
+      toast.error('Erro ao salvar');
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  // ============================================================
+  // EQUIPAMENTOS POR CATEGORIA
+  // ============================================================
+  const equipsPorCategoria = equipamentos.reduce((acc, eq) => {
+    if (!acc[eq.categoria]) acc[eq.categoria] = [];
+    acc[eq.categoria].push(eq);
+    return acc;
+  }, {} as Record<string, Equipamento[]>);
+
+  const calcularTotalBloco = (bloco: BlocoServico) => {
+    if (bloco.valorManual > 0) return bloco.valorManual;
+    const diarias = form.diarias || 1;
+    return bloco.itens.reduce((acc, i) => acc + i.valorDia * i.quantidade * diarias, 0);
+  };
+
+  if (loading) return (
+    <div className="min-h-[60vh] flex items-center justify-center">
+      <Loader2 className="w-8 h-8 animate-spin text-[#ff5351]" />
+    </div>
+  );
+
+  return (
+    <div className="space-y-6 pb-20 text-left max-w-5xl">
+
+      {/* Header */}
+      <header className="flex items-start justify-between gap-4">
+        <div>
+          <button onClick={() => navigate('/orcamentos')}
+            className="flex items-center gap-2 text-zinc-500 hover:text-white transition-colors text-xs font-black uppercase tracking-widest mb-3">
+            <ArrowLeft className="w-4 h-4" /> Voltar
+          </button>
+          <p className="text-[11px] uppercase tracking-[0.4em] text-[#ff5351] font-black mb-1">Orçamentos</p>
+          <h1 className="text-4xl font-black text-white uppercase italic tracking-tight">
+            {isNovo ? 'Novo Orçamento' : `Orçamento ${form.numero}`}
+          </h1>
+        </div>
+        <div className="flex gap-2 shrink-0 mt-8">
+          <button onClick={() => handleSalvar('rascunho')} disabled={salvando}
+            className="h-10 px-4 bg-zinc-800 border border-zinc-700 text-zinc-400 rounded-xl font-black uppercase text-[9px] tracking-widest hover:text-white transition-all flex items-center gap-2 disabled:opacity-50">
+            {salvando ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />} Salvar Rascunho
+          </button>
+          <button onClick={() => handleSalvar('enviado')} disabled={salvando}
+            className="h-10 px-5 bg-[#ff5351] text-white rounded-xl font-black uppercase text-[9px] tracking-widest hover:brightness-110 transition-all flex items-center gap-2 disabled:opacity-50">
+            <FileText className="w-4 h-4" /> Gerar PDF
+          </button>
+        </div>
+      </header>
+
+      {/* DADOS DO CLIENTE */}
+      <div className="bg-[#1f1f1f] border border-zinc-800 rounded-[24px] overflow-hidden">
+        <div className="p-5 border-b border-zinc-800">
+          <h2 className="text-xs font-black uppercase tracking-widest text-white">Dados do Cliente</h2>
+        </div>
+        <div className="p-6 space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Nome do Cliente *</label>
+              <input type="text" value={form.nomeCliente || ''} onChange={e => updateForm({ nomeCliente: e.target.value })}
+                placeholder="Ex: Irrigacana"
+                className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none" />
+            </div>
+            <div>
+              <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Nome do Evento</label>
+              <input type="text" value={form.nomeEvento || ''} onChange={e => updateForm({ nomeEvento: e.target.value })}
+                placeholder="Ex: 6º Irrigacana 2026"
+                className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none" />
+            </div>
+            <div>
+              <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">CNPJ / CPF *</label>
+              <input type="text" value={form.cnpjCpf || ''} onChange={e => updateForm({ cnpjCpf: e.target.value })}
+                placeholder="00.000.000/0000-00"
+                className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none" />
+            </div>
+            <div>
+              <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">E-mail Principal</label>
+              <input type="text" value={form.emailPrincipal || ''} onChange={e => updateForm({ emailPrincipal: e.target.value })}
+                placeholder="contato@empresa.com"
+                className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none" />
+            </div>
+            <div>
+              <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Razão Social</label>
+              <input type="text" value={form.razaoSocial || ''} onChange={e => updateForm({ razaoSocial: e.target.value })}
+                className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none" />
+            </div>
+            <div>
+              <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Telefone</label>
+              <input type="text" value={form.telefone || ''} onChange={e => updateForm({ telefone: e.target.value })}
+                placeholder="(00) 00000-0000"
+                className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none" />
+            </div>
+            <div>
+              <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Nome Comercial</label>
+              <input type="text" value={form.nomeComercial || ''} onChange={e => updateForm({ nomeComercial: e.target.value })}
+                className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none" />
+            </div>
+            <div>
+              <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Website</label>
+              <input type="text" value={form.website || ''} onChange={e => updateForm({ website: e.target.value })}
+                className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none" />
+            </div>
+            <div className="md:col-span-2">
+              <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Responsável</label>
+              <input type="text" value={form.responsavel || ''} onChange={e => updateForm({ responsavel: e.target.value })}
+                className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none" />
+            </div>
+          </div>
+
+          {/* Endereço */}
+          <div className="pt-4 border-t border-zinc-800">
+            <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-3">Endereço</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">CEP</label>
+                <input type="text" value={form.cep || ''} onChange={e => updateForm({ cep: e.target.value })}
+                  placeholder="00000-000"
+                  className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none" />
+              </div>
+              <div>
+                <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Endereço</label>
+                <input type="text" value={form.endereco || ''} onChange={e => updateForm({ endereco: e.target.value })}
+                  className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none" />
+              </div>
+              <div>
+                <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Número</label>
+                <input type="text" value={form.numero_end || ''} onChange={e => updateForm({ numero_end: e.target.value })}
+                  className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none" />
+              </div>
+              <div>
+                <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Complemento</label>
+                <input type="text" value={form.complemento || ''} onChange={e => updateForm({ complemento: e.target.value })}
+                  className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none" />
+              </div>
+              <div>
+                <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Bairro</label>
+                <input type="text" value={form.bairro || ''} onChange={e => updateForm({ bairro: e.target.value })}
+                  className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none" />
+              </div>
+              <div className="grid grid-cols-[1fr_100px] gap-3">
+                <div>
+                  <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Cidade</label>
+                  <input type="text" value={form.cidade || ''} onChange={e => updateForm({ cidade: e.target.value })}
+                    className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none" />
+                </div>
+                <div>
+                  <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Estado</label>
+                  <input type="text" value={form.estado || ''} onChange={e => updateForm({ estado: e.target.value })}
+                    placeholder="SP"
+                    className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none" />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Dados do orçamento */}
+          <div className="pt-4 border-t border-zinc-800">
+            <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-3">Dados do Orçamento</p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Local do Evento</label>
+                <input type="text" value={form.localEvento || ''} onChange={e => updateForm({ localEvento: e.target.value })}
+                  placeholder="Ex: Ribeirão Preto/SP"
+                  className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none" />
+              </div>
+              <div>
+                <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Número de Diárias</label>
+                <input type="number" value={form.diarias || 1} min={1}
+                  onChange={e => updateForm({ diarias: Number(e.target.value) })}
+                  className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none text-center" />
+              </div>
+              <div>
+                <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Condição de Pagamento</label>
+                <select value={form.condicaoPagamento || ''} onChange={e => updateForm({ condicaoPagamento: e.target.value })}
+                  className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none appearance-none">
+                  {CONDICOES_PAGAMENTO.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* BLOCOS DE SERVIÇO */}
+      <div className="space-y-4">
+        {(form.blocos || []).map(bloco => (
+          <div key={bloco.id} className="bg-[#1f1f1f] border border-zinc-800 rounded-[24px] overflow-hidden">
+            <div className="p-4 border-b border-zinc-800 flex items-center gap-3 bg-zinc-900/50">
+              <input type="text" value={bloco.nome} onChange={e => updateForm({
+                blocos: (form.blocos || []).map(b => b.id === bloco.id ? { ...b, nome: e.target.value } : b)
+              })}
+                placeholder="Nome do bloco (ex: Cobertura do Evento)"
+                className="flex-1 h-9 bg-transparent text-white text-sm font-black uppercase outline-none placeholder:text-zinc-600" />
+              <button onClick={() => setExpandidoBloco(expandidoBloco === bloco.id ? null : bloco.id)}
+                className="p-1.5 text-zinc-500 hover:text-white transition-all">
+                {expandidoBloco === bloco.id ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </button>
+              <button onClick={() => removerBloco(bloco.id)} className="p-1.5 text-zinc-500 hover:text-red-400 transition-all">
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Template base</label>
+                  <select value={bloco.templateId} onChange={e => carregarTemplate(bloco.id, e.target.value)}
+                    className="w-full h-10 bg-zinc-900 border border-zinc-800 rounded-xl px-3 text-white text-sm focus:border-[#ff5351] outline-none appearance-none">
+                    <option value="">Sem template (manual)</option>
+                    {templates.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Valor manual (R$)</label>
+                  <input type="number" value={bloco.valorManual || ''} placeholder="Automático pelo template"
+                    onChange={e => updateForm({
+                      blocos: (form.blocos || []).map(b => b.id === bloco.id ? { ...b, valorManual: Number(e.target.value) } : b)
+                    })}
+                    className="w-full h-10 bg-zinc-900 border border-zinc-800 rounded-xl px-3 text-white text-sm focus:border-[#ff5351] outline-none" />
+                </div>
+              </div>
+
+              {/* Itens do bloco */}
+              {bloco.itens.length > 0 && (
+                <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="border-b border-zinc-800">
+                        <th className="px-4 py-2 text-[9px] font-black uppercase tracking-widest text-zinc-600">Item</th>
+                        <th className="px-4 py-2 text-[9px] font-black uppercase tracking-widest text-zinc-600 text-right">Total</th>
+                        <th className="px-4 py-2 text-[9px] font-black uppercase tracking-widest text-zinc-600 text-center">Tipo</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-800">
+                      {bloco.itens.map((item, idx) => (
+                        <tr key={idx} className="hover:bg-zinc-800/30 transition-all">
+                          <td className="px-4 py-2.5 text-white text-sm">
+                            {String(item.quantidade).padStart(2, '0')} — {item.nome}
+                          </td>
+                          <td className="px-4 py-2.5 text-right text-zinc-400 text-sm">
+                            {fmt(item.valorDia * item.quantidade * (form.diarias || 1))}
+                          </td>
+                          <td className="px-4 py-2.5 text-center">
+                            <button
+                              onClick={() => toggleTipoItem(bloco.id, idx)}
+                              disabled={item.tipo === 'equipe'}
+                              className={cn(
+                                'px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border transition-all',
+                                item.tipo === 'proprio' && 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20 cursor-pointer',
+                                item.tipo === 'equipe' && 'bg-amber-500/10 text-amber-400 border-amber-500/20 cursor-default',
+                                item.tipo === 'locacao' && 'bg-red-500/10 text-red-400 border-red-500/20 hover:bg-red-500/20 cursor-pointer',
+                              )}>
+                              {item.tipo === 'proprio' && '📷 Próprio'}
+                              {item.tipo === 'equipe' && '👥 Equipe'}
+                              {item.tipo === 'locacao' && '🔧 Locação'}
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <div className="px-4 py-3 border-t border-zinc-800 flex items-center justify-between">
+                    <div className="flex gap-4">
+                      {bloco.itens.some(i => i.tipo === 'proprio') && (
+                        <span className="text-[10px] font-black text-emerald-400">
+                          📷 {fmt(bloco.itens.filter(i => i.tipo === 'proprio').reduce((a, i) => a + i.valorDia * i.quantidade * (form.diarias || 1), 0))}
+                        </span>
+                      )}
+                      {bloco.itens.some(i => i.tipo === 'equipe') && (
+                        <span className="text-[10px] font-black text-amber-400">
+                          👥 {fmt(bloco.itens.filter(i => i.tipo === 'equipe').reduce((a, i) => a + i.valorDia * i.quantidade * (form.diarias || 1), 0))}
+                        </span>
+                      )}
+                      {bloco.itens.some(i => i.tipo === 'locacao') && (
+                        <span className="text-[10px] font-black text-red-400">
+                          🔧 {fmt(bloco.itens.filter(i => i.tipo === 'locacao').reduce((a, i) => a + i.valorDia * i.quantidade * (form.diarias || 1), 0))}
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-[10px] font-black text-[#ff5351]">
+                      Total: {fmt(calcularTotalBloco(bloco))}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
+
+        <button onClick={adicionarBloco}
+          className="w-full h-12 border border-dashed border-zinc-700 rounded-2xl text-zinc-500 hover:text-white hover:border-zinc-500 transition-all text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2">
+          <Plus className="w-4 h-4" /> Adicionar bloco de serviço
+        </button>
+      </div>
+
+      {/* DESPESAS + CALCULADORA */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="bg-[#1f1f1f] border border-zinc-800 rounded-[24px] overflow-hidden">
+          <div className="p-5 border-b border-zinc-800">
+            <h2 className="text-xs font-black uppercase tracking-widest text-white">
+              Despesas de Deslocamento
+              <span className="ml-2 text-zinc-600 font-normal normal-case text-[10px]">— não aparece no PDF</span>
+            </h2>
+          </div>
+          <div className="p-5 space-y-3">
+            {[
+              { label: 'Alimentação', field: 'despAlimentacao' },
+              { label: 'Transporte / Km', field: 'despTransporte' },
+              { label: 'Hospedagem', field: 'despHospedagem' },
+              { label: 'Pedágio / Estacionamento', field: 'despPedagio' },
+            ].map(({ label, field }) => (
+              <div key={field} className="flex items-center gap-4">
+                <label className="text-sm text-zinc-400 min-w-[160px]">{label}</label>
+                <div className="flex-1 relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm">R$</span>
+                  <input type="number" value={(form as any)[field] || 0}
+                    onChange={e => updateForm({ [field]: Number(e.target.value) })}
+                    className="w-full h-10 bg-zinc-900 border border-zinc-800 rounded-xl pl-8 pr-3 text-white text-sm focus:border-[#ff5351] outline-none" />
+                </div>
+              </div>
+            ))}
+            <div className="pt-3 border-t border-zinc-800 flex items-center justify-between">
+              <span className="text-sm text-zinc-500">Total despesas</span>
+              <span className="text-sm font-black text-white">
+                {fmt((form.despAlimentacao || 0) + (form.despTransporte || 0) + (form.despHospedagem || 0) + (form.despPedagio || 0))}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-[#1f1f1f] border border-zinc-800 rounded-[24px] overflow-hidden">
+          <div className="p-5 border-b border-zinc-800">
+            <h2 className="text-xs font-black uppercase tracking-widest text-white">
+              Calculadora Interna
+              <span className="ml-2 text-zinc-600 font-normal normal-case text-[10px]">— não aparece no PDF</span>
+            </h2>
+          </div>
+          <div className="p-5 space-y-3">
+            <div className="flex items-center gap-4">
+              <label className="text-sm text-zinc-400 min-w-[160px]">% Nota fiscal</label>
+              <div className="flex items-center gap-2">
+                <input type="number" value={form.pctNota || 0} min={0} max={100}
+                  onChange={e => updateForm({ pctNota: Number(e.target.value) })}
+                  className="w-20 h-10 bg-zinc-900 border border-zinc-800 rounded-xl px-3 text-white text-sm focus:border-[#ff5351] outline-none text-center" />
+                <span className="text-zinc-500 text-sm">%</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-4">
+              <label className="text-sm text-zinc-400 min-w-[160px]">% Margem adicional</label>
+              <div className="flex items-center gap-2">
+                <input type="number" value={form.pctMargem || 0} min={0}
+                  onChange={e => updateForm({ pctMargem: Number(e.target.value) })}
+                  className="w-20 h-10 bg-zinc-900 border border-zinc-800 rounded-xl px-3 text-white text-sm focus:border-[#ff5351] outline-none text-center" />
+                <span className="text-zinc-500 text-sm">%</span>
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-zinc-800 space-y-2">
+              {[
+                { label: '👥 Equipe/freelance', value: form.totalCustoEquipe || 0, color: 'text-amber-400' },
+                { label: '🔧 Locação externa', value: form.totalCustoLocacao || 0, color: 'text-red-400' },
+                { label: '🚗 Despesas', value: form.totalCustoDesp || 0, color: 'text-zinc-400' },
+                { label: '📄 Nota fiscal', value: form.totalCustoNota || 0, color: 'text-zinc-400' },
+              ].map(({ label, value, color }) => (
+                <div key={label} className="flex items-center justify-between">
+                  <span className={cn('text-xs', color)}>{label}</span>
+                  <span className="text-xs text-zinc-400">{fmt(value)}</span>
+                </div>
+              ))}
+              <div className="flex items-center justify-between py-1 border-t border-zinc-800">
+                <span className="text-xs font-black text-white">Custo total real</span>
+                <span className="text-xs font-black text-white">{fmt(form.totalCustoReal || 0)}</span>
+              </div>
+              <div className="flex items-center justify-between bg-emerald-500/5 border border-emerald-500/20 rounded-xl px-3 py-2">
+                <span className="text-xs font-black text-emerald-400">📷 Equip. próprios (lucro direto)</span>
+                <span className="text-xs font-black text-emerald-400">{fmt(form.totalProprio || 0)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-zinc-400">📈 Margem adicional</span>
+                <span className="text-xs text-emerald-400">{fmt(form.totalMargem || 0)}</span>
+              </div>
+              <div className="flex items-center justify-between py-2 border-t border-zinc-800">
+                <span className="text-sm font-black text-[#ff5351]">Total sugerido</span>
+                <span className="text-lg font-black text-[#ff5351]">{fmt(form.totalSugerido || 0)}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* EXTRAS */}
+      <div className="bg-[#1f1f1f] border border-zinc-800 rounded-[24px] overflow-hidden">
+        <div className="p-5 border-b border-zinc-800 flex items-center justify-between">
+          <h2 className="text-xs font-black uppercase tracking-widest text-white">Extras (aparecem no PDF com valor)</h2>
+          <button onClick={adicionarExtra}
+            className="flex items-center gap-1.5 px-3 py-2 bg-zinc-800 border border-zinc-700 text-zinc-400 rounded-xl text-[9px] font-black uppercase tracking-widest hover:text-white transition-all">
+            <Plus className="w-3 h-3" /> Adicionar extra
+          </button>
+        </div>
+        <div className="p-5">
+          {(form.extras || []).length === 0 ? (
+            <p className="text-zinc-600 text-sm text-center py-4">Nenhum extra adicionado</p>
+          ) : (
+            <div className="space-y-2">
+              {(form.extras || []).map(extra => (
+                <div key={extra.id} className="grid grid-cols-[1fr_160px_auto] gap-3 items-center">
+                  <input type="text" value={extra.nome} onChange={e => atualizarExtra(extra.id, 'nome', e.target.value)}
+                    placeholder="Nome do extra"
+                    className="h-10 bg-zinc-900 border border-zinc-800 rounded-xl px-3 text-white text-sm focus:border-[#ff5351] outline-none" />
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm">R$</span>
+                    <input type="number" value={extra.valor || ''} onChange={e => atualizarExtra(extra.id, 'valor', Number(e.target.value))}
+                      placeholder="0,00"
+                      className="w-full h-10 bg-zinc-900 border border-zinc-800 rounded-xl pl-8 pr-3 text-white text-sm focus:border-[#ff5351] outline-none" />
+                  </div>
+                  <button onClick={() => removerExtra(extra.id)} className="p-2 text-zinc-500 hover:text-red-400 transition-all">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* PROPOSTA FINAL */}
+      <div className="bg-[#1f1f1f] border border-zinc-800 rounded-[24px] overflow-hidden">
+        <div className="p-5 border-b border-zinc-800">
+          <h2 className="text-xs font-black uppercase tracking-widest text-white">Proposta Final</h2>
+        </div>
+        <div className="p-5 space-y-4">
+          {/* Resumo blocos */}
+          <div className="space-y-1">
+            {(form.blocos || []).map(bloco => (
+              <div key={bloco.id} className="flex items-center justify-between py-2 border-b border-zinc-800">
+                <span className="text-sm font-black text-white uppercase">{bloco.nome || 'Bloco sem nome'}</span>
+                <span className="text-sm font-black text-white">{fmt(calcularTotalBloco(bloco))}</span>
+              </div>
+            ))}
+            {(form.extras || []).map(extra => (
+              <div key={extra.id} className="flex items-center justify-between py-2 border-b border-zinc-800">
+                <span className="text-sm text-zinc-400">{extra.nome || 'Extra'}</span>
+                <span className="text-sm text-zinc-400">{fmt(extra.valor)}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* Valor final */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-zinc-800">
+            <div>
+              <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">
+                Valor para o cliente (R$)
+              </label>
+              <input type="number" value={form.valorCliente || 0}
+                onChange={e => {
+                  const v = Number(e.target.value);
+                  const custoTotal = form.totalCustoReal || 0;
+                  setForm(prev => ({ ...prev, valorCliente: v, lucroReal: v - custoTotal }));
+                }}
+                className="w-full h-14 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-2xl font-black focus:border-[#ff5351] outline-none" />
+              <p className="text-[10px] text-zinc-600 mt-1">Você pode ajustar o valor sugerido</p>
+            </div>
+            <div className="flex flex-col justify-center gap-2">
+              <div className="flex items-center justify-between p-3 bg-zinc-900 border border-zinc-800 rounded-xl">
+                <span className="text-xs text-zinc-500">Lucro real com este valor</span>
+                <span className={cn('text-sm font-black', (form.lucroReal || 0) >= 0 ? 'text-emerald-400' : 'text-red-400')}>
+                  {fmt(form.lucroReal || 0)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between p-3 bg-zinc-900 border border-zinc-800 rounded-xl">
+                <span className="text-xs text-zinc-500">Condição de pagamento</span>
+                <span className="text-xs font-black text-white">{form.condicaoPagamento}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Observações */}
+          <div>
+            <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Observações (aparecem no PDF)</label>
+            <textarea value={form.observacoes || ''} onChange={e => updateForm({ observacoes: e.target.value })}
+              rows={3} placeholder="Ex: Todo o material será entregue via link do Google Drive..."
+              className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-white text-sm focus:border-[#ff5351] outline-none resize-none" />
+          </div>
+        </div>
+      </div>
+
+      {/* Botões finais */}
+      <div className="flex items-center justify-end gap-3 pt-4 border-t border-zinc-800">
+        <button onClick={() => navigate('/orcamentos')}
+          className="h-10 px-6 bg-zinc-800 border border-zinc-700 text-zinc-400 rounded-xl font-black uppercase text-[9px] tracking-widest hover:text-white transition-all">
+          Cancelar
+        </button>
+        <button onClick={() => handleSalvar('rascunho')} disabled={salvando}
+          className="h-10 px-6 bg-zinc-800 border border-zinc-700 text-zinc-400 rounded-xl font-black uppercase text-[9px] tracking-widest hover:text-white transition-all flex items-center gap-2 disabled:opacity-50">
+          {salvando ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />} Salvar Rascunho
+        </button>
+        <button onClick={() => handleSalvar('enviado')} disabled={salvando}
+          className="h-10 px-6 bg-[#ff5351] text-white rounded-xl font-black uppercase text-[9px] tracking-widest hover:brightness-110 transition-all flex items-center gap-2 disabled:opacity-50 shadow-xl shadow-[#ff5351]/20">
+          <FileText className="w-4 h-4" /> Gerar PDF
+        </button>
+      </div>
+    </div>
+  );
 }
