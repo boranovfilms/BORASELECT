@@ -63,7 +63,15 @@ export default function Orcamentos() {
       <header className="flex items-start justify-between gap-4">
         <div>
           <p className="text-[11px] uppercase tracking-[0.4em] text-[#ff5351] font-black mb-2">Boranov</p>
-          <h1 className="text-5xl font-black text-white uppercase italic tracking-tight">Orçamentos</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-5xl font-black text-white uppercase italic tracking-tight">Orçamentos</h1>
+            <button
+              onClick={() => navigate('/orcamentos/configuracoes')}
+              title="Configurações"
+              className="p-2 text-zinc-600 hover:text-white transition-all">
+              <Settings className="w-5 h-5" />
+            </button>
+          </div>
           <p className="text-zinc-500 text-sm mt-1">Gerencie propostas e orçamentos</p>
         </div>
         <button
