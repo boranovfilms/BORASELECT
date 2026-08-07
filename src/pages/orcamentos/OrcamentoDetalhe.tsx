@@ -53,6 +53,8 @@ interface Orcamento {
   cidade: string;
   estado: string;
   localEvento: string;
+  dataEventoInicio: string;
+  dataEventoFim: string;
   diarias: number;
   condicaoPagamento: string;
   blocos: BlocoServico[];
@@ -134,7 +136,8 @@ export default function OrcamentoDetalhe() {
     nomeCliente: '', nomeEvento: '', cnpjCpf: '', emailPrincipal: '',
     razaoSocial: '', telefone: '', nomeComercial: '', website: '', responsavel: '',
     cep: '', endereco: '', numero_end: '', complemento: '', bairro: '', cidade: '', estado: '',
-    localEvento: '', diarias: 1, condicaoPagamento: '50% entrada + 50% na entrega',
+    localEvento: '', dataEventoInicio: '', dataEventoFim: '',
+    diarias: 1, condicaoPagamento: '50% entrada + 50% na entrega',
     blocos: [], extras: [],
     despAlimentacao: 0, despTransporte: 0, despHospedagem: 0, despPedagio: 0,
     pctNota: 0, pctMargem: 20,
@@ -304,10 +307,7 @@ export default function OrcamentoDetalhe() {
     updateForm({
       extras: [...(form.extras || []), {
         id: Date.now().toString(),
-        nome: '',
-        valorDia: 0,
-        diarias: 1,
-        valor: 0,
+        nome: '', valorDia: 0, diarias: 1, valor: 0,
       }]
     });
   };
@@ -369,6 +369,10 @@ export default function OrcamentoDetalhe() {
         condicaoPagamento: form.condicaoPagamento || '',
         blocos: (form.blocos || []) as any,
         extras: (form.extras || []) as any,
+        despAlimentacao: form.despAlimentacao || 0,
+        despTransporte: form.despTransporte || 0,
+        despHospedagem: form.despHospedagem || 0,
+        despPedagio: form.despPedagio || 0,
         valorCliente: form.valorCliente || 0,
         observacoes: form.observacoes || '',
       }, {
@@ -552,9 +556,10 @@ export default function OrcamentoDetalhe() {
             </div>
           )}
 
+          {/* Dados do orçamento */}
           <div className="pt-4 border-t border-zinc-800">
             <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-3">Dados do Orçamento</p>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Local do Evento</label>
                 <input type="text" value={form.localEvento || ''} onChange={e => updateForm({ localEvento: e.target.value })}
@@ -568,6 +573,16 @@ export default function OrcamentoDetalhe() {
                   className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none text-center" />
               </div>
               <div>
+                <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Data Início do Evento</label>
+                <input type="date" value={form.dataEventoInicio || ''} onChange={e => updateForm({ dataEventoInicio: e.target.value })}
+                  className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none" />
+              </div>
+              <div>
+                <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Data Fim do Evento (opcional)</label>
+                <input type="date" value={form.dataEventoFim || ''} onChange={e => updateForm({ dataEventoFim: e.target.value })}
+                  className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none" />
+              </div>
+              <div className="md:col-span-2">
                 <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Condição de Pagamento</label>
                 <select value={form.condicaoPagamento || ''} onChange={e => updateForm({ condicaoPagamento: e.target.value })}
                   className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none appearance-none">
