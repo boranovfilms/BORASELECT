@@ -30,10 +30,16 @@ interface OrcamentoParaPdf {
   telefone: string;
   responsavel: string;
   localEvento: string;
+  dataEventoInicio: string;
+  dataEventoFim: string;
   diarias: number;
   condicaoPagamento: string;
   blocos: BlocoServico[];
   extras: Extra[];
+  despAlimentacao: number;
+  despTransporte: number;
+  despHospedagem: number;
+  despPedagio: number;
   valorCliente: number;
   observacoes: string;
 }
@@ -58,6 +64,12 @@ function hexToRgb(hex: string) {
   return rgb(r, g, b);
 }
 
+function formatarData(dataStr: string): string {
+  if (!dataStr) return '';
+  const [ano, mes, dia] = dataStr.split('-');
+  return `${dia}/${mes}/${ano.slice(2)}`;
+}
+
 async function fetchPdfBytes(url: string): Promise<Uint8Array> {
   const response = await fetch(url);
   if (!response.ok) throw new Error(`Erro ao baixar PDF: ${url}`);
@@ -71,14 +83,15 @@ export async function gerarOrcamentoPdf(
 ): Promise<void> {
   try {
     const finalPdf = await PDFDocument.create();
-    const fontBold = await finalPdf.embedFont(StandardFonts.HelveticaBold);       // trocar por TT Chocolates Bold
-    const fontMedium = await finalPdf.embedFont(StandardFonts.Helvetica);         // trocar por TT Chocolates Medium
-    const fontRegular = await finalPdf.embedFont(StandardFonts.Helvetica);        // trocar por TT Chocolates Regular
+    const fontBold = await finalPdf.embedFont(StandardFonts.HelveticaBold);
+    const fontRegular = await finalPdf.embedFont(StandardFonts.Helvetica);
 
-    const corVermelha = hexToRgb('#dd4d4c');                                       // cor padrão vermelha Bornov
-    const corPreta = hexToRgb('#535353');                                           // cor texto escuro
-    const corCinza = hexToRgb('#888888');                                           // cor texto secundário
-    const corBranca = rgb(1, 1, 1);                                                // cor branca
+    const corVermelha = hexToRgb('#dd4d4c');
+    const corPreta = hexToRgb('#535353');
+    const corCinza = hexToRgb('#888888');
+    const corBranca = rgb(1, 1, 1);
+    const corEscura = hexToRgb('#222222');
+    const corLinha = hexToRgb('#e0e0e0');
 
     // ============================================================
     // PÁGINA 1 — CAPA
@@ -88,13 +101,13 @@ export async function gerarOrcamentoPdf(
       const capaDoc = await PDFDocument.load(capaBytes);
       const [capaPage] = await finalPdf.copyPages(capaDoc, [0]);
       const { width, height } = capaPage.getSize();
+      const escala = width / 2481;
 
-      // ── NÚMERO DO ORÇAMENTO ──────────────────────────────────
+      // Número do orçamento
       const numText = orcamento.numero;
-      const escala = width / 2481;                                                 // fator escala horizontal
-      const numX = 1920.72 * escala;                                              // X do Photoshop convertido
-      const numY = height - (177.46 * (height / 3509)) - 10;                     // Y invertido + ajuste fino
-      const numSize = 22 * (height / 3509) * (300 / 72);                         // fonte 22pt Photoshop → PDF
+      const numX = 1920.72 * escala;
+      const numY = height - (177.46 * (height / 3509)) - 10;
+      const numSize = 22 * (height / 3509) * (300 / 72);
       capaPage.drawText(numText, {
         x: numX,
         y: numY,
@@ -103,34 +116,31 @@ export async function gerarOrcamentoPdf(
         color: corBranca,
       });
 
-      // ── NOME DO CLIENTE ──────────────────────────────────────
-      // Usa primeiro nome ou nome comercial (máx 2 palavras)
+      // Nome do cliente — centralizado na caixa
       const nomeCompleto = orcamento.nomeCliente.toUpperCase();
       const palavras = nomeCompleto.split(' ');
-      const nomeExibir = palavras.slice(0, 2).join(' ');                          // máx 2 palavras
-      const clienteSize = 22 * (height / 3509) * (300 / 72);                     // fonte 22pt Photoshop → PDF
-      const clienteTextWidth = fontMedium.widthOfTextAtSize(nomeExibir, clienteSize);
-      const caixaClienteW = 453.93 * escala;                                      // largura da caixa no Photoshop
-      const clienteX = (1012.44 * escala) + (caixaClienteW / 2) - (clienteTextWidth / 2); // centralizado na caixa
-      const clienteY = height - (1444.46 * (height / 3509)) - 5;                 // Y invertido
+      const nomeExibir = palavras.length > 2 ? palavras.slice(0, 2).join(' ') : nomeCompleto;
+      const clienteSize = 22 * (height / 3509) * (300 / 72);
+      const caixaClienteW = 453.93 * escala;
+      const clienteTextW = fontRegular.widthOfTextAtSize(nomeExibir, clienteSize);
+      const clienteX = (1012.44 * escala) + (caixaClienteW / 2) - (clienteTextW / 2);
+      const clienteY = height - (1444.46 * (height / 3509)) - 5;
       capaPage.drawText(nomeExibir, {
         x: clienteX,
         y: clienteY,
         size: clienteSize,
-        font: fontMedium,
+        font: fontRegular,
         color: corPreta,
       });
 
-      // ── DATA DO ORÇAMENTO ────────────────────────────────────
+      // Data do orçamento
       const hoje = new Date();
-      const dataText = hoje.toLocaleDateString('pt-BR', {                          // formato dd/mm/aa
-        day: '2-digit',
-        month: '2-digit',
-        year: '2-digit',
+      const dataText = hoje.toLocaleDateString('pt-BR', {
+        day: '2-digit', month: '2-digit', year: '2-digit',
       });
-      const dataSize = 15 * (height / 3509) * (300 / 72);                        // fonte 15pt Photoshop → PDF
-      const dataX = 1873.53 * escala;                                             // X do Photoshop convertido
-      const dataY = height - (3282.81 * (height / 3509)) - 5;                    // Y invertido
+      const dataSize = 15 * (height / 3509) * (300 / 72);
+      const dataX = 1873.53 * escala;
+      const dataY = height - (3282.81 * (height / 3509)) - 5;
       capaPage.drawText(dataText, {
         x: dataX,
         y: dataY,
@@ -171,7 +181,7 @@ export async function gerarOrcamentoPdf(
         pageWidth = 595;
         pageHeight = 842;
       }
-      y = pageHeight - 75;                                                         // começa 75pt abaixo do topo
+      y = pageHeight - 75;
     };
 
     const checkNovaPage = async (espacoNecessario: number) => {
@@ -183,25 +193,26 @@ export async function gerarOrcamentoPdf(
     await adicionarPagina();
 
     const lineHeight = 18;
-    const sectionGap = 16;
+    const sectionGap = 14;
 
-    const drawLinha = (cor = hexToRgb('#dddddd'), espessura = 0.5) => {
+    const drawLinha = () => {
       page.drawLine({
         start: { x: marginLeft, y },
         end: { x: marginLeft + contentWidth, y },
-        thickness: espessura,
-        color: cor,
+        thickness: 0.5,
+        color: corLinha,
       });
       y -= 8;
     };
 
-    const drawSecaoTitulo = (texto: string) => {
+    const drawSecaoTitulo = async (texto: string) => {
+      await checkNovaPage(40);
       page.drawRectangle({
         x: marginLeft,
         y: y - 6,
         width: contentWidth,
         height: 22,
-        color: corVermelha,                                                        // #dd4d4c
+        color: corVermelha,
       });
       page.drawText(texto.toUpperCase(), {
         x: marginLeft + 10,
@@ -213,94 +224,149 @@ export async function gerarOrcamentoPdf(
       y -= 30;
     };
 
-    // ── CABEÇALHO DA PÁGINA DE CONTEÚDO ─────────────────────────
-    page.drawText('PROPOSTA AUDIOVISUAL', {
+    // ── CABEÇALHO — DADOS DA PROPOSTA ───────────────────────────
+    page.drawText('DADOS DA PROPOSTA', {
       x: marginLeft,
       y,
       size: 16,
       font: fontBold,
-      color: corPreta,
+      color: corEscura,
     });
-    const numW = fontBold.widthOfTextAtSize(orcamento.numero, 12);
-    page.drawText(orcamento.numero, {
-      x: marginLeft + contentWidth - numW,
-      y,
-      size: 12,
-      font: fontBold,
-      color: corVermelha,
-    });
-    y -= 18;
+    y -= 6;
 
-    if (orcamento.nomeCliente) {
-      page.drawText(orcamento.nomeCliente.toUpperCase(), {
-        x: marginLeft,
-        y,
-        size: 10,
-        font: fontMedium,
-        color: corCinza,
-      });
-      y -= 14;
-    }
-
-    if (orcamento.localEvento) {
-      page.drawText(`Local: ${orcamento.localEvento}`, {
-        x: marginLeft,
-        y,
-        size: 9,
-        font: fontRegular,
-        color: corCinza,
-      });
-      y -= 14;
-    }
-
-    y -= sectionGap;
     page.drawLine({
       start: { x: marginLeft, y },
       end: { x: marginLeft + contentWidth, y },
-      thickness: 1,
+      thickness: 1.5,
       color: corVermelha,
     });
-    y -= sectionGap;
+    y -= 12;
 
-    // ── DADOS DO CLIENTE ─────────────────────────────────────────
-    const dadosCliente = [
-      { label: 'Cliente', valor: orcamento.nomeCliente },
-      { label: 'CNPJ/CPF', valor: orcamento.cnpjCpf },
-      { label: 'E-mail', valor: orcamento.emailPrincipal },
-      { label: 'Telefone', valor: orcamento.telefone },
-      { label: 'Responsável', valor: orcamento.responsavel },
-    ].filter(d => d.valor);
+    // Responsável
+    if (orcamento.responsavel) {
+      page.drawText('Responsável:', {
+        x: marginLeft,
+        y,
+        size: 9,
+        font: fontBold,
+        color: corCinza,
+      });
+      page.drawText(orcamento.responsavel, {
+        x: marginLeft + 65,
+        y,
+        size: 9,
+        font: fontRegular,
+        color: corPreta,
+      });
+      y -= lineHeight;
+    }
 
-    if (dadosCliente.length > 0) {
-      await checkNovaPage(40 + dadosCliente.length * lineHeight);
-      drawSecaoTitulo('Dados do Cliente');
-      for (const dado of dadosCliente) {
-        await checkNovaPage(lineHeight + 4);
-        page.drawText(`${dado.label}:`, {
-          x: marginLeft + 8,
+    // Local + Data na mesma linha
+    const temLocal = !!orcamento.localEvento;
+    const temData = !!orcamento.dataEventoInicio;
+
+    if (temLocal || temData) {
+      if (temLocal) {
+        page.drawText('Local:', {
+          x: marginLeft,
           y,
           size: 9,
           font: fontBold,
           color: corCinza,
         });
-        page.drawText(dado.valor, {
-          x: marginLeft + 90,
+        page.drawText(orcamento.localEvento, {
+          x: marginLeft + 35,
           y,
           size: 9,
           font: fontRegular,
           color: corPreta,
         });
-        y -= lineHeight;
       }
-      y -= sectionGap;
+
+      if (temData) {
+        const dataInicio = formatarData(orcamento.dataEventoInicio);
+        const dataFim = orcamento.dataEventoFim ? formatarData(orcamento.dataEventoFim) : '';
+        const dataTexto = dataFim ? `${dataInicio} a ${dataFim}` : dataInicio;
+        page.drawText('Data:', {
+          x: marginLeft + contentWidth / 2,
+          y,
+          size: 9,
+          font: fontBold,
+          color: corCinza,
+        });
+        page.drawText(dataTexto, {
+          x: marginLeft + contentWidth / 2 + 30,
+          y,
+          size: 9,
+          font: fontRegular,
+          color: corPreta,
+        });
+      }
+      y -= lineHeight + 4;
     }
+
+    y -= sectionGap;
+
+    // ── DADOS DO CLIENTE ─────────────────────────────────────────
+    await drawSecaoTitulo('Dados do Cliente');
+
+    // Empresa
+    page.drawText('Empresa:', {
+      x: marginLeft + 8,
+      y,
+      size: 9,
+      font: fontBold,
+      color: corCinza,
+    });
+    page.drawText(orcamento.nomeCliente, {
+      x: marginLeft + 58,
+      y,
+      size: 9,
+      font: fontRegular,
+      color: corPreta,
+    });
+    y -= lineHeight;
+
+    // CNPJ + Telefone na mesma linha
+    if (orcamento.cnpjCpf) {
+      page.drawText('CNPJ/CPF:', {
+        x: marginLeft + 8,
+        y,
+        size: 9,
+        font: fontBold,
+        color: corCinza,
+      });
+      page.drawText(orcamento.cnpjCpf, {
+        x: marginLeft + 60,
+        y,
+        size: 9,
+        font: fontRegular,
+        color: corPreta,
+      });
+    }
+    if (orcamento.telefone) {
+      page.drawText('Telefone:', {
+        x: marginLeft + contentWidth / 2,
+        y,
+        size: 9,
+        font: fontBold,
+        color: corCinza,
+      });
+      page.drawText(orcamento.telefone, {
+        x: marginLeft + contentWidth / 2 + 52,
+        y,
+        size: 9,
+        font: fontRegular,
+        color: corPreta,
+      });
+    }
+    y -= lineHeight + sectionGap;
 
     // ── BLOCOS DE SERVIÇO ────────────────────────────────────────
     for (const bloco of orcamento.blocos) {
       if (!bloco.nome) continue;
       const itensPdf = bloco.itens.filter(i => i.exibirNoPdf !== false);
-      await checkNovaPage(50 + itensPdf.length * (lineHeight + 8));
-      drawSecaoTitulo(bloco.nome);
+      await drawSecaoTitulo(bloco.nome);
 
       for (const item of itensPdf) {
         await checkNovaPage(lineHeight + 8);
@@ -336,8 +402,7 @@ export async function gerarOrcamentoPdf(
     // ── EXTRAS ───────────────────────────────────────────────────
     const extrasValidos = orcamento.extras.filter(e => e.nome && (e.valorDia * e.diarias) > 0);
     if (extrasValidos.length > 0) {
-      await checkNovaPage(50 + extrasValidos.length * lineHeight);
-      drawSecaoTitulo('Extras');
+      await drawSecaoTitulo('Extras');
       for (const extra of extrasValidos) {
         await checkNovaPage(lineHeight + 8);
         const valorExtra = fmt(extra.valorDia * extra.diarias);
@@ -363,78 +428,88 @@ export async function gerarOrcamentoPdf(
     }
 
     // ── DESPESAS DE DESLOCAMENTO ─────────────────────────────────
-    await checkNovaPage(30);
-    page.drawText('Despesas de deslocamento', {
-      x: marginLeft + 8,
-      y,
-      size: 9,
-      font: fontRegular,
-      color: corCinza,
-    });
-    const inclW = fontRegular.widthOfTextAtSize('incluso', 9);
-    page.drawText('incluso', {
-      x: marginLeft + contentWidth - inclW,
-      y,
-      size: 9,
-      font: fontRegular,
-      color: corCinza,
-    });
-    y -= lineHeight;
-    drawLinha();
-    y -= sectionGap;
+    const totalDesp = (orcamento.despAlimentacao || 0) +
+      (orcamento.despTransporte || 0) +
+      (orcamento.despHospedagem || 0) +
+      (orcamento.despPedagio || 0);
 
-    // ── PROPOSTA FINAL ───────────────────────────────────────────
-    const totalBlocos = orcamento.blocos.filter(b => b.nome);
-    await checkNovaPage(60 + (totalBlocos.length + extrasValidos.length) * lineHeight + 50);
-    drawSecaoTitulo('Proposta Final');
+    const despesas = [
+      { label: 'Alimentação', valor: orcamento.despAlimentacao },
+      { label: 'Transporte', valor: orcamento.despTransporte },
+      { label: 'Hospedagem', valor: orcamento.despHospedagem },
+      { label: 'Pedágio / Estacionamento', valor: orcamento.despPedagio },
+    ].filter(d => d.valor > 0);
 
-    for (const bloco of totalBlocos) {
-      await checkNovaPage(lineHeight + 8);
-      const valorBloco = bloco.valorManual > 0 ? fmt(bloco.valorManual) : '';
-      page.drawText(bloco.nome.toUpperCase(), {
+    if (despesas.length > 0) {
+      await drawSecaoTitulo('Despesas de Deslocamento');
+      for (const desp of despesas) {
+        await checkNovaPage(lineHeight);
+        page.drawText(desp.label, {
+          x: marginLeft + 8,
+          y,
+          size: 9,
+          font: fontRegular,
+          color: corCinza,
+        });
+        y -= lineHeight;
+      }
+      // Total despesas
+      await checkNovaPage(20);
+      page.drawLine({
+        start: { x: marginLeft, y },
+        end: { x: marginLeft + contentWidth, y },
+        thickness: 0.5,
+        color: corLinha,
+      });
+      y -= 10;
+      const totalDespText = fmt(totalDesp);
+      const totalDespW = fontBold.widthOfTextAtSize(totalDespText, 9);
+      page.drawText('Total', {
         x: marginLeft + 8,
         y,
         size: 9,
         font: fontBold,
         color: corPreta,
       });
-      if (valorBloco) {
-        const vW = fontBold.widthOfTextAtSize(valorBloco, 9);
-        page.drawText(valorBloco, {
-          x: marginLeft + contentWidth - vW,
-          y,
-          size: 9,
-          font: fontBold,
-          color: corPreta,
-        });
-      }
-      y -= lineHeight;
-      drawLinha();
+      page.drawText(totalDespText, {
+        x: marginLeft + contentWidth - totalDespW,
+        y,
+        size: 9,
+        font: fontBold,
+        color: corPreta,
+      });
+      y -= lineHeight + sectionGap;
     }
 
-    for (const extra of extrasValidos) {
+    // ── PROPOSTA FINAL ───────────────────────────────────────────
+    const blocosComValor = orcamento.blocos.filter(b => b.nome && b.valorManual > 0);
+    const totalFinal = blocosComValor.reduce((acc, b) => acc + b.valorManual, 0);
+
+    await drawSecaoTitulo('Proposta Final');
+
+    for (const bloco of blocosComValor) {
       await checkNovaPage(lineHeight + 8);
-      const valorExtra = fmt(extra.valorDia * extra.diarias);
-      const vW = fontRegular.widthOfTextAtSize(valorExtra, 9);
-      page.drawText(extra.nome, {
+      const valorBloco = fmt(bloco.valorManual);
+      const vW = fontBold.widthOfTextAtSize(valorBloco, 9);
+      page.drawText(bloco.nome, {
         x: marginLeft + 8,
         y,
         size: 9,
-        font: fontRegular,
-        color: corCinza,
+        font: fontBold,
+        color: corPreta,
       });
-      page.drawText(valorExtra, {
+      page.drawText(valorBloco, {
         x: marginLeft + contentWidth - vW,
         y,
         size: 9,
-        font: fontRegular,
-        color: corCinza,
+        font: fontBold,
+        color: corPreta,
       });
       y -= lineHeight;
       drawLinha();
     }
 
-    // ── TOTAL ────────────────────────────────────────────────────
+    // TOTAL
     await checkNovaPage(40);
     y -= 8;
     page.drawRectangle({
@@ -442,7 +517,7 @@ export async function gerarOrcamentoPdf(
       y: y - 6,
       width: contentWidth,
       height: 26,
-      color: hexToRgb('#222222'),
+      color: corEscura,
     });
     page.drawText('TOTAL', {
       x: marginLeft + 10,
@@ -451,7 +526,7 @@ export async function gerarOrcamentoPdf(
       font: fontBold,
       color: corBranca,
     });
-    const totalText = fmt(orcamento.valorCliente);
+    const totalText = fmt(totalFinal);
     const totalW = fontBold.widthOfTextAtSize(totalText, 13);
     page.drawText(totalText, {
       x: marginLeft + contentWidth - totalW,
@@ -469,7 +544,7 @@ export async function gerarOrcamentoPdf(
       y,
       size: 10,
       font: fontBold,
-      color: corPreta,
+      color: corEscura,
     });
     y -= 16;
     page.drawText(orcamento.condicaoPagamento, {
@@ -490,7 +565,7 @@ export async function gerarOrcamentoPdf(
         y,
         size: 9,
         font: fontBold,
-        color: corPreta,
+        color: corEscura,
       });
       y -= 14;
       const palavrasObs = orcamento.observacoes.split(' ');
@@ -509,7 +584,6 @@ export async function gerarOrcamentoPdf(
       if (linha) {
         await checkNovaPage(12);
         page.drawText(linha, { x: marginLeft, y, size: 8, font: fontRegular, color: corCinza });
-        y -= 12;
       }
     }
 
