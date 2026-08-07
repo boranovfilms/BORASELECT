@@ -11,6 +11,7 @@ interface Orcamento {
   numero: string;
   cliente: string;
   tipo: string;
+  nomeCliente: string;
   valorCliente: number;
   status: 'rascunho' | 'enviado' | 'aprovado' | 'rejeitado';
   criadoEm?: any;
@@ -162,7 +163,7 @@ export default function Orcamentos() {
                   <td className="px-6 py-4">
                     <span className="text-[#ff5351] font-black text-sm">{orc.numero}</span>
                   </td>
-                  <td className="px-6 py-4 text-white font-bold text-sm">{orc.cliente}</td>
+                  <td className="px-6 py-4 text-white font-bold text-sm">{orc.nomeCliente}</td>
                   <td className="px-6 py-4 text-zinc-400 text-xs">{orc.tipo}</td>
                   <td className="px-6 py-4 text-right">
                     <span className="text-emerald-400 font-black text-sm">
