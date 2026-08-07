@@ -11,7 +11,7 @@ interface Orcamento {
   numero: string;
   cliente: string;
   tipo: string;
-  totalCliente: number;
+  valorCliente: number;
   status: 'rascunho' | 'enviado' | 'aprovado' | 'rejeitado';
   criadoEm?: any;
   updatedAt?: any;
@@ -53,7 +53,7 @@ export default function Orcamentos() {
     }
   };
 
-  const totalAprovados = orcamentos.filter(o => o.status === 'aprovado').reduce((acc, o) => acc + (o.totalCliente || 0), 0);
+  const totalAprovados = orcamentos.filter(o => o.status === 'aprovado').reduce((acc, o) => acc + (o.valorCliente || 0), 0);
   const totalEnviados = orcamentos.filter(o => o.status === 'enviado').length;
   const totalRascunhos = orcamentos.filter(o => o.status === 'rascunho').length;
 
@@ -166,7 +166,7 @@ export default function Orcamentos() {
                   <td className="px-6 py-4 text-zinc-400 text-xs">{orc.tipo}</td>
                   <td className="px-6 py-4 text-right">
                     <span className="text-emerald-400 font-black text-sm">
-                      {(orc.totalCliente || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                      {(orc.valorCliente || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                     </span>
                   </td>
                   <td className="px-6 py-4 text-center">
