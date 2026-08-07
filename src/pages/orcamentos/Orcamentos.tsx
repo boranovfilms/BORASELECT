@@ -9,21 +9,28 @@ import { cn } from '../../lib/utils';
 interface Orcamento {
   id?: string;
   numero: string;
-  cliente: string;
-  tipo: string;
   nomeCliente: string;
+  nomeEvento: string;
   valorCliente: number;
-  status: 'rascunho' | 'enviado' | 'aprovado' | 'rejeitado';
+  status: 'rascunho' | 'enviado' | 'aprovado' | 'reprovado' | 'alterado' | 'cancelado';
   criadoEm?: any;
   updatedAt?: any;
 }
 
 const STATUS_CONFIG: Record<string, { label: string; class: string }> = {
-  rascunho: { label: 'Rascunho', class: 'bg-zinc-800 text-zinc-400 border-zinc-700' },
+  rascunho: { label: 'Gerado', class: 'bg-zinc-800 text-zinc-400 border-zinc-700' },
   enviado: { label: 'Enviado', class: 'bg-blue-500/10 text-blue-400 border-blue-500/20' },
-  aprovado: { label: 'Aprovado ✓', class: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' },
-  rejeitado: { label: 'Rejeitado', class: 'bg-red-500/10 text-red-400 border-red-500/20' },
+  aprovado: { label: 'Aprovado', class: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' },
+  reprovado: { label: 'Reprovado', class: 'bg-red-500/10 text-red-400 border-red-500/20' },
+  alterado: { label: 'Alterado', class: 'bg-amber-500/10 text-amber-400 border-amber-500/20' },
+  cancelado: { label: 'Cancelado', class: 'bg-zinc-800 text-zinc-600 border-zinc-700' },
 };
+
+function primeiroSegundoNome(nome: string): string {
+  if (!nome) return '—';
+  const partes = nome.trim().split(' ');
+  return partes.slice(0, 2).join(' ');
+}
 
 export default function Orcamentos() {
   const [orcamentos, setOrcamentos] = useState<Orcamento[]>([]);
@@ -34,8 +41,8 @@ export default function Orcamentos() {
     const unsub = onSnapshot(collection(db, 'orcamentos'), snap => {
       const data = snap.docs.map(d => ({ id: d.id, ...d.data() })) as Orcamento[];
       data.sort((a, b) => {
-        const dateA = a.criadoEm?.toDate ? a.criadoEm.toDate() : new Date(a.criadoEm || 0);
-        const dateB = b.criadoEm?.toDate ? b.criadoEm.toDate() : new Date(b.criadoEm || 0);
+        const dateA = a.criadoEm?.toDate ? a.criadoEm.toDate() : new Date(0);
+        const dateB = b.criadoEm?.toDate ? b.criadoEm.toDate() : new Date(0);
         return dateB.getTime() - dateA.getTime();
       });
       setOrcamentos(data);
@@ -60,7 +67,6 @@ export default function Orcamentos() {
 
   return (
     <div className="space-y-8 pb-20 text-left">
-      {/* Header */}
       <header className="flex items-start justify-between gap-4">
         <div>
           <p className="text-[11px] uppercase tracking-[0.4em] text-[#ff5351] font-black mb-2">Boranov</p>
@@ -116,18 +122,14 @@ export default function Orcamentos() {
             {totalAprovados.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
           </p>
           <div className="flex gap-3 mt-3">
-            <span className="text-[9px] font-black uppercase text-zinc-500">
-              {totalEnviados} enviados
-            </span>
+            <span className="text-[9px] font-black uppercase text-zinc-500">{totalEnviados} enviados</span>
             <span className="text-zinc-700">•</span>
-            <span className="text-[9px] font-black uppercase text-zinc-500">
-              {totalRascunhos} rascunhos
-            </span>
+            <span className="text-[9px] font-black uppercase text-zinc-500">{totalRascunhos} gerados</span>
           </div>
         </div>
       </div>
 
-      {/* Lista de orçamentos */}
+      {/* Lista */}
       {loading ? (
         <div className="flex items-center justify-center py-20">
           <Loader2 className="w-8 h-8 animate-spin text-[#ff5351]" />
@@ -142,7 +144,7 @@ export default function Orcamentos() {
         <div className="bg-[#1f1f1f] border border-zinc-800 rounded-[24px] overflow-hidden">
           <div className="px-6 py-4 border-b border-zinc-800">
             <h2 className="text-xs font-black uppercase tracking-widest text-white">
-              {orcamentos.length} orçamentos
+              {orcamentos.length} orçamento{orcamentos.length > 1 ? 's' : ''}
             </h2>
           </div>
           <table className="w-full text-left border-collapse">
@@ -150,10 +152,9 @@ export default function Orcamentos() {
               <tr className="border-b border-zinc-800 bg-zinc-900/50">
                 <th className="px-6 py-3 text-[10px] font-black uppercase tracking-widest text-zinc-500">Número</th>
                 <th className="px-6 py-3 text-[10px] font-black uppercase tracking-widest text-zinc-500">Cliente</th>
-                <th className="px-6 py-3 text-[10px] font-black uppercase tracking-widest text-zinc-500">Tipo</th>
+                <th className="px-6 py-3 text-[10px] font-black uppercase tracking-widest text-zinc-500">Nome do Evento</th>
                 <th className="px-6 py-3 text-[10px] font-black uppercase tracking-widest text-zinc-500 text-right">Valor</th>
                 <th className="px-6 py-3 text-[10px] font-black uppercase tracking-widest text-zinc-500 text-center">Status</th>
-                <th className="px-6 py-3 text-[10px] font-black uppercase tracking-widest text-zinc-500 text-center">Data</th>
                 <th className="px-6 py-3 text-[10px] font-black uppercase tracking-widest text-zinc-500 text-right">Ações</th>
               </tr>
             </thead>
@@ -163,22 +164,22 @@ export default function Orcamentos() {
                   <td className="px-6 py-4">
                     <span className="text-[#ff5351] font-black text-sm">{orc.numero}</span>
                   </td>
-                  <td className="px-6 py-4 text-white font-bold text-sm">{orc.nomeCliente}</td>
-                  <td className="px-6 py-4 text-zinc-400 text-xs">{orc.tipo}</td>
+                  <td className="px-6 py-4 text-white font-bold text-sm">
+                    {primeiroSegundoNome(orc.nomeCliente)}
+                  </td>
+                  <td className="px-6 py-4 text-zinc-400 text-sm">
+                    {orc.nomeEvento || '—'}
+                  </td>
                   <td className="px-6 py-4 text-right">
                     <span className="text-emerald-400 font-black text-sm">
                       {(orc.valorCliente || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                     </span>
                   </td>
                   <td className="px-6 py-4 text-center">
-                    <span className={cn('px-2 py-0.5 rounded-full border text-[9px] font-black uppercase tracking-widest', STATUS_CONFIG[orc.status]?.class || STATUS_CONFIG.rascunho.class)}>
-                      {STATUS_CONFIG[orc.status]?.label || 'Rascunho'}
+                    <span className={cn('px-2 py-0.5 rounded-full border text-[9px] font-black uppercase tracking-widest',
+                      STATUS_CONFIG[orc.status]?.class || STATUS_CONFIG.rascunho.class)}>
+                      {STATUS_CONFIG[orc.status]?.label || 'Gerado'}
                     </span>
-                  </td>
-                  <td className="px-6 py-4 text-center text-zinc-500 text-xs">
-                    {orc.criadoEm?.toDate
-                      ? new Intl.DateTimeFormat('pt-BR').format(orc.criadoEm.toDate())
-                      : '—'}
                   </td>
                   <td className="px-6 py-4 text-right">
                     <div className="flex items-center justify-end gap-2">
