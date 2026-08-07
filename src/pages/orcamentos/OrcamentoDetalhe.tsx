@@ -417,6 +417,7 @@ export default function OrcamentoDetalhe() {
         await updateDoc(doc(db, 'orcamentos', docId), { somenteLeitura: true, updatedAt: serverTimestamp() });
         const novosDados = { ...form, ...calc, id: undefined, versao: novaVersao, numero: novoNumero, status: novaVersao > 1 ? 'alterado' : 'rascunho', somenteLeitura: false, criadoEm: serverTimestamp(), updatedAt: serverTimestamp() };
         await addDoc(collection(db, 'orcamentos'), novosDados);
+        setSomenteLeitura(true);
       }
 
       const configSnap = await getDoc(doc(db, 'configuracoes', 'orcamento'));
