@@ -375,9 +375,9 @@ export default function OrcamentoDetalhe() {
           updatedAt: serverTimestamp(),
         });
 
+        const { id: _id2, ...formSemId2 } = form as any;
         const novosDados = {
-          ...form, ...calc,
-          id: undefined,
+          ...formSemId2, ...calc,
           versao: novaVersao,
           numero: novoNumero,
           status: novaVersao > 1 ? 'alterado' : 'rascunho',
@@ -415,7 +415,8 @@ export default function OrcamentoDetalhe() {
         const numeroBase = (form.numero || '').split('-v')[0];
         const novoNumero = `${numeroBase}-v${novaVersao}`;
         await updateDoc(doc(db, 'orcamentos', docId), { somenteLeitura: true, updatedAt: serverTimestamp() });
-        const novosDados = { ...form, ...calc, id: undefined, versao: novaVersao, numero: novoNumero, status: novaVersao > 1 ? 'alterado' : 'rascunho', somenteLeitura: false, criadoEm: serverTimestamp(), updatedAt: serverTimestamp() };
+        const { id: _id, ...formSemId } = form as any;
+        const novosDados = { ...formSemId, ...calc, versao: novaVersao, numero: novoNumero, status: novaVersao > 1 ? 'alterado' : 'rascunho', somenteLeitura: false, criadoEm: serverTimestamp(), updatedAt: serverTimestamp() };
         await addDoc(collection(db, 'orcamentos'), novosDados);
         setSomenteLeitura(true);
       }
