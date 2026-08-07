@@ -36,6 +36,7 @@ interface Extra {
 interface Orcamento {
   id?: string;
   numero: string;
+  versao: number;
   nomeCliente: string;
   nomeEvento: string;
   cnpjCpf: string;
@@ -75,7 +76,8 @@ interface Orcamento {
   totalSugerido: number;
   valorCliente: number;
   lucroReal: number;
-  status: 'rascunho' | 'enviado' | 'aprovado' | 'rejeitado';
+  status: 'rascunho' | 'enviado' | 'aprovado' | 'reprovado' | 'alterado' | 'cancelado';
+  somenteLeitura?: boolean;
   observacoes: string;
   criadoEm?: any;
   updatedAt?: any;
@@ -118,6 +120,11 @@ function isCnpj(v: string) {
   return v.replace(/\D/g, '').length === 14;
 }
 
+function primeiroNome(nome: string): string {
+  if (!nome) return 'BORANOV';
+  return nome.trim().split(' ')[0];
+}
+
 export default function OrcamentoDetalhe() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -130,9 +137,11 @@ export default function OrcamentoDetalhe() {
   const [dadosExpandidos, setDadosExpandidos] = useState(false);
   const [equipamentos, setEquipamentos] = useState<Equipamento[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
+  const [somenteLeitura, setSomenteLeitura] = useState(false);
 
   const [form, setForm] = useState<Partial<Orcamento>>({
     numero: '',
+    versao: 1,
     nomeCliente: '', nomeEvento: '', cnpjCpf: '', emailPrincipal: '',
     razaoSocial: '', telefone: '', nomeComercial: '', website: '', responsavel: '',
     cep: '', endereco: '', numero_end: '', complemento: '', bairro: '', cidade: '', estado: '',
@@ -162,13 +171,21 @@ export default function OrcamentoDetalhe() {
         if (!isNovo && id) {
           const docSnap = await getDoc(doc(db, 'orcamentos', id));
           if (docSnap.exists()) {
-            setForm({ id: docSnap.id, ...docSnap.data() } as Orcamento);
+            const data = { id: docSnap.id, ...docSnap.data() } as Orcamento;
+            setForm(data);
+            setSomenteLeitura(data.somenteLeitura || false);
           }
         } else {
           const orcSnap = await getDocs(collection(db, 'orcamentos'));
           const ano = new Date().getFullYear();
-          const proximo = (orcSnap.docs.length + 1).toString().padStart(3, '0');
-          setForm(prev => ({ ...prev, numero: `${proximo}-${ano}` }));
+          // Conta apenas orçamentos com número base único
+          const numerosBase = new Set(
+            orcSnap.docs
+              .map(d => d.data().numero as string)
+              .map(n => n.split('-v')[0])
+          );
+          const proximo = (numerosBase.size + 1).toString().padStart(3, '0');
+          setForm(prev => ({ ...prev, numero: `${proximo}-${ano}-v1`, versao: 1 }));
         }
       } catch {
         toast.error('Erro ao carregar dados');
@@ -327,25 +344,59 @@ export default function OrcamentoDetalhe() {
     });
   };
 
-  const handleSalvar = async (novoStatus?: string) => {
+  const handleSalvar = async () => {
     if (!form.nomeCliente?.trim()) { toast.error('Nome do cliente é obrigatório'); return; }
     if (!form.cnpjCpf?.trim()) { toast.error('CNPJ/CPF é obrigatório'); return; }
     setSalvando(true);
     try {
-      const dados = { ...form, status: novoStatus || form.status, updatedAt: serverTimestamp() };
-      console.log('Tentando salvar:', JSON.stringify(dados, null, 2));
+      const calc = calcular(form);
       const docId = form.id || id;
+
       if (!docId || docId === 'novo') {
-        const ref = await addDoc(collection(db, 'orcamentos'), { ...dados, criadoEm: serverTimestamp() });
-        setForm(prev => ({ ...prev, id: ref.id }));
-        toast.success('Orçamento criado!');
+        // Novo orçamento — cria v1
+        const dados = {
+          ...form, ...calc,
+          versao: 1,
+          status: 'rascunho',
+          somenteLeitura: false,
+          updatedAt: serverTimestamp(),
+          criadoEm: serverTimestamp(),
+        };
+        const ref = await addDoc(collection(db, 'orcamentos'), dados);
+        setForm(prev => ({ ...prev, id: ref.id, ...calc }));
+        toast.success('Orçamento salvo!');
         navigate(`/orcamentos/${ref.id}`);
       } else {
-        await updateDoc(doc(db, 'orcamentos', docId), dados);
-        toast.success('Orçamento salvo!');
+        // Orçamento existente — cria nova versão
+        const versaoAtual = form.versao || 1;
+        const novaVersao = versaoAtual + 1;
+        const numeroBase = (form.numero || '').split('-v')[0];
+        const novoNumero = `${numeroBase}-v${novaVersao}`;
+
+        // Marca versão atual como somente leitura
+        await updateDoc(doc(db, 'orcamentos', docId), {
+          somenteLeitura: true,
+          updatedAt: serverTimestamp(),
+        });
+
+        // Cria nova versão
+        const novosDados = {
+          ...form, ...calc,
+          id: undefined,
+          versao: novaVersao,
+          numero: novoNumero,
+          status: novaVersao > 1 ? 'alterado' : 'rascunho',
+          somenteLeitura: false,
+          criadoEm: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        };
+        const ref = await addDoc(collection(db, 'orcamentos'), novosDados);
+        toast.success(`Orçamento salvo como ${novoNumero}!`);
+        navigate(`/orcamentos/${ref.id}`);
       }
-    } catch {
-      toast.error('Erro ao salvar');
+    } catch (err: any) {
+      console.error('Erro ao salvar:', err);
+      toast.error(`Erro ao salvar: ${err.message}`);
     } finally {
       setSalvando(false);
     }
@@ -355,8 +406,12 @@ export default function OrcamentoDetalhe() {
     if (!form.nomeCliente?.trim()) { toast.error('Preencha o nome do cliente'); return; }
     setGerandoPdf(true);
     try {
+      // Salva primeiro
+      await handleSalvar();
+
       const configSnap = await getDoc(doc(db, 'configuracoes', 'orcamento'));
       const config = configSnap.exists() ? configSnap.data() : {};
+
       await gerarOrcamentoPdf({
         numero: form.numero || '000-2026',
         nomeCliente: form.nomeCliente || '',
@@ -385,8 +440,9 @@ export default function OrcamentoDetalhe() {
         telefone: config.telefone || '',
         email: config.email || '',
         site: config.site || '',
-      });
-      toast.success('PDF gerado com sucesso!');
+      }, primeiroNome(form.nomeCliente || ''));
+
+      toast.success('PDF gerado!');
     } catch (error: any) {
       toast.error(`Erro ao gerar PDF: ${error.message}`);
     } finally {
@@ -420,22 +476,29 @@ export default function OrcamentoDetalhe() {
           <h1 className="text-4xl font-black text-white uppercase italic tracking-tight">
             {isNovo ? 'Novo Orçamento' : `Orçamento ${form.numero}`}
           </h1>
+          {somenteLeitura && (
+            <span className="mt-2 inline-flex items-center px-3 py-1 bg-amber-500/10 border border-amber-500/20 rounded-full text-amber-400 text-[9px] font-black uppercase tracking-widest">
+              Versão anterior — somente leitura
+            </span>
+          )}
         </div>
-        <div className="flex gap-2 shrink-0 mt-8">
-          <button onClick={() => handleSalvar('rascunho')} disabled={salvando}
-            className="h-10 px-4 bg-zinc-800 border border-zinc-700 text-zinc-400 rounded-xl font-black uppercase text-[9px] tracking-widest hover:text-white transition-all flex items-center gap-2 disabled:opacity-50">
-            {salvando ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />} Salvar Rascunho
-          </button>
-          <button onClick={handleGerarPdf} disabled={gerandoPdf}
-            className="h-10 px-5 bg-[#ff5351] text-white rounded-xl font-black uppercase text-[9px] tracking-widest hover:brightness-110 transition-all flex items-center gap-2 disabled:opacity-50 shadow-xl shadow-[#ff5351]/20">
-            {gerandoPdf ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
-            {gerandoPdf ? 'Gerando...' : 'Gerar PDF'}
-          </button>
-        </div>
+        {!somenteLeitura && (
+          <div className="flex gap-2 shrink-0 mt-8">
+            <button onClick={handleSalvar} disabled={salvando}
+              className="h-10 px-4 bg-zinc-800 border border-zinc-700 text-zinc-400 rounded-xl font-black uppercase text-[9px] tracking-widest hover:text-white transition-all flex items-center gap-2 disabled:opacity-50">
+              {salvando ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />} Salvar
+            </button>
+            <button onClick={handleGerarPdf} disabled={gerandoPdf}
+              className="h-10 px-5 bg-[#ff5351] text-white rounded-xl font-black uppercase text-[9px] tracking-widest hover:brightness-110 transition-all flex items-center gap-2 disabled:opacity-50 shadow-xl shadow-[#ff5351]/20">
+              {gerandoPdf ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
+              {gerandoPdf ? 'Gerando...' : 'Gerar PDF'}
+            </button>
+          </div>
+        )}
       </header>
 
       {/* DADOS DO CLIENTE */}
-      <div className="bg-[#1f1f1f] border border-zinc-800 rounded-[24px] overflow-hidden">
+      <div className={cn("bg-[#1f1f1f] border border-zinc-800 rounded-[24px] overflow-hidden", somenteLeitura && "opacity-75 pointer-events-none")}>
         <div className="p-5 border-b border-zinc-800">
           <h2 className="text-xs font-black uppercase tracking-widest text-white">Dados do Cliente</h2>
         </div>
@@ -444,24 +507,23 @@ export default function OrcamentoDetalhe() {
             <div>
               <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Nome do Cliente *</label>
               <input type="text" value={form.nomeCliente || ''} onChange={e => updateForm({ nomeCliente: e.target.value })}
-                placeholder="Ex: Irrigacana"
+                placeholder="Ex: Irrigacana" readOnly={somenteLeitura}
                 className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none" />
             </div>
             <div>
               <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Nome do Evento</label>
               <input type="text" value={form.nomeEvento || ''} onChange={e => updateForm({ nomeEvento: e.target.value })}
-                placeholder="Ex: 6º Irrigacana 2026"
+                placeholder="Ex: 6º Irrigacana 2026" readOnly={somenteLeitura}
                 className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none" />
             </div>
             <div>
               <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">CNPJ / CPF *</label>
               <div className="flex gap-2">
                 <input type="text" value={form.cnpjCpf || ''} onChange={e => updateForm({ cnpjCpf: e.target.value })}
-                  placeholder="00.000.000/0000-00 ou 000.000.000-00"
+                  placeholder="00.000.000/0000-00" readOnly={somenteLeitura}
                   className="flex-1 h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none" />
-                {isCnpj(form.cnpjCpf || '') && (
+                {isCnpj(form.cnpjCpf || '') && !somenteLeitura && (
                   <button onClick={buscarCnpj} disabled={buscandoCnpj}
-                    title="Buscar dados do CNPJ"
                     className="h-11 w-11 shrink-0 bg-zinc-800 border border-zinc-700 rounded-xl flex items-center justify-center text-zinc-400 hover:text-[#ff5351] hover:border-[#ff5351] transition-all disabled:opacity-50">
                     {buscandoCnpj ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
                   </button>
@@ -471,13 +533,13 @@ export default function OrcamentoDetalhe() {
             <div>
               <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">E-mail Principal</label>
               <input type="text" value={form.emailPrincipal || ''} onChange={e => updateForm({ emailPrincipal: e.target.value })}
-                placeholder="contato@empresa.com"
+                placeholder="contato@empresa.com" readOnly={somenteLeitura}
                 className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none" />
             </div>
             <div>
               <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Telefone</label>
               <input type="text" value={form.telefone || ''} onChange={e => updateForm({ telefone: e.target.value })}
-                placeholder="(00) 00000-0000"
+                placeholder="(00) 00000-0000" readOnly={somenteLeitura}
                 className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none" />
             </div>
           </div>
@@ -494,21 +556,25 @@ export default function OrcamentoDetalhe() {
                 <div>
                   <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Razão Social</label>
                   <input type="text" value={form.razaoSocial || ''} onChange={e => updateForm({ razaoSocial: e.target.value })}
+                    readOnly={somenteLeitura}
                     className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none" />
                 </div>
                 <div>
                   <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Nome Comercial</label>
                   <input type="text" value={form.nomeComercial || ''} onChange={e => updateForm({ nomeComercial: e.target.value })}
+                    readOnly={somenteLeitura}
                     className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none" />
                 </div>
                 <div>
                   <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Website</label>
                   <input type="text" value={form.website || ''} onChange={e => updateForm({ website: e.target.value })}
+                    readOnly={somenteLeitura}
                     className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none" />
                 </div>
                 <div>
                   <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Responsável</label>
                   <input type="text" value={form.responsavel || ''} onChange={e => updateForm({ responsavel: e.target.value })}
+                    readOnly={somenteLeitura}
                     className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none" />
                 </div>
               </div>
@@ -518,39 +584,44 @@ export default function OrcamentoDetalhe() {
                   <div>
                     <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">CEP</label>
                     <input type="text" value={form.cep || ''} onChange={e => updateForm({ cep: e.target.value })}
-                      placeholder="00000-000"
+                      placeholder="00000-000" readOnly={somenteLeitura}
                       className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none" />
                   </div>
                   <div>
                     <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Endereço</label>
                     <input type="text" value={form.endereco || ''} onChange={e => updateForm({ endereco: e.target.value })}
+                      readOnly={somenteLeitura}
                       className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none" />
                   </div>
                   <div>
                     <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Número</label>
                     <input type="text" value={form.numero_end || ''} onChange={e => updateForm({ numero_end: e.target.value })}
+                      readOnly={somenteLeitura}
                       className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none" />
                   </div>
                   <div>
                     <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Complemento</label>
                     <input type="text" value={form.complemento || ''} onChange={e => updateForm({ complemento: e.target.value })}
+                      readOnly={somenteLeitura}
                       className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none" />
                   </div>
                   <div>
                     <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Bairro</label>
                     <input type="text" value={form.bairro || ''} onChange={e => updateForm({ bairro: e.target.value })}
+                      readOnly={somenteLeitura}
                       className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none" />
                   </div>
                   <div className="grid grid-cols-[1fr_100px] gap-3">
                     <div>
                       <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Cidade</label>
                       <input type="text" value={form.cidade || ''} onChange={e => updateForm({ cidade: e.target.value })}
+                        readOnly={somenteLeitura}
                         className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none" />
                     </div>
                     <div>
                       <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Estado</label>
                       <input type="text" value={form.estado || ''} onChange={e => updateForm({ estado: e.target.value })}
-                        placeholder="SP"
+                        placeholder="SP" readOnly={somenteLeitura}
                         className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none" />
                     </div>
                   </div>
@@ -566,28 +637,32 @@ export default function OrcamentoDetalhe() {
               <div>
                 <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Local do Evento</label>
                 <input type="text" value={form.localEvento || ''} onChange={e => updateForm({ localEvento: e.target.value })}
-                  placeholder="Ex: Ribeirão Preto/SP"
+                  placeholder="Ex: Ribeirão Preto/SP" readOnly={somenteLeitura}
                   className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none" />
               </div>
               <div>
                 <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Número de Diárias</label>
                 <input type="number" value={form.diarias || 1} min={1}
                   onChange={e => updateForm({ diarias: Number(e.target.value) })}
+                  readOnly={somenteLeitura}
                   className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none text-center" />
               </div>
               <div>
                 <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Data Início do Evento</label>
                 <input type="date" value={form.dataEventoInicio || ''} onChange={e => updateForm({ dataEventoInicio: e.target.value })}
+                  readOnly={somenteLeitura}
                   className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none" />
               </div>
               <div>
                 <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Data Fim do Evento (opcional)</label>
                 <input type="date" value={form.dataEventoFim || ''} onChange={e => updateForm({ dataEventoFim: e.target.value })}
+                  readOnly={somenteLeitura}
                   className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none" />
               </div>
               <div className="md:col-span-2">
                 <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Condição de Pagamento</label>
                 <select value={form.condicaoPagamento || ''} onChange={e => updateForm({ condicaoPagamento: e.target.value })}
+                  disabled={somenteLeitura}
                   className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none appearance-none">
                   {CONDICOES_PAGAMENTO.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
@@ -598,7 +673,7 @@ export default function OrcamentoDetalhe() {
       </div>
 
       {/* BLOCOS DE SERVIÇO */}
-      <div className="space-y-4">
+      <div className={cn("space-y-4", somenteLeitura && "opacity-75 pointer-events-none")}>
         {(form.blocos || []).map(bloco => (
           <div key={bloco.id} className="bg-[#1f1f1f] border border-zinc-800 rounded-[24px] overflow-hidden">
             <div className="p-4 border-b border-zinc-800 flex items-center gap-3 bg-zinc-900/50">
@@ -606,16 +681,20 @@ export default function OrcamentoDetalhe() {
                 blocos: (form.blocos || []).map(b => b.id === bloco.id ? { ...b, nome: e.target.value } : b)
               })}
                 placeholder="Nome do bloco (ex: Cobertura do Evento)"
+                readOnly={somenteLeitura}
                 className="flex-1 h-9 bg-transparent text-white text-sm font-black uppercase outline-none placeholder:text-zinc-600" />
-              <button onClick={() => removerBloco(bloco.id)} className="p-1.5 text-zinc-500 hover:text-red-400 transition-all">
-                <Trash2 className="w-4 h-4" />
-              </button>
+              {!somenteLeitura && (
+                <button onClick={() => removerBloco(bloco.id)} className="p-1.5 text-zinc-500 hover:text-red-400 transition-all">
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              )}
             </div>
             <div className="p-5 space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Template base</label>
                   <select value={bloco.templateId} onChange={e => carregarTemplate(bloco.id, e.target.value)}
+                    disabled={somenteLeitura}
                     className="w-full h-10 bg-zinc-900 border border-zinc-800 rounded-xl px-3 text-white text-sm focus:border-[#ff5351] outline-none appearance-none">
                     <option value="">Sem template (manual)</option>
                     {templates.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
@@ -624,6 +703,7 @@ export default function OrcamentoDetalhe() {
                 <div>
                   <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Valor manual (R$)</label>
                   <input type="number" value={bloco.valorManual || ''} placeholder="Automático pelo template"
+                    readOnly={somenteLeitura}
                     onChange={e => updateForm({
                       blocos: (form.blocos || []).map(b => b.id === bloco.id ? { ...b, valorManual: Number(e.target.value) } : b)
                     })}
@@ -651,7 +731,8 @@ export default function OrcamentoDetalhe() {
                             {fmt(item.valorDia * item.quantidade * (form.diarias || 1))}
                           </td>
                           <td className="px-4 py-2.5 text-center">
-                            <button onClick={() => toggleTipoItem(bloco.id, idx)} disabled={item.tipo === 'equipe'}
+                            <button onClick={() => toggleTipoItem(bloco.id, idx)}
+                              disabled={item.tipo === 'equipe' || somenteLeitura}
                               className={cn(
                                 'px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border transition-all',
                                 item.tipo === 'proprio' && 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20 cursor-pointer',
@@ -695,14 +776,16 @@ export default function OrcamentoDetalhe() {
           </div>
         ))}
 
-        <button onClick={adicionarBloco}
-          className="w-full h-12 border border-dashed border-zinc-700 rounded-2xl text-zinc-500 hover:text-white hover:border-zinc-500 transition-all text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2">
-          <Plus className="w-4 h-4" /> Adicionar bloco de serviço
-        </button>
+        {!somenteLeitura && (
+          <button onClick={adicionarBloco}
+            className="w-full h-12 border border-dashed border-zinc-700 rounded-2xl text-zinc-500 hover:text-white hover:border-zinc-500 transition-all text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2">
+            <Plus className="w-4 h-4" /> Adicionar bloco de serviço
+          </button>
+        )}
       </div>
 
       {/* DESPESAS + CALCULADORA */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className={cn("grid grid-cols-1 md:grid-cols-2 gap-6", somenteLeitura && "opacity-75 pointer-events-none")}>
         <div className="bg-[#1f1f1f] border border-zinc-800 rounded-[24px] overflow-hidden">
           <div className="p-5 border-b border-zinc-800">
             <h2 className="text-xs font-black uppercase tracking-widest text-white">
@@ -723,11 +806,11 @@ export default function OrcamentoDetalhe() {
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm">R$</span>
                   <input type="number" value={(form as any)[field] || 0}
                     onChange={e => updateForm({ [field]: Number(e.target.value) })}
+                    readOnly={somenteLeitura}
                     className="w-full h-10 bg-zinc-900 border border-zinc-800 rounded-xl pl-8 pr-3 text-white text-sm focus:border-[#ff5351] outline-none" />
                 </div>
               </div>
             ))}
-            
             <div className="pt-3 border-t border-zinc-800 flex items-center justify-between">
               <span className="text-sm text-zinc-500">Total despesas</span>
               <span className="text-sm font-black text-white">
@@ -750,6 +833,7 @@ export default function OrcamentoDetalhe() {
               <div className="flex items-center gap-2">
                 <input type="number" value={form.pctNota || 0} min={0} max={100}
                   onChange={e => updateForm({ pctNota: Number(e.target.value) })}
+                  readOnly={somenteLeitura}
                   className="w-20 h-10 bg-zinc-900 border border-zinc-800 rounded-xl px-3 text-white text-sm focus:border-[#ff5351] outline-none text-center" />
                 <span className="text-zinc-500 text-sm">%</span>
               </div>
@@ -759,6 +843,7 @@ export default function OrcamentoDetalhe() {
               <div className="flex items-center gap-2">
                 <input type="number" value={form.pctMargem || 0} min={0}
                   onChange={e => updateForm({ pctMargem: Number(e.target.value) })}
+                  readOnly={somenteLeitura}
                   className="w-20 h-10 bg-zinc-900 border border-zinc-800 rounded-xl px-3 text-white text-sm focus:border-[#ff5351] outline-none text-center" />
                 <span className="text-zinc-500 text-sm">%</span>
               </div>
@@ -775,7 +860,6 @@ export default function OrcamentoDetalhe() {
                   <span className="text-xs text-zinc-400">{fmt(value)}</span>
                 </div>
               ))}
-              
               <div className="flex items-center justify-between py-1 border-t border-zinc-800">
                 <span className="text-xs font-black text-white">Custo total real</span>
                 <span className="text-xs font-black text-white">{fmt(form.totalCustoReal || 0)}</span>
@@ -798,13 +882,15 @@ export default function OrcamentoDetalhe() {
       </div>
 
       {/* EXTRAS */}
-      <div className="bg-[#1f1f1f] border border-zinc-800 rounded-[24px] overflow-hidden">
+      <div className={cn("bg-[#1f1f1f] border border-zinc-800 rounded-[24px] overflow-hidden", somenteLeitura && "opacity-75 pointer-events-none")}>
         <div className="p-5 border-b border-zinc-800 flex items-center justify-between">
           <h2 className="text-xs font-black uppercase tracking-widest text-white">Extras (aparecem no PDF com valor)</h2>
-          <button onClick={adicionarExtra}
-            className="flex items-center gap-1.5 px-3 py-2 bg-zinc-800 border border-zinc-700 text-zinc-400 rounded-xl text-[9px] font-black uppercase tracking-widest hover:text-white transition-all">
-            <Plus className="w-3 h-3" /> Adicionar extra
-          </button>
+          {!somenteLeitura && (
+            <button onClick={adicionarExtra}
+              className="flex items-center gap-1.5 px-3 py-2 bg-zinc-800 border border-zinc-700 text-zinc-400 rounded-xl text-[9px] font-black uppercase tracking-widest hover:text-white transition-all">
+              <Plus className="w-3 h-3" /> Adicionar extra
+            </button>
+          )}
         </div>
         <div className="p-5">
           {(form.extras || []).length === 0 ? (
@@ -821,28 +907,30 @@ export default function OrcamentoDetalhe() {
               {(form.extras || []).map(extra => (
                 <div key={extra.id} className="grid grid-cols-[1fr_140px_80px_100px_auto] gap-3 items-center">
                   <input type="text" value={extra.nome} onChange={e => atualizarExtra(extra.id, 'nome', e.target.value)}
-                    placeholder="Nome do extra"
+                    placeholder="Nome do extra" readOnly={somenteLeitura}
                     className="h-10 bg-zinc-900 border border-zinc-800 rounded-xl px-3 text-white text-sm focus:border-[#ff5351] outline-none" />
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-xs">R$</span>
                     <input type="number" value={extra.valorDia || ''} onChange={e => atualizarExtra(extra.id, 'valorDia', Number(e.target.value))}
-                      placeholder="0,00"
+                      placeholder="0,00" readOnly={somenteLeitura}
                       className="w-full h-10 bg-zinc-900 border border-zinc-800 rounded-xl pl-8 pr-3 text-white text-sm focus:border-[#ff5351] outline-none" />
                   </div>
                   <input type="number" value={extra.diarias || 1} min={1}
                     onChange={e => atualizarExtra(extra.id, 'diarias', Number(e.target.value))}
+                    readOnly={somenteLeitura}
                     className="h-10 bg-zinc-900 border border-zinc-800 rounded-xl px-3 text-white text-sm focus:border-[#ff5351] outline-none text-center" />
                   <div className="h-10 bg-zinc-900/50 border border-zinc-800 rounded-xl px-3 flex items-center justify-end">
                     <span className="text-emerald-400 text-sm font-black">
                       {fmt((extra.valorDia || 0) * (extra.diarias || 1))}
                     </span>
                   </div>
-                  <button onClick={() => removerExtra(extra.id)} className="p-2 text-zinc-500 hover:text-red-400 transition-all">
-                    <X className="w-4 h-4" />
-                  </button>
+                  {!somenteLeitura && (
+                    <button onClick={() => removerExtra(extra.id)} className="p-2 text-zinc-500 hover:text-red-400 transition-all">
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
               ))}
-              
               <div className="flex items-center justify-between pt-2 border-t border-zinc-800">
                 <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Total extras</span>
                 <span className="text-sm font-black text-white">
@@ -855,7 +943,7 @@ export default function OrcamentoDetalhe() {
       </div>
 
       {/* PROPOSTA FINAL */}
-      <div className="bg-[#1f1f1f] border border-zinc-800 rounded-[24px] overflow-hidden">
+      <div className={cn("bg-[#1f1f1f] border border-zinc-800 rounded-[24px] overflow-hidden", somenteLeitura && "opacity-75 pointer-events-none")}>
         <div className="p-5 border-b border-zinc-800">
           <h2 className="text-xs font-black uppercase tracking-widest text-white">Proposta Final</h2>
         </div>
@@ -885,6 +973,7 @@ export default function OrcamentoDetalhe() {
                   const v = Number(e.target.value);
                   setForm(prev => ({ ...prev, valorCliente: v, lucroReal: v - (prev.totalCustoReal || 0) }));
                 }}
+                readOnly={somenteLeitura}
                 className="w-full h-14 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-2xl font-black focus:border-[#ff5351] outline-none" />
               <p className="text-[10px] text-zinc-600 mt-1">Você pode ajustar o valor sugerido</p>
             </div>
@@ -906,27 +995,30 @@ export default function OrcamentoDetalhe() {
             <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Observações (aparecem no PDF)</label>
             <textarea value={form.observacoes || ''} onChange={e => updateForm({ observacoes: e.target.value })}
               rows={3} placeholder="Ex: Todo o material será entregue via link do Google Drive..."
+              readOnly={somenteLeitura}
               className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-white text-sm focus:border-[#ff5351] outline-none resize-none" />
           </div>
         </div>
       </div>
 
       {/* Botões finais */}
-      <div className="flex items-center justify-end gap-3 pt-4 border-t border-zinc-800">
-        <button onClick={() => navigate('/orcamentos')}
-          className="h-10 px-6 bg-zinc-800 border border-zinc-700 text-zinc-400 rounded-xl font-black uppercase text-[9px] tracking-widest hover:text-white transition-all">
-          Cancelar
-        </button>
-        <button onClick={() => handleSalvar('rascunho')} disabled={salvando}
-          className="h-10 px-6 bg-zinc-800 border border-zinc-700 text-zinc-400 rounded-xl font-black uppercase text-[9px] tracking-widest hover:text-white transition-all flex items-center gap-2 disabled:opacity-50">
-          {salvando ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />} Salvar Rascunho
-        </button>
-        <button onClick={handleGerarPdf} disabled={gerandoPdf}
-          className="h-10 px-6 bg-[#ff5351] text-white rounded-xl font-black uppercase text-[9px] tracking-widest hover:brightness-110 transition-all flex items-center gap-2 disabled:opacity-50 shadow-xl shadow-[#ff5351]/20">
-          {gerandoPdf ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
-          {gerandoPdf ? 'Gerando...' : 'Gerar PDF'}
-        </button>
-      </div>
+      {!somenteLeitura && (
+        <div className="flex items-center justify-end gap-3 pt-4 border-t border-zinc-800">
+          <button onClick={() => navigate('/orcamentos')}
+            className="h-10 px-6 bg-zinc-800 border border-zinc-700 text-zinc-400 rounded-xl font-black uppercase text-[9px] tracking-widest hover:text-white transition-all">
+            Cancelar
+          </button>
+          <button onClick={handleSalvar} disabled={salvando}
+            className="h-10 px-6 bg-zinc-800 border border-zinc-700 text-zinc-400 rounded-xl font-black uppercase text-[9px] tracking-widest hover:text-white transition-all flex items-center gap-2 disabled:opacity-50">
+            {salvando ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />} Salvar
+          </button>
+          <button onClick={handleGerarPdf} disabled={gerandoPdf}
+            className="h-10 px-6 bg-[#ff5351] text-white rounded-xl font-black uppercase text-[9px] tracking-widest hover:brightness-110 transition-all flex items-center gap-2 disabled:opacity-50 shadow-xl shadow-[#ff5351]/20">
+            {gerandoPdf ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
+            {gerandoPdf ? 'Gerando...' : 'Gerar PDF'}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
