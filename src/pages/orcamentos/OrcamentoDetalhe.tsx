@@ -333,6 +333,7 @@ export default function OrcamentoDetalhe() {
     setSalvando(true);
     try {
       const dados = { ...form, status: novoStatus || form.status, updatedAt: serverTimestamp() };
+      console.log('Tentando salvar:', JSON.stringify(dados, null, 2));
       if (isNovo) {
         const ref = await addDoc(collection(db, 'orcamentos'), { ...dados, criadoEm: serverTimestamp() });
         toast.success('Orçamento criado!');
