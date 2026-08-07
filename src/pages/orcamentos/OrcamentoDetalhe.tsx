@@ -402,24 +402,9 @@ export default function OrcamentoDetalhe() {
     if (!form.cnpjCpf?.trim()) { toast.error('CNPJ/CPF é obrigatório'); return; }
     setGerandoPdf(true);
     try {
-      // Salva silenciosamente sem navegar
-      const calc = calcular(form);
-      const docId = form.id || id;
-      if (!docId || docId === 'novo') {
-        const dados = { ...form, ...calc, versao: 1, status: 'rascunho', somenteLeitura: false, updatedAt: serverTimestamp(), criadoEm: serverTimestamp() };
-        const ref = await addDoc(collection(db, 'orcamentos'), dados);
-        setForm(prev => ({ ...prev, id: ref.id, ...calc }));
-      } else {
-        const versaoAtual = form.versao || 1;
-        const novaVersao = versaoAtual + 1;
-        const numeroBase = (form.numero || '').split('-v')[0];
-        const novoNumero = `${numeroBase}-v${novaVersao}`;
-        await updateDoc(doc(db, 'orcamentos', docId), { somenteLeitura: true, updatedAt: serverTimestamp() });
-        const { id: _id, ...formSemId } = form as any;
-        const novosDados = { ...formSemId, ...calc, versao: novaVersao, numero: novoNumero, status: novaVersao > 1 ? 'alterado' : 'rascunho', somenteLeitura: false, criadoEm: serverTimestamp(), updatedAt: serverTimestamp() };
-        await addDoc(collection(db, 'orcamentos'), novosDados);
-        setSomenteLeitura(true);
-      }
+      // Salva e aguarda antes de gerar PDF
+      await handleSalvar();
+      await new Promise(resolve => setTimeout(resolve, 1500));
 
       const configSnap = await getDoc(doc(db, 'configuracoes', 'orcamento'));
       const config = configSnap.exists() ? configSnap.data() : {};
