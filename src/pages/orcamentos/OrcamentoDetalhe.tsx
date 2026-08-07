@@ -334,15 +334,16 @@ export default function OrcamentoDetalhe() {
     try {
       const dados = { ...form, status: novoStatus || form.status, updatedAt: serverTimestamp() };
       console.log('Tentando salvar:', JSON.stringify(dados, null, 2));
-      if (isNovo || !form.id) {
-  const ref = await addDoc(collection(db, 'orcamentos'), { ...dados, criadoEm: serverTimestamp() });
-  setForm(prev => ({ ...prev, id: ref.id }));
-  toast.success('Orçamento criado!');
-  navigate(`/orcamentos/${ref.id}`);
-} else {
-  await updateDoc(doc(db, 'orcamentos', form.id), dados);
-  toast.success('Orçamento salvo!');
-}
+      const docId = form.id || id;
+      if (!docId || docId === 'novo') {
+        const ref = await addDoc(collection(db, 'orcamentos'), { ...dados, criadoEm: serverTimestamp() });
+        setForm(prev => ({ ...prev, id: ref.id }));
+        toast.success('Orçamento criado!');
+        navigate(`/orcamentos/${ref.id}`);
+      } else {
+        await updateDoc(doc(db, 'orcamentos', docId), dados);
+        toast.success('Orçamento salvo!');
+      }
     } catch {
       toast.error('Erro ao salvar');
     } finally {
@@ -726,6 +727,7 @@ export default function OrcamentoDetalhe() {
                 </div>
               </div>
             ))}
+            
             <div className="pt-3 border-t border-zinc-800 flex items-center justify-between">
               <span className="text-sm text-zinc-500">Total despesas</span>
               <span className="text-sm font-black text-white">
@@ -773,6 +775,7 @@ export default function OrcamentoDetalhe() {
                   <span className="text-xs text-zinc-400">{fmt(value)}</span>
                 </div>
               ))}
+              
               <div className="flex items-center justify-between py-1 border-t border-zinc-800">
                 <span className="text-xs font-black text-white">Custo total real</span>
                 <span className="text-xs font-black text-white">{fmt(form.totalCustoReal || 0)}</span>
@@ -839,6 +842,7 @@ export default function OrcamentoDetalhe() {
                   </button>
                 </div>
               ))}
+              
               <div className="flex items-center justify-between pt-2 border-t border-zinc-800">
                 <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Total extras</span>
                 <span className="text-sm font-black text-white">
