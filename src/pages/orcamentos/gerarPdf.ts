@@ -365,7 +365,7 @@ export async function gerarOrcamentoPdf(
     // ── BLOCOS DE SERVIÇO ────────────────────────────────────────
     for (const bloco of orcamento.blocos) {
       if (!bloco.nome) continue;
-      const itensPdf = bloco.itens.filter(i => i.exibirNoPdf !== false);
+      const itensPdf = bloco.itens;
       await drawSecaoTitulo(bloco.nome);
 
       for (const item of itensPdf) {
