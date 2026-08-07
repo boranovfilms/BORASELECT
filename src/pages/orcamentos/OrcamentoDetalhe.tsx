@@ -363,6 +363,8 @@ export default function OrcamentoDetalhe() {
         telefone: form.telefone || '',
         responsavel: form.responsavel || '',
         localEvento: form.localEvento || '',
+        dataEventoInicio: form.dataEventoInicio || '',
+        dataEventoFim: form.dataEventoFim || '',
         diarias: form.diarias || 1,
         condicaoPagamento: form.condicaoPagamento || '',
         blocos: (form.blocos || []) as any,
