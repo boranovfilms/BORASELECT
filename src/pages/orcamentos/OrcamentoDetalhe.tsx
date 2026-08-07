@@ -334,14 +334,15 @@ export default function OrcamentoDetalhe() {
     try {
       const dados = { ...form, status: novoStatus || form.status, updatedAt: serverTimestamp() };
       console.log('Tentando salvar:', JSON.stringify(dados, null, 2));
-      if (isNovo) {
-        const ref = await addDoc(collection(db, 'orcamentos'), { ...dados, criadoEm: serverTimestamp() });
-        toast.success('Orçamento criado!');
-        navigate(`/orcamentos/${ref.id}`);
-      } else if (id) {
-        await updateDoc(doc(db, 'orcamentos', id), dados);
-        toast.success('Orçamento salvo!');
-      }
+      if (isNovo || !form.id) {
+  const ref = await addDoc(collection(db, 'orcamentos'), { ...dados, criadoEm: serverTimestamp() });
+  setForm(prev => ({ ...prev, id: ref.id }));
+  toast.success('Orçamento criado!');
+  navigate(`/orcamentos/${ref.id}`);
+} else {
+  await updateDoc(doc(db, 'orcamentos', form.id), dados);
+  toast.success('Orçamento salvo!');
+}
     } catch {
       toast.error('Erro ao salvar');
     } finally {
