@@ -178,7 +178,6 @@ export default function OrcamentoDetalhe() {
         } else {
           const orcSnap = await getDocs(collection(db, 'orcamentos'));
           const ano = new Date().getFullYear();
-          // Conta apenas orçamentos com número base único
           const numerosBase = new Set(
             orcSnap.docs
               .map(d => d.data().numero as string)
@@ -353,7 +352,6 @@ export default function OrcamentoDetalhe() {
       const docId = form.id || id;
 
       if (!docId || docId === 'novo') {
-        // Novo orçamento — cria v1
         const dados = {
           ...form, ...calc,
           versao: 1,
@@ -367,19 +365,16 @@ export default function OrcamentoDetalhe() {
         toast.success('Orçamento salvo!');
         navigate(`/orcamentos/${ref.id}`);
       } else {
-        // Orçamento existente — cria nova versão
         const versaoAtual = form.versao || 1;
         const novaVersao = versaoAtual + 1;
         const numeroBase = (form.numero || '').split('-v')[0];
         const novoNumero = `${numeroBase}-v${novaVersao}`;
 
-        // Marca versão atual como somente leitura
         await updateDoc(doc(db, 'orcamentos', docId), {
           somenteLeitura: true,
           updatedAt: serverTimestamp(),
         });
 
-        // Cria nova versão
         const novosDados = {
           ...form, ...calc,
           id: undefined,
@@ -404,10 +399,25 @@ export default function OrcamentoDetalhe() {
 
   const handleGerarPdf = async () => {
     if (!form.nomeCliente?.trim()) { toast.error('Preencha o nome do cliente'); return; }
+    if (!form.cnpjCpf?.trim()) { toast.error('CNPJ/CPF é obrigatório'); return; }
     setGerandoPdf(true);
     try {
-      // Salva primeiro
-      await handleSalvar();
+      // Salva silenciosamente sem navegar
+      const calc = calcular(form);
+      const docId = form.id || id;
+      if (!docId || docId === 'novo') {
+        const dados = { ...form, ...calc, versao: 1, status: 'rascunho', somenteLeitura: false, updatedAt: serverTimestamp(), criadoEm: serverTimestamp() };
+        const ref = await addDoc(collection(db, 'orcamentos'), dados);
+        setForm(prev => ({ ...prev, id: ref.id, ...calc }));
+      } else {
+        const versaoAtual = form.versao || 1;
+        const novaVersao = versaoAtual + 1;
+        const numeroBase = (form.numero || '').split('-v')[0];
+        const novoNumero = `${numeroBase}-v${novaVersao}`;
+        await updateDoc(doc(db, 'orcamentos', docId), { somenteLeitura: true, updatedAt: serverTimestamp() });
+        const novosDados = { ...form, ...calc, id: undefined, versao: novaVersao, numero: novoNumero, status: novaVersao > 1 ? 'alterado' : 'rascunho', somenteLeitura: false, criadoEm: serverTimestamp(), updatedAt: serverTimestamp() };
+        await addDoc(collection(db, 'orcamentos'), novosDados);
+      }
 
       const configSnap = await getDoc(doc(db, 'configuracoes', 'orcamento'));
       const config = configSnap.exists() ? configSnap.data() : {};
@@ -811,6 +821,7 @@ export default function OrcamentoDetalhe() {
                 </div>
               </div>
             ))}
+            
             <div className="pt-3 border-t border-zinc-800 flex items-center justify-between">
               <span className="text-sm text-zinc-500">Total despesas</span>
               <span className="text-sm font-black text-white">
@@ -860,6 +871,7 @@ export default function OrcamentoDetalhe() {
                   <span className="text-xs text-zinc-400">{fmt(value)}</span>
                 </div>
               ))}
+              
               <div className="flex items-center justify-between py-1 border-t border-zinc-800">
                 <span className="text-xs font-black text-white">Custo total real</span>
                 <span className="text-xs font-black text-white">{fmt(form.totalCustoReal || 0)}</span>
@@ -931,6 +943,7 @@ export default function OrcamentoDetalhe() {
                   )}
                 </div>
               ))}
+              
               <div className="flex items-center justify-between pt-2 border-t border-zinc-800">
                 <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Total extras</span>
                 <span className="text-sm font-black text-white">
