@@ -485,11 +485,6 @@ export default function OrcamentoDetalhe() {
               className="h-10 px-4 bg-zinc-800 border border-zinc-700 text-zinc-400 rounded-xl font-black uppercase text-[9px] tracking-widest hover:text-white transition-all flex items-center gap-2 disabled:opacity-50">
               {salvando ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />} Salvar
             </button>
-            <button onClick={handleGerarPdf} disabled={gerandoPdf}
-              className="h-10 px-5 bg-[#ff5351] text-white rounded-xl font-black uppercase text-[9px] tracking-widest hover:brightness-110 transition-all flex items-center gap-2 disabled:opacity-50 shadow-xl shadow-[#ff5351]/20">
-              {gerandoPdf ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
-              {gerandoPdf ? 'Gerando...' : 'Gerar PDF'}
-            </button>
           </div>
         )}
       </header>
@@ -863,7 +858,7 @@ export default function OrcamentoDetalhe() {
                 <span className="text-xs font-black text-white">Custo total real</span>
                 <span className="text-xs font-black text-white">{fmt(form.totalCustoReal || 0)}</span>
               </div>
-              <div className="flex items-center justify-between bg-emerald-500/5 border border-emerald-500/20 rounded-xl px-3 py-2">
+              <div className="flex items-center="flex items-center justify-between bg-emerald-500/5 border border-emerald-500/20 rounded-xl px-3 py-2">
                 <span className="text-xs font-black text-emerald-400">📷 Equip. próprios (lucro direto)</span>
                 <span className="text-xs font-black text-emerald-400">{fmt(form.totalProprio || 0)}</span>
               </div>
@@ -956,7 +951,7 @@ export default function OrcamentoDetalhe() {
               </div>
             ))}
             {(form.extras || []).map(extra => (
-              <div key={extra.id} className="flex items-center justify-between py-2 border-b border-zinc-800">
+              <div key={extra.id} className="flex_items-center justify-between py-2 border-b border-zinc-800">
                 <span className="text-sm text-zinc-400">{extra.nome || 'Extra'}</span>
                 <span className="text-sm text-zinc-400">{fmt((extra.valorDia || 0) * (extra.diarias || 1))}</span>
               </div>
@@ -1011,11 +1006,6 @@ export default function OrcamentoDetalhe() {
           <button onClick={handleSalvar} disabled={salvando}
             className="h-10 px-6 bg-zinc-800 border border-zinc-700 text-zinc-400 rounded-xl font-black uppercase text-[9px] tracking-widest hover:text-white transition-all flex items-center gap-2 disabled:opacity-50">
             {salvando ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />} Salvar
-          </button>
-          <button onClick={handleGerarPdf} disabled={gerandoPdf}
-            className="h-10 px-6 bg-[#ff5351] text-white rounded-xl font-black uppercase text-[9px] tracking-widest hover:brightness-110 transition-all flex items-center gap-2 disabled:opacity-50 shadow-xl shadow-[#ff5351]/20">
-            {gerandoPdf ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
-            {gerandoPdf ? 'Gerando...' : 'Gerar PDF'}
           </button>
         </div>
       )}
