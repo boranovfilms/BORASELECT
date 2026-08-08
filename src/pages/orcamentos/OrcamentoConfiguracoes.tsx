@@ -17,6 +17,7 @@ interface ConfiguracaoOrcamento {
   capaPdfUrl: string;
   timbradoPdfUrl: string;
   capaJpgUrl: string;
+  timbradoJpgUrl: string;
   updatedAt?: any;
 }
 
@@ -26,9 +27,11 @@ export default function OrcamentoConfiguracoes() {
   const [uploadandoCapa, setUploadandoCapa] = useState(false);
   const [uploadandoTimbrado, setUploadandoTimbrado] = useState(false);
   const [uploadandoCapaJpg, setUploadandoCapaJpg] = useState(false);
+  const [uploadandoTimbradoJpg, setUploadandoTimbradoJpg] = useState(false);
   const [progressCapa, setProgressCapa] = useState(0);
   const [progressTimbrado, setProgressTimbrado] = useState(0);
   const [progressCapaJpg, setProgressCapaJpg] = useState(0);
+  const [progressTimbradoJpg, setProgressTimbradoJpg] = useState(0);
 
   const [form, setForm] = useState<ConfiguracaoOrcamento>({
     nomeEmpresa: 'BORNOV',
@@ -42,6 +45,7 @@ export default function OrcamentoConfiguracoes() {
     capaPdfUrl: '',
     timbradoPdfUrl: '',
     capaJpgUrl: '',
+    timbradoJpgUrl: '',
   });
 
   useEffect(() => {
@@ -104,9 +108,11 @@ export default function OrcamentoConfiguracoes() {
   };
 
   // Upload de imagem (JPG/PNG) — prévia de fundo para o editor visual do PDF.
-  // Grava apenas o campo da imagem com merge, sem reescrever os demais dados.
+  // Serve para capa e timbrado. Grava apenas o campo da imagem com merge,
+  // sem reescrever os demais dados.
   const uploadImagem = async (
     file: File,
+    campo: 'capa' | 'timbrado',
     setProgress: (v: number) => void,
     setUploading: (v: boolean) => void
   ) => {
@@ -118,7 +124,8 @@ export default function OrcamentoConfiguracoes() {
     setProgress(0);
     try {
       const ext = file.type === 'image/png' ? 'png' : 'jpg';
-      const path = `orcamentos/config/capa_img_${Date.now()}.${ext}`;
+      const campoUrl = campo === 'capa' ? 'capaJpgUrl' : 'timbradoJpgUrl';
+      const path = `orcamentos/config/${campo}_img_${Date.now()}.${ext}`;
       const storageRef = ref(storage, path);
       const uploadTask = uploadBytesResumable(storageRef, file);
       await new Promise<void>((resolve, reject) => {
@@ -128,13 +135,13 @@ export default function OrcamentoConfiguracoes() {
           reject,
           async () => {
             const url = await getDownloadURL(uploadTask.snapshot.ref);
-            setForm(prev => ({ ...prev, capaJpgUrl: url }));
+            setForm(prev => ({ ...prev, [campoUrl]: url }));
             await setDoc(
               doc(db, 'configuracoes', 'orcamento'),
-              { capaJpgUrl: url, updatedAt: serverTimestamp() },
+              { [campoUrl]: url, updatedAt: serverTimestamp() },
               { merge: true }
             );
-            toast.success('Imagem da capa enviada!');
+            toast.success(`Imagem ${campo === 'capa' ? 'da capa' : 'do timbrado'} enviada!`);
             resolve();
           }
         );
@@ -245,7 +252,7 @@ export default function OrcamentoConfiguracoes() {
                 <input type="file" accept="image/jpeg,image/png" className="hidden" disabled={uploadandoCapaJpg}
                   onChange={e => {
                     const file = e.target.files?.[0];
-                    if (file) uploadImagem(file, setProgressCapaJpg, setUploadandoCapaJpg);
+                    if (file) uploadImagem(file, 'capa', setProgressCapaJpg, setUploadandoCapaJpg);
                     e.target.value = '';
                   }} />
               </label>
@@ -288,6 +295,39 @@ export default function OrcamentoConfiguracoes() {
                   e.target.value = '';
                 }} />
             </label>
+
+            {/* Imagem JPG do timbrado — fundo do editor visual */}
+            <div className="pt-3 mt-1 border-t border-zinc-800/60 space-y-3">
+              <div>
+                <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-1">Imagem do Timbrado (JPG)</p>
+                <p className="text-zinc-600 text-xs">Prévia usada para definir as margens do conteúdo no editor visual</p>
+              </div>
+              {form.timbradoJpgUrl ? (
+                <div className="relative rounded-xl overflow-hidden border border-zinc-800 bg-zinc-900">
+                  <img src={form.timbradoJpgUrl} alt="Prévia do timbrado"
+                    className="w-full h-auto max-h-72 object-contain" />
+                </div>
+              ) : (
+                <div className="p-6 bg-zinc-900 border border-dashed border-zinc-700 rounded-xl flex flex-col items-center gap-2">
+                  <ImageIcon className="w-5 h-5 text-zinc-700" />
+                  <p className="text-zinc-600 text-xs text-center">Nenhuma imagem cadastrada</p>
+                </div>
+              )}
+              <label className={`w-full h-10 flex items-center justify-center gap-2 rounded-xl font-black uppercase text-[9px] tracking-widest cursor-pointer transition-all border
+                ${uploadandoTimbradoJpg ? 'bg-zinc-800 border-zinc-700 text-zinc-600 cursor-not-allowed' : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:text-white hover:border-zinc-500'}`}>
+                {uploadandoTimbradoJpg ? (
+                  <><Loader2 className="w-3 h-3 animate-spin" /> Enviando {progressTimbradoJpg}%</>
+                ) : (
+                  <><Upload className="w-3 h-3" /> {form.timbradoJpgUrl ? 'Substituir imagem' : 'Enviar imagem JPG'}</>
+                )}
+                <input type="file" accept="image/jpeg,image/png" className="hidden" disabled={uploadandoTimbradoJpg}
+                  onChange={e => {
+                    const file = e.target.files?.[0];
+                    if (file) uploadImagem(file, 'timbrado', setProgressTimbradoJpg, setUploadandoTimbradoJpg);
+                    e.target.value = '';
+                  }} />
+              </label>
+            </div>
           </div>
         </div>
       </div>
@@ -360,3 +400,4 @@ export default function OrcamentoConfiguracoes() {
     </div>
   );
 }
+
