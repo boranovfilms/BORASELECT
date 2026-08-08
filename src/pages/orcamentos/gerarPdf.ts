@@ -411,33 +411,7 @@ capaPage.drawText(dataLabel, {
       y -= sectionGap;
     }
 
-    // ── EXTRAS ───────────────────────────────────────────────────
-    const extrasValidos = orcamento.extras.filter(e => e.nome && (e.valorDia * e.diarias) > 0);
-    if (extrasValidos.length > 0) {
-      await drawSecaoTitulo('Extras');
-      for (const extra of extrasValidos) {
-        await checkNovaPage(lineHeight + 8);
-        const valorExtra = fmt(extra.valorDia * extra.diarias);
-        const vW = fontBold.widthOfTextAtSize(valorExtra, 9);
-        page.drawText(extra.nome, {
-          x: marginLeft + 8,
-          y,
-          size: 9,
-          font: fontRegular,
-          color: corPreta,
-        });
-        page.drawText(valorExtra, {
-          x: marginLeft + contentWidth - vW,
-          y,
-          size: 9,
-          font: fontBold,
-          color: corPreta,
-        });
-        y -= lineHeight;
-        drawLinha();
-      }
-      y -= sectionGap;
-    }
+    
 
     // ── DESPESAS DE DESLOCAMENTO ─────────────────────────────────
     const totalDesp = (orcamento.despAlimentacao || 0) +
@@ -570,6 +544,34 @@ capaPage.drawText(dataLabel, {
       color: corCinza,
     });
     y -= lineHeight;
+
+    // ── EXTRAS ───────────────────────────────────────────────────
+    const extrasValidos = orcamento.extras.filter(e => e.nome && (e.valorDia * e.diarias) > 0);
+    if (extrasValidos.length > 0) {
+      await drawSecaoTitulo('Extras');
+      for (const extra of extrasValidos) {
+        await checkNovaPage(lineHeight + 8);
+        const valorExtra = fmt(extra.valorDia * extra.diarias);
+        const vW = fontBold.widthOfTextAtSize(valorExtra, 9);
+        page.drawText(extra.nome, {
+          x: marginLeft + 8,
+          y,
+          size: 9,
+          font: fontRegular,
+          color: corPreta,
+        });
+        page.drawText(valorExtra, {
+          x: marginLeft + contentWidth - vW,
+          y,
+          size: 9,
+          font: fontBold,
+          color: corPreta,
+        });
+        y -= lineHeight;
+        drawLinha();
+      }
+      y -= sectionGap;
+    }
 
     // ── OBSERVAÇÕES ──────────────────────────────────────────────
     if (orcamento.observacoes) {
