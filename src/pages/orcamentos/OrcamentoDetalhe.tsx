@@ -439,8 +439,7 @@ export default function OrcamentoDetalhe() {
         site: config.site || '',
       }, primeiroNome(form.nomeCliente || ''));
 
-      toast.success('PDF gerado!');
-      navigate('/orcamentos');
+           navigate('/orcamentos');
     } catch (error: any) {
       toast.error(`Erro ao gerar PDF: ${error.message}`);
     } finally {
