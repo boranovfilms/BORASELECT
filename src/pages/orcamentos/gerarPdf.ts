@@ -223,6 +223,7 @@ export async function gerarOrcamentoPdf(
 
     const lineHeight = 18;
     const sectionGap = 14;
+    const labelGap = 5; // respiro entre o label (negrito) e o valor
 
     const drawLinha = () => {
       page.drawLine({
@@ -281,7 +282,7 @@ export async function gerarOrcamentoPdf(
         color: corCinza,
       });
       page.drawText(orcamento.responsavel, {
-        x: marginLeft + 68,
+        x: marginLeft + fontBold.widthOfTextAtSize('Responsável:', 9) + labelGap,
         y,
         size: 9,
         font: fontRegular,
@@ -304,7 +305,7 @@ export async function gerarOrcamentoPdf(
           color: corCinza,
         });
         page.drawText(orcamento.localEvento, {
-          x: marginLeft + 35,
+          x: marginLeft + fontBold.widthOfTextAtSize('Local:', 9) + labelGap,
           y,
           size: 9,
           font: fontRegular,
@@ -323,7 +324,7 @@ export async function gerarOrcamentoPdf(
           color: corCinza,
         });
         page.drawText(dataTexto, {
-          x: marginLeft + contentWidth / 2 + 30,
+          x: marginLeft + contentWidth / 2 + fontBold.widthOfTextAtSize('Data:', 9) + labelGap,
           y,
           size: 9,
           font: fontRegular,
@@ -346,7 +347,7 @@ export async function gerarOrcamentoPdf(
       color: corCinza,
     });
     page.drawText(orcamento.nomeCliente, {
-      x: marginLeft + 58,
+      x: marginLeft + 8 + fontBold.widthOfTextAtSize('Empresa:', 9) + labelGap,
       y,
       size: 9,
       font: fontRegular,
@@ -364,7 +365,7 @@ export async function gerarOrcamentoPdf(
           color: corCinza,
         });
         page.drawText(orcamento.cnpjCpf, {
-          x: marginLeft + 60,
+          x: marginLeft + 8 + fontBold.widthOfTextAtSize('CNPJ/CPF:', 9) + labelGap,
           y,
           size: 9,
           font: fontRegular,
@@ -380,7 +381,7 @@ export async function gerarOrcamentoPdf(
           color: corCinza,
         });
         page.drawText(orcamento.telefone, {
-          x: marginLeft + contentWidth / 2 + 52,
+          x: marginLeft + contentWidth / 2 + fontBold.widthOfTextAtSize('Telefone:', 9) + labelGap,
           y,
           size: 9,
           font: fontRegular,
