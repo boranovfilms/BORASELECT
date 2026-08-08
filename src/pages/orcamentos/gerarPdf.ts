@@ -11,6 +11,7 @@ interface BlocoServico {
   nome: string;
   itens: ItemBloco[];
   valorManual: number;
+  valorDia?: number;
 }
 
 interface Extra {
@@ -70,6 +71,14 @@ function formatarData(dataStr: string): string {
   return `${dia}/${mes}/${ano.slice(2)}`;
 }
 
+function calcularTotalBloco(bloco: BlocoServico, diarias: number): number {
+  if (bloco.valorManual > 0) return bloco.valorManual;
+  if (!bloco.itens || bloco.itens.length === 0) return 0;
+  return (bloco as any).itens.reduce((acc: number, item: any) => {
+    return acc + (item.valorDia || 0) * (item.quantidade || 1) * diarias;
+  }, 0);
+}
+
 async function fetchPdfBytes(url: string): Promise<Uint8Array> {
   const response = await fetch(url);
   if (!response.ok) throw new Error(`Erro ao baixar PDF: ${url}`);
@@ -79,7 +88,8 @@ async function fetchPdfBytes(url: string): Promise<Uint8Array> {
 
 export async function gerarOrcamentoPdf(
   orcamento: OrcamentoParaPdf,
-  config: ConfiguracaoOrcamento
+  config: ConfiguracaoOrcamento,
+  primeiroNomeCliente: string = 'BORANOV'
 ): Promise<void> {
   try {
     const finalPdf = await PDFDocument.create();
@@ -133,15 +143,16 @@ export async function gerarOrcamentoPdf(
         color: corPreta,
       });
 
-      // Data do orçamento
+      // Data do orçamento com label
       const hoje = new Date();
-      const dataText = hoje.toLocaleDateString('pt-BR', {
+      const dataFormatada = hoje.toLocaleDateString('pt-BR', {
         day: '2-digit', month: '2-digit', year: '2-digit',
       });
+      const dataLabel = `Data do orçamento: ${dataFormatada}`;
       const dataSize = 15 * (height / 3509) * (300 / 72);
       const dataX = 1873.53 * escala;
       const dataY = height - (3282.81 * (height / 3509)) - 5;
-      capaPage.drawText(dataText, {
+      capaPage.drawText(dataLabel, {
         x: dataX,
         y: dataY,
         size: dataSize,
@@ -240,7 +251,7 @@ export async function gerarOrcamentoPdf(
       thickness: 1.5,
       color: corVermelha,
     });
-    y -= 12;
+    y -= 14;
 
     // Responsável
     if (orcamento.responsavel) {
@@ -252,7 +263,7 @@ export async function gerarOrcamentoPdf(
         color: corCinza,
       });
       page.drawText(orcamento.responsavel, {
-        x: marginLeft + 65,
+        x: marginLeft + 68,
         y,
         size: 9,
         font: fontRegular,
@@ -261,7 +272,7 @@ export async function gerarOrcamentoPdf(
       y -= lineHeight;
     }
 
-    // Local + Data na mesma linha
+    // Local + Data do evento na mesma linha
     const temLocal = !!orcamento.localEvento;
     const temData = !!orcamento.dataEventoInicio;
 
@@ -282,7 +293,6 @@ export async function gerarOrcamentoPdf(
           color: corPreta,
         });
       }
-
       if (temData) {
         const dataInicio = formatarData(orcamento.dataEventoInicio);
         const dataFim = orcamento.dataEventoFim ? formatarData(orcamento.dataEventoFim) : '';
@@ -310,7 +320,6 @@ export async function gerarOrcamentoPdf(
     // ── DADOS DO CLIENTE ─────────────────────────────────────────
     await drawSecaoTitulo('Dados do Cliente');
 
-    // Empresa
     page.drawText('Empresa:', {
       x: marginLeft + 8,
       y,
@@ -327,45 +336,46 @@ export async function gerarOrcamentoPdf(
     });
     y -= lineHeight;
 
-    // CNPJ + Telefone na mesma linha
-    if (orcamento.cnpjCpf) {
-      page.drawText('CNPJ/CPF:', {
-        x: marginLeft + 8,
-        y,
-        size: 9,
-        font: fontBold,
-        color: corCinza,
-      });
-      page.drawText(orcamento.cnpjCpf, {
-        x: marginLeft + 60,
-        y,
-        size: 9,
-        font: fontRegular,
-        color: corPreta,
-      });
+    if (orcamento.cnpjCpf || orcamento.telefone) {
+      if (orcamento.cnpjCpf) {
+        page.drawText('CNPJ/CPF:', {
+          x: marginLeft + 8,
+          y,
+          size: 9,
+          font: fontBold,
+          color: corCinza,
+        });
+        page.drawText(orcamento.cnpjCpf, {
+          x: marginLeft + 60,
+          y,
+          size: 9,
+          font: fontRegular,
+          color: corPreta,
+        });
+      }
+      if (orcamento.telefone) {
+        page.drawText('Telefone:', {
+          x: marginLeft + contentWidth / 2,
+          y,
+          size: 9,
+          font: fontBold,
+          color: corCinza,
+        });
+        page.drawText(orcamento.telefone, {
+          x: marginLeft + contentWidth / 2 + 52,
+          y,
+          size: 9,
+          font: fontRegular,
+          color: corPreta,
+        });
+      }
+      y -= lineHeight + sectionGap;
     }
-    if (orcamento.telefone) {
-      page.drawText('Telefone:', {
-        x: marginLeft + contentWidth / 2,
-        y,
-        size: 9,
-        font: fontBold,
-        color: corCinza,
-      });
-      page.drawText(orcamento.telefone, {
-        x: marginLeft + contentWidth / 2 + 52,
-        y,
-        size: 9,
-        font: fontRegular,
-        color: corPreta,
-      });
-    }
-    y -= lineHeight + sectionGap;
 
     // ── BLOCOS DE SERVIÇO ────────────────────────────────────────
     for (const bloco of orcamento.blocos) {
       if (!bloco.nome) continue;
-      const itensPdf = bloco.itens;
+      const itensPdf = (bloco.itens || []) as any[];
       await drawSecaoTitulo(bloco.nome);
 
       for (const item of itensPdf) {
@@ -382,10 +392,12 @@ export async function gerarOrcamentoPdf(
         drawLinha();
       }
 
-      if (bloco.valorManual > 0) {
+      // Valor do bloco — automático ou manual
+      const totalBloco = calcularTotalBloco(bloco, orcamento.diarias || 1);
+      if (totalBloco > 0) {
         await checkNovaPage(30);
         y -= 4;
-        const valorText = fmt(bloco.valorManual);
+        const valorText = fmt(totalBloco);
         const valorW = fontBold.widthOfTextAtSize(valorText, 13);
         page.drawText(valorText, {
           x: marginLeft + contentWidth - valorW,
@@ -438,10 +450,10 @@ export async function gerarOrcamentoPdf(
       { label: 'Transporte', valor: orcamento.despTransporte },
       { label: 'Hospedagem', valor: orcamento.despHospedagem },
       { label: 'Pedágio / Estacionamento', valor: orcamento.despPedagio },
-    ].filter(d => d.valor > 0);
+    ].filter(d => (d.valor || 0) > 0);
 
     if (despesas.length > 0) {
-      await drawSecaoTitulo('Despesas de Deslocamento');
+      await drawSecaoTitulo('Despesas Extras');
       for (const desp of despesas) {
         await checkNovaPage(lineHeight);
         page.drawText(desp.label, {
@@ -453,7 +465,6 @@ export async function gerarOrcamentoPdf(
         });
         y -= lineHeight;
       }
-      // Total despesas
       await checkNovaPage(20);
       page.drawLine({
         start: { x: marginLeft, y },
@@ -482,14 +493,16 @@ export async function gerarOrcamentoPdf(
     }
 
     // ── PROPOSTA FINAL ───────────────────────────────────────────
-    const blocosComValor = orcamento.blocos.filter(b => b.nome && b.valorManual > 0);
-    const totalFinal = blocosComValor.reduce((acc, b) => acc + b.valorManual, 0);
+    const blocosComValor = orcamento.blocos.filter(b => b.nome);
+    const totalFinal = blocosComValor.reduce((acc, b) =>
+      acc + calcularTotalBloco(b, orcamento.diarias || 1), 0);
 
     await drawSecaoTitulo('Proposta Final');
 
     for (const bloco of blocosComValor) {
       await checkNovaPage(lineHeight + 8);
-      const valorBloco = fmt(bloco.valorManual);
+      const totalBloco = calcularTotalBloco(bloco, orcamento.diarias || 1);
+      const valorBloco = fmt(totalBloco);
       const vW = fontBold.widthOfTextAtSize(valorBloco, 9);
       page.drawText(bloco.nome, {
         x: marginLeft + 8,
@@ -498,13 +511,15 @@ export async function gerarOrcamentoPdf(
         font: fontBold,
         color: corPreta,
       });
-      page.drawText(valorBloco, {
-        x: marginLeft + contentWidth - vW,
-        y,
-        size: 9,
-        font: fontBold,
-        color: corPreta,
-      });
+      if (totalBloco > 0) {
+        page.drawText(valorBloco, {
+          x: marginLeft + contentWidth - vW,
+          y,
+          size: 9,
+          font: fontBold,
+          color: corPreta,
+        });
+      }
       y -= lineHeight;
       drawLinha();
     }
@@ -593,7 +608,7 @@ export async function gerarOrcamentoPdf(
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `Orcamento_${orcamento.numero}_${orcamento.nomeCliente.replace(/\s+/g, '_')}.pdf`;
+    link.download = `Orcamento_${orcamento.numero}_${primeiroNomeCliente}_BORANOV.pdf`;
     link.click();
     URL.revokeObjectURL(url);
 
