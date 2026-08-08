@@ -11,10 +11,11 @@ type Coords = Record<ElementoKey, Coord>;
 
 // Coordenadas em PROPORÇÃO da imagem (0 = topo/esquerda, 1 = base/direita).
 // Guardar em proporção faz a posição valer para qualquer tamanho de imagem/PDF.
-// O ponto (x, y) representa o canto SUPERIOR-ESQUERDO do texto (âncora à esquerda).
+// numero/data: âncora à esquerda (x = início do texto).
+// cliente: âncora ao CENTRO (x = centro do texto), para ficar sempre centralizado.
 const DEFAULT_COORDS: Coords = {
   numero: { x: 0.77, y: 0.05 },
-  cliente: { x: 0.42, y: 0.41 },
+  cliente: { x: 0.5, y: 0.41 },
   data: { x: 0.02, y: 0.93 },
 };
 
@@ -25,10 +26,11 @@ const ELEMENTOS: {
   cor: string;
   corBorda: string;
   corLegenda: string;
+  align: 'left' | 'center';
 }[] = [
-  { key: 'numero', label: 'Número', sample: '001-2026-v1', cor: 'bg-[#ff5351]/85', corBorda: 'border-[#ff5351]', corLegenda: 'bg-[#ff5351]' },
-  { key: 'cliente', label: 'Cliente', sample: 'CLIENTE EXEMPLO', cor: 'bg-blue-500/85', corBorda: 'border-blue-400', corLegenda: 'bg-blue-500' },
-  { key: 'data', label: 'Data', sample: 'Data do orçamento: 21/08/26', cor: 'bg-amber-500/85', corBorda: 'border-amber-400', corLegenda: 'bg-amber-500' },
+  { key: 'numero', label: 'Número', sample: '001-2026-v1', cor: 'bg-[#ff5351]/85', corBorda: 'border-[#ff5351]', corLegenda: 'bg-[#ff5351]', align: 'left' },
+  { key: 'cliente', label: 'Cliente (centralizado)', sample: 'CLIENTE EXEMPLO', cor: 'bg-blue-500/85', corBorda: 'border-blue-400', corLegenda: 'bg-blue-500', align: 'center' },
+  { key: 'data', label: 'Data', sample: 'Data do orçamento: 21/08/26', cor: 'bg-amber-500/85', corBorda: 'border-amber-400', corLegenda: 'bg-amber-500', align: 'left' },
 ];
 
 export default function OrcamentoEditorPdf() {
@@ -186,6 +188,7 @@ export default function OrcamentoEditorPdf() {
                   style={{
                     left: `${c.x * 100}%`,
                     top: `${c.y * 100}%`,
+                    transform: el.align === 'center' ? 'translateX(-50%)' : undefined,
                     touchAction: 'none',
                     maxWidth: '92%',
                   }}
