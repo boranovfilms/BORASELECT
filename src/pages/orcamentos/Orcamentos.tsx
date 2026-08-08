@@ -150,6 +150,7 @@ export default function Orcamentos() {
         telefone: config.telefone || '',
         email: config.email || '',
         site: config.site || '',
+        capaCoords: config.capaCoords || null,
       }, orc.nomeCliente?.trim().split(' ')[0] || 'BORANOV');
 
       // Marca como PDF gerado
