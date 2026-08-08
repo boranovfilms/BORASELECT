@@ -858,7 +858,7 @@ export default function OrcamentoDetalhe() {
                 <span className="text-xs font-black text-white">Custo total real</span>
                 <span className="text-xs font-black text-white">{fmt(form.totalCustoReal || 0)}</span>
               </div>
-              <div className="flex items-center="flex items-center justify-between bg-emerald-500/5 border border-emerald-500/20 rounded-xl px-3 py-2">
+            <div className="flex items-center justify-between bg-emerald-500/5 border border-emerald-500/20 rounded-xl px-3 py-2">
                 <span className="text-xs font-black text-emerald-400">📷 Equip. próprios (lucro direto)</span>
                 <span className="text-xs font-black text-emerald-400">{fmt(form.totalProprio || 0)}</span>
               </div>
