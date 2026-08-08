@@ -346,6 +346,9 @@ export default function OrcamentoDetalhe() {
   const handleSalvar = async () => {
     if (!form.nomeCliente?.trim()) { toast.error('Nome do cliente é obrigatório'); return; }
     if (!form.cnpjCpf?.trim()) { toast.error('CNPJ/CPF é obrigatório'); return; }
+    if (!form.responsavel?.trim()) { toast.error('Responsável é obrigatório'); return; }
+    if (!form.localEvento?.trim()) { toast.error('Local do evento é obrigatório'); return; }
+    if (!form.dataEventoInicio?.trim()) { toast.error('Data de início do evento é obrigatória'); return; }
     setSalvando(true);
     try {
       const calc = calcular(form);
@@ -564,7 +567,7 @@ export default function OrcamentoDetalhe() {
                     className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none" />
                 </div>
                 <div>
-                  <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Responsável</label>
+                  <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Responsável *</label>
                   <input type="text" value={form.responsavel || ''} onChange={e => updateForm({ responsavel: e.target.value })}
                     readOnly={somenteLeitura}
                     className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none" />
@@ -627,7 +630,7 @@ export default function OrcamentoDetalhe() {
             <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-3">Dados do Orçamento</p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Local do Evento</label>
+                <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Local do Evento *</label>
                 <input type="text" value={form.localEvento || ''} onChange={e => updateForm({ localEvento: e.target.value })}
                   placeholder="Ex: Ribeirão Preto/SP" readOnly={somenteLeitura}
                   className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none" />
@@ -640,7 +643,7 @@ export default function OrcamentoDetalhe() {
                   className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none text-center" />
               </div>
               <div>
-                <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Data Início do Evento</label>
+                <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Data Início do Evento *</label>
                 <input type="date" value={form.dataEventoInicio || ''} onChange={e => updateForm({ dataEventoInicio: e.target.value })}
                   readOnly={somenteLeitura}
                   className="w-full h-11 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white text-sm focus:border-[#ff5351] outline-none" />
@@ -858,7 +861,7 @@ export default function OrcamentoDetalhe() {
                 <span className="text-xs font-black text-white">Custo total real</span>
                 <span className="text-xs font-black text-white">{fmt(form.totalCustoReal || 0)}</span>
               </div>
-            <div className="flex items-center justify-between bg-emerald-500/5 border border-emerald-500/20 rounded-xl px-3 py-2">
+              <div className="flex items-center justify-between bg-emerald-500/5 border border-emerald-500/20 rounded-xl px-3 py-2">
                 <span className="text-xs font-black text-emerald-400">📷 Equip. próprios (lucro direto)</span>
                 <span className="text-xs font-black text-emerald-400">{fmt(form.totalProprio || 0)}</span>
               </div>
@@ -951,7 +954,7 @@ export default function OrcamentoDetalhe() {
               </div>
             ))}
             {(form.extras || []).map(extra => (
-              <div key={extra.id} className="flex_items-center justify-between py-2 border-b border-zinc-800">
+              <div key={extra.id} className="flex items-center justify-between py-2 border-b border-zinc-800">
                 <span className="text-sm text-zinc-400">{extra.nome || 'Extra'}</span>
                 <span className="text-sm text-zinc-400">{fmt((extra.valorDia || 0) * (extra.diarias || 1))}</span>
               </div>
@@ -979,7 +982,7 @@ export default function OrcamentoDetalhe() {
                   {fmt(form.lucroReal || 0)}
                 </span>
               </div>
-              <div className="flex items-center justify-between p-3 bg-zinc-900 border border-zinc-800 rounded-xl">
+              <div className="flex items-center justify-between p-3 bg-zinc-900 border border-zinc800 rounded-xl">
                 <span className="text-xs text-zinc-500">Condição de pagamento</span>
                 <span className="text-xs font-black text-white">{form.condicaoPagamento}</span>
               </div>
