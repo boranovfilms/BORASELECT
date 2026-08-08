@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { collection, onSnapshot, deleteDoc, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
-import { Plus, Loader2, FileText, Trash2, Edit2, Settings, Package, ChevronRight, ChevronDown, ChevronUp, Printer } from 'lucide-react';
+import { Plus, Loader2, FileText, Trash2, Edit2, Eye, Settings, Package, ChevronRight, ChevronDown, ChevronUp, Printer } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { cn } from '../../lib/utils';
 import { gerarOrcamentoPdf } from './gerarPdf';
@@ -169,7 +169,7 @@ export default function Orcamentos() {
 
   const RowOrcamento = ({ orc, isAnterior = false }: { orc: Orcamento; isAnterior?: boolean }) => (
     <tr className={cn('hover:bg-zinc-800/30 transition-all', isAnterior && 'bg-zinc-900/50')}>
-      <td className="px-6 py-3">
+      <td className="px-6 py-2">
         <div className="flex items-center gap-2">
           {isAnterior && <span className="w-3 h-3 text-zinc-600">↳</span>}
           <span className={cn('font-black text-sm', isAnterior ? 'text-zinc-500' : 'text-[#ff5351]')}>
@@ -182,24 +182,24 @@ export default function Orcamentos() {
           )}
         </div>
       </td>
-      <td className="px-6 py-3 text-white font-bold text-sm">
+      <td className="px-6 py-2 text-white font-bold text-sm">
         {primeiroSegundoNome(orc.nomeCliente)}
       </td>
-      <td className="px-6 py-3 text-zinc-400 text-sm">
+      <td className="px-6 py-2 text-zinc-400 text-sm">
         {orc.nomeEvento || '—'}
       </td>
-      <td className="px-6 py-3 text-right">
+      <td className="px-6 py-2 text-right">
         <span className={cn('font-black text-sm', isAnterior ? 'text-zinc-500' : 'text-emerald-400')}>
           {(orc.valorCliente || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
         </span>
       </td>
-      <td className="px-6 py-3 text-center">
+      <td className="px-6 py-2 text-center">
         <span className={cn('px-2 py-0.5 rounded-full border text-[9px] font-black uppercase tracking-widest',
           STATUS_CONFIG[orc.status]?.class || STATUS_CONFIG.rascunho.class)}>
           {STATUS_CONFIG[orc.status]?.label || 'Gerado'}
         </span>
       </td>
-      <td className="px-6 py-3 text-right">
+      <td className="px-6 py-2 text-right">
         <div className="flex items-center justify-end gap-2">
           {/* Impressora — verde se nunca gerou, amarelo se já gerou */}
           <button
@@ -319,19 +319,19 @@ export default function Orcamentos() {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-zinc-800 bg-zinc-900/50">
-                <th className="px-6 py-3 text-[10px] font-black uppercase tracking-widest text-zinc-500">Número</th>
-                <th className="px-6 py-3 text-[10px] font-black uppercase tracking-widest text-zinc-500">Cliente</th>
-                <th className="px-6 py-3 text-[10px] font-black uppercase tracking-widest text-zinc-500">Nome do Evento</th>
-                <th className="px-6 py-3 text-[10px] font-black uppercase tracking-widest text-zinc-500 text-right">Valor</th>
-                <th className="px-6 py-3 text-[10px] font-black uppercase tracking-widest text-zinc-500 text-center">Status</th>
-                <th className="px-6 py-3 text-[10px] font-black uppercase tracking-widest text-zinc-500 text-right">Ações</th>
+                <th className="px-6 py-2 text-[10px] font-black uppercase tracking-widest text-zinc-500">Número</th>
+                <th className="px-6 py-2 text-[10px] font-black uppercase tracking-widest text-zinc-500">Cliente</th>
+                <th className="px-6 py-2 text-[10px] font-black uppercase tracking-widest text-zinc-500">Nome do Evento</th>
+                <th className="px-6 py-2 text-[10px] font-black uppercase tracking-widest text-zinc-500 text-right">Valor</th>
+                <th className="px-6 py-2 text-[10px] font-black uppercase tracking-widest text-zinc-500 text-center">Status</th>
+                <th className="px-6 py-2 text-[10px] font-black uppercase tracking-widest text-zinc-500 text-right">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-800">
               {grupos.map(({ atual, anteriores }) => (
                 <React.Fragment key={atual.id}>
-                  <tr className="hover:bg-zinc-800/30 transition-all">
-                    <td className="px-6 py-3">
+                  <tr className="hover:bg-zinc-800/30 transition-all text-sm">
+                    <td className="px-6 py-2">
                       <div className="flex items-center gap-2">
                         <span className="text-[#ff5351] font-black text-sm">{atual.numero}</span>
                         {anteriores.length > 0 && (
@@ -348,22 +348,22 @@ export default function Orcamentos() {
                         )}
                       </div>
                     </td>
-                    <td className="px-6 py-3 text-white font-bold text-sm">
+                    <td className="px-6 py-2 text-white font-bold text-sm">
                       {primeiroSegundoNome(atual.nomeCliente)}
                     </td>
-                    <td className="px-6 py-3 text-zinc-400 text-sm">{atual.nomeEvento || '—'}</td>
-                    <td className="px-6 py-3 text-right">
+                    <td className="px-6 py-2 text-zinc-400 text-sm">{atual.nomeEvento || '—'}</td>
+                    <td className="px-6 py-2 text-right">
                       <span className="text-emerald-400 font-black text-sm">
                         {(atual.valorCliente || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                       </span>
                     </td>
-                    <td className="px-6 py-3 text-center">
+                    <td className="px-6 py-2 text-center">
                       <span className={cn('px-2 py-0.5 rounded-full border text-[9px] font-black uppercase tracking-widest',
                         STATUS_CONFIG[atual.status]?.class || STATUS_CONFIG.rascunho.class)}>
                         {STATUS_CONFIG[atual.status]?.label || 'Gerado'}
                       </span>
                     </td>
-                    <td className="px-6 py-3 text-right">
+                    <td className="px-6 py-2 text-right">
                       <div className="flex items-center justify-end gap-2">
                         <button onClick={() => handleGerarPdf(atual)} disabled={gerandoPdf === atual.id}
                           title={atual.pdfGerado ? 'PDF já gerado — gerar novamente' : 'Gerar PDF'}
@@ -426,7 +426,7 @@ export default function Orcamentos() {
                           <button onClick={() => navigate(`/orcamentos/${ant.id}`)}
                             title="Visualizar versão anterior"
                             className="p-1.5 text-zinc-600 hover:text-zinc-400 transition-all">
-                            <Edit2 className="w-3 h-3" />
+                            <Eye className="w-3 h-3" />
                           </button>
                         </div>
                       </td>
