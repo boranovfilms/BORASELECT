@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../../lib/firebase';
-import { Save, Loader2, Upload, FileText, CheckCircle } from 'lucide-react';
+import { Save, Loader2, Upload, FileText, CheckCircle, Image as ImageIcon } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 
 interface ConfiguracaoOrcamento {
@@ -16,6 +16,7 @@ interface ConfiguracaoOrcamento {
   estado: string;
   capaPdfUrl: string;
   timbradoPdfUrl: string;
+  capaJpgUrl: string;
   updatedAt?: any;
 }
 
@@ -24,8 +25,10 @@ export default function OrcamentoConfiguracoes() {
   const [salvando, setSalvando] = useState(false);
   const [uploadandoCapa, setUploadandoCapa] = useState(false);
   const [uploadandoTimbrado, setUploadandoTimbrado] = useState(false);
+  const [uploadandoCapaJpg, setUploadandoCapaJpg] = useState(false);
   const [progressCapa, setProgressCapa] = useState(0);
   const [progressTimbrado, setProgressTimbrado] = useState(0);
+  const [progressCapaJpg, setProgressCapaJpg] = useState(0);
 
   const [form, setForm] = useState<ConfiguracaoOrcamento>({
     nomeEmpresa: 'BORNOV',
@@ -38,6 +41,7 @@ export default function OrcamentoConfiguracoes() {
     estado: '',
     capaPdfUrl: '',
     timbradoPdfUrl: '',
+    capaJpgUrl: '',
   });
 
   useEffect(() => {
@@ -93,6 +97,50 @@ export default function OrcamentoConfiguracoes() {
       });
     } catch {
       toast.error('Erro ao enviar arquivo');
+    } finally {
+      setUploading(false);
+      setProgress(0);
+    }
+  };
+
+  // Upload de imagem (JPG/PNG) — prévia de fundo para o editor visual do PDF.
+  // Grava apenas o campo da imagem com merge, sem reescrever os demais dados.
+  const uploadImagem = async (
+    file: File,
+    setProgress: (v: number) => void,
+    setUploading: (v: boolean) => void
+  ) => {
+    if (!file.type.startsWith('image/')) {
+      toast.error('Envie uma imagem (JPG ou PNG)');
+      return;
+    }
+    setUploading(true);
+    setProgress(0);
+    try {
+      const ext = file.type === 'image/png' ? 'png' : 'jpg';
+      const path = `orcamentos/config/capa_img_${Date.now()}.${ext}`;
+      const storageRef = ref(storage, path);
+      const uploadTask = uploadBytesResumable(storageRef, file);
+      await new Promise<void>((resolve, reject) => {
+        uploadTask.on(
+          'state_changed',
+          snapshot => setProgress(Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100)),
+          reject,
+          async () => {
+            const url = await getDownloadURL(uploadTask.snapshot.ref);
+            setForm(prev => ({ ...prev, capaJpgUrl: url }));
+            await setDoc(
+              doc(db, 'configuracoes', 'orcamento'),
+              { capaJpgUrl: url, updatedAt: serverTimestamp() },
+              { merge: true }
+            );
+            toast.success('Imagem da capa enviada!');
+            resolve();
+          }
+        );
+      });
+    } catch {
+      toast.error('Erro ao enviar imagem');
     } finally {
       setUploading(false);
       setProgress(0);
@@ -169,6 +217,39 @@ export default function OrcamentoConfiguracoes() {
                   e.target.value = '';
                 }} />
             </label>
+
+            {/* Imagem JPG da capa — fundo do editor visual */}
+            <div className="pt-3 mt-1 border-t border-zinc-800/60 space-y-3">
+              <div>
+                <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-1">Imagem da Capa (JPG)</p>
+                <p className="text-zinc-600 text-xs">Prévia usada para posicionar os textos no editor visual</p>
+              </div>
+              {form.capaJpgUrl ? (
+                <div className="relative rounded-xl overflow-hidden border border-zinc-800 bg-zinc-900">
+                  <img src={form.capaJpgUrl} alt="Prévia da capa"
+                    className="w-full h-auto max-h-72 object-contain" />
+                </div>
+              ) : (
+                <div className="p-6 bg-zinc-900 border border-dashed border-zinc-700 rounded-xl flex flex-col items-center gap-2">
+                  <ImageIcon className="w-5 h-5 text-zinc-700" />
+                  <p className="text-zinc-600 text-xs text-center">Nenhuma imagem cadastrada</p>
+                </div>
+              )}
+              <label className={`w-full h-10 flex items-center justify-center gap-2 rounded-xl font-black uppercase text-[9px] tracking-widest cursor-pointer transition-all border
+                ${uploadandoCapaJpg ? 'bg-zinc-800 border-zinc-700 text-zinc-600 cursor-not-allowed' : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:text-white hover:border-zinc-500'}`}>
+                {uploadandoCapaJpg ? (
+                  <><Loader2 className="w-3 h-3 animate-spin" /> Enviando {progressCapaJpg}%</>
+                ) : (
+                  <><Upload className="w-3 h-3" /> {form.capaJpgUrl ? 'Substituir imagem' : 'Enviar imagem JPG'}</>
+                )}
+                <input type="file" accept="image/jpeg,image/png" className="hidden" disabled={uploadandoCapaJpg}
+                  onChange={e => {
+                    const file = e.target.files?.[0];
+                    if (file) uploadImagem(file, setProgressCapaJpg, setUploadandoCapaJpg);
+                    e.target.value = '';
+                  }} />
+              </label>
+            </div>
           </div>
 
           {/* Timbrado */}
