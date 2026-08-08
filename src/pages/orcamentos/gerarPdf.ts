@@ -1,4 +1,8 @@
-import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
+import { PDFDocument, rgb } from 'pdf-lib';
+import fontkit from '@pdf-lib/fontkit';
+import fontBoldUrl from '../../assets/fonts/TT Chocolates Trial Bold.otf?url';
+import fontMediumUrl from '../../assets/fonts/TT Chocolates Trial Medium.otf?url';
+import fontRegularUrl from '../../assets/fonts/TT Chocolates Trial Regular.otf?url';
 
 interface ItemBloco {
   nome: string;
@@ -93,8 +97,22 @@ export async function gerarOrcamentoPdf(
 ): Promise<void> {
   try {
     const finalPdf = await PDFDocument.create();
-    const fontBold = await finalPdf.embedFont(StandardFonts.HelveticaBold);
-    const fontRegular = await finalPdf.embedFont(StandardFonts.Helvetica);
+
+    // ── FONTES TT CHOCOLATES (embedadas via fontkit) ────────────
+    // Bold   → títulos, número, data, valores
+    // Medium → nome do cliente na capa
+    // Regular→ texto corrido, itens, observações
+    finalPdf.registerFontkit(fontkit);
+
+    const [boldBytes, mediumBytes, regularBytes] = await Promise.all([
+      fetch(fontBoldUrl).then(r => r.arrayBuffer()),
+      fetch(fontMediumUrl).then(r => r.arrayBuffer()),
+      fetch(fontRegularUrl).then(r => r.arrayBuffer()),
+    ]);
+
+    const fontBold = await finalPdf.embedFont(boldBytes);
+    const fontMedium = await finalPdf.embedFont(mediumBytes);
+    const fontRegular = await finalPdf.embedFont(regularBytes);
 
     const corVermelha = hexToRgb('#dd4d4c');
     const corPreta = hexToRgb('#535353');
@@ -126,20 +144,20 @@ export async function gerarOrcamentoPdf(
         color: corBranca,
       });
 
-      // Nome do cliente — centralizado na caixa
+      // Nome do cliente — centralizado na caixa (TT Chocolates Medium)
       const nomeCompleto = orcamento.nomeCliente.toUpperCase();
       const palavras = nomeCompleto.split(' ');
       const nomeExibir = palavras.length > 2 ? palavras.slice(0, 2).join(' ') : nomeCompleto;
       const clienteSize = 22 * (height / 3509) * (300 / 72);
       const caixaClienteW = 453.93 * escala;
-      const clienteTextW = fontRegular.widthOfTextAtSize(nomeExibir, clienteSize);
+      const clienteTextW = fontMedium.widthOfTextAtSize(nomeExibir, clienteSize);
       const clienteX = (1012.44 * escala) + (caixaClienteW / 2) - (clienteTextW / 2);
       const clienteY = height - (1444.46 * (height / 3509)) - 5;
       capaPage.drawText(nomeExibir, {
         x: clienteX,
         y: clienteY,
         size: clienteSize,
-        font: fontRegular,
+        font: fontMedium,
         color: corPreta,
       });
 
@@ -148,17 +166,17 @@ export async function gerarOrcamentoPdf(
       const dataFormatada = hoje.toLocaleDateString('pt-BR', {
         day: '2-digit', month: '2-digit', year: '2-digit',
       });
-     const dataLabel = `Data do orçamento: ${dataFormatada}`;
-const dataSize = 11 * (height / 3509) * (300 / 72);  // fonte menor
-const dataX = 30 * escala;                             // mais para esquerda
-const dataY = height - (3282.81 * (height / 3509)) - 5;
-capaPage.drawText(dataLabel, {
-  x: dataX,
-  y: dataY,
-  size: dataSize,
-  font: fontBold,
-  color: corVermelha,
-});
+      const dataLabel = `Data do orçamento: ${dataFormatada}`;
+      const dataSize = 11 * (height / 3509) * (300 / 72);  // fonte menor
+      const dataX = 30 * escala;                             // mais para esquerda
+      const dataY = height - (3282.81 * (height / 3509)) - 5;
+      capaPage.drawText(dataLabel, {
+        x: dataX,
+        y: dataY,
+        size: dataSize,
+        font: fontBold,
+        color: corVermelha,
+      });
 
       finalPdf.addPage(capaPage);
     }
@@ -410,8 +428,6 @@ capaPage.drawText(dataLabel, {
       }
       y -= sectionGap;
     }
-
-    
 
     // ── DESPESAS DE DESLOCAMENTO ─────────────────────────────────
     const totalDesp = (orcamento.despAlimentacao || 0) +
