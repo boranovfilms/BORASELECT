@@ -148,17 +148,17 @@ export async function gerarOrcamentoPdf(
       const dataFormatada = hoje.toLocaleDateString('pt-BR', {
         day: '2-digit', month: '2-digit', year: '2-digit',
       });
-      const dataLabel = `Data do orçamento: ${dataFormatada}`;
-      const dataSize = 15 * (height / 3509) * (300 / 72);
-      const dataX = 1873.53 * escala;
-      const dataY = height - (3282.81 * (height / 3509)) - 5;
-      capaPage.drawText(dataLabel, {
-        x: dataX,
-        y: dataY,
-        size: dataSize,
-        font: fontBold,
-        color: corVermelha,
-      });
+     const dataLabel = `Data do orçamento: ${dataFormatada}`;
+const dataSize = 11 * (height / 3509) * (300 / 72);  // fonte menor
+const dataX = 70 * escala;                             // lado esquerdo
+const dataY = height - (3282.81 * (height / 3509)) - 5;
+capaPage.drawText(dataLabel, {
+  x: dataX,
+  y: dataY,
+  size: dataSize,
+  font: fontBold,
+  color: corVermelha,
+});
 
       finalPdf.addPage(capaPage);
     }
