@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
-import { ArrowLeft, Save, Loader2, Move, ImageOff, RotateCcw } from 'lucide-react';
+import { ArrowLeft, Save, Loader2, ImageOff, RotateCcw } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 
 type Coord = { x: number; y: number };
@@ -193,10 +193,7 @@ export default function OrcamentoEditorPdf() {
                     maxWidth: '92%',
                   }}
                 >
-                  <div className="flex items-center gap-1.5 whitespace-nowrap">
-                    <Move className="w-3 h-3 text-white/80 shrink-0" />
-                    <span className="text-white text-[10px] font-bold leading-tight">{el.sample}</span>
-                  </div>
+                  <span className="text-white text-[10px] font-bold leading-tight whitespace-nowrap">{el.sample}</span>
                 </div>
               );
             })}
@@ -212,9 +209,19 @@ export default function OrcamentoEditorPdf() {
                     <span className={`w-3 h-3 rounded ${el.corLegenda}`} />
                     <span className="text-white text-xs font-bold">{el.label}</span>
                   </div>
-                  <span className="text-zinc-600 text-[10px] font-mono">
-                    {Math.round(coords[el.key].x * 100)}% · {Math.round(coords[el.key].y * 100)}%
-                  </span>
+                  <div className="flex items-center gap-3">
+                    {el.align === 'center' && (
+                      <button
+                        onClick={() => setCoords(prev => ({ ...prev, [el.key]: { ...prev[el.key], x: 0.5 } }))}
+                        title="Centralizar na horizontal (50%)"
+                        className="text-[9px] font-black uppercase tracking-widest text-blue-400 hover:text-blue-300 transition-all">
+                        Centralizar
+                      </button>
+                    )}
+                    <span className="text-zinc-600 text-[10px] font-mono">
+                      {Math.round(coords[el.key].x * 100)}% · {Math.round(coords[el.key].y * 100)}%
+                    </span>
+                  </div>
                 </div>
               ))}
             </div>
