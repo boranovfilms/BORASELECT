@@ -42,6 +42,7 @@ import OrcamentoDetalhe from './pages/orcamentos/OrcamentoDetalhe';
 import OrcamentoTemplates from './pages/orcamentos/OrcamentoTemplates';
 import OrcamentoEquipamentos from './pages/orcamentos/OrcamentoEquipamentos';
 import OrcamentoConfiguracoes from './pages/orcamentos/OrcamentoConfiguracoes';
+import OrcamentoEditorPdf from './pages/orcamentos/OrcamentoEditorPdf';
 
 export default function App() {
   const [loading, setLoading] = useState(true);
@@ -161,6 +162,7 @@ export default function App() {
         <Route path="/orcamentos/templates" element={user ? wrapLayout(<OrcamentoTemplates />) : <Navigate to="/login" />} />
         <Route path="/orcamentos/equipamentos" element={user ? wrapLayout(<OrcamentoEquipamentos />) : <Navigate to="/login" />} />
         <Route path="/orcamentos/configuracoes" element={user ? wrapLayout(<OrcamentoConfiguracoes />) : <Navigate to="/login" />} />
+        <Route path="/orcamentos/editor-pdf" element={user ? wrapLayout(<OrcamentoEditorPdf />) : <Navigate to="/login" />} />
         
       </Routes>
     </BrowserRouter>
