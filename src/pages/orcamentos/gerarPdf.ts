@@ -114,6 +114,16 @@ export async function gerarOrcamentoPdf(
     const fontMedium = await finalPdf.embedFont(mediumBytes);
     const fontRegular = await finalPdf.embedFont(regularBytes);
 
+    // Largura de um label para posicionar o valor logo depois.
+    // Mede a versão SEM acentos (o acento não altera a largura real da letra,
+    // mas nesta fonte infla o "advance" medido). O texto continua sendo
+    // desenhado com acento normalmente — só o cálculo de posição ignora.
+    const larguraLabel = (texto: string, size = 9) =>
+      fontBold.widthOfTextAtSize(
+        texto.normalize('NFD').replace(/[\u0300-\u036f]/g, ''),
+        size
+      );
+
     const corVermelha = hexToRgb('#dd4d4c');
     const corPreta = hexToRgb('#535353');
     const corCinza = hexToRgb('#888888');
@@ -282,7 +292,7 @@ export async function gerarOrcamentoPdf(
         color: corCinza,
       });
       page.drawText(orcamento.responsavel, {
-        x: marginLeft + fontBold.widthOfTextAtSize('Responsável:', 9) + labelGap,
+        x: marginLeft + larguraLabel('Responsável:') + labelGap,
         y,
         size: 9,
         font: fontRegular,
@@ -305,7 +315,7 @@ export async function gerarOrcamentoPdf(
           color: corCinza,
         });
         page.drawText(orcamento.localEvento, {
-          x: marginLeft + fontBold.widthOfTextAtSize('Local:', 9) + labelGap,
+          x: marginLeft + larguraLabel('Local:') + labelGap,
           y,
           size: 9,
           font: fontRegular,
@@ -324,7 +334,7 @@ export async function gerarOrcamentoPdf(
           color: corCinza,
         });
         page.drawText(dataTexto, {
-          x: marginLeft + contentWidth / 2 + fontBold.widthOfTextAtSize('Data:', 9) + labelGap,
+          x: marginLeft + contentWidth / 2 + larguraLabel('Data:') + labelGap,
           y,
           size: 9,
           font: fontRegular,
@@ -347,7 +357,7 @@ export async function gerarOrcamentoPdf(
       color: corCinza,
     });
     page.drawText(orcamento.nomeCliente, {
-      x: marginLeft + 8 + fontBold.widthOfTextAtSize('Empresa:', 9) + labelGap,
+      x: marginLeft + 8 + larguraLabel('Empresa:') + labelGap,
       y,
       size: 9,
       font: fontRegular,
@@ -365,7 +375,7 @@ export async function gerarOrcamentoPdf(
           color: corCinza,
         });
         page.drawText(orcamento.cnpjCpf, {
-          x: marginLeft + 8 + fontBold.widthOfTextAtSize('CNPJ/CPF:', 9) + labelGap,
+          x: marginLeft + 8 + larguraLabel('CNPJ/CPF:') + labelGap,
           y,
           size: 9,
           font: fontRegular,
@@ -381,7 +391,7 @@ export async function gerarOrcamentoPdf(
           color: corCinza,
         });
         page.drawText(orcamento.telefone, {
-          x: marginLeft + contentWidth / 2 + fontBold.widthOfTextAtSize('Telefone:', 9) + labelGap,
+          x: marginLeft + contentWidth / 2 + larguraLabel('Telefone:') + labelGap,
           y,
           size: 9,
           font: fontRegular,
