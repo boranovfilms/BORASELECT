@@ -233,7 +233,7 @@ export async function gerarOrcamentoPdf(
 
     const lineHeight = 18;
     const sectionGap = 14;
-    const labelGap = 4; // respiro entre o label (negrito) e o valor
+    const labelGap = 2; // respiro entre o label (negrito) e o valor
 
     const drawLinha = () => {
       page.drawLine({
