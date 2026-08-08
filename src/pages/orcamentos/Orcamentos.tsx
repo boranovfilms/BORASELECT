@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { collection, onSnapshot, deleteDoc, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
-import { Plus, Loader2, FileText, Trash2, Edit2, Eye, Settings, Package, ChevronRight, ChevronDown, ChevronUp, Printer } from 'lucide-react';
+import { Plus, Loader2, FileText, Trash2, Edit2, Eye, Settings, Package, ChevronRight, ChevronDown, ChevronUp, Printer, LayoutTemplate } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { cn } from '../../lib/utils';
 import { gerarOrcamentoPdf } from './gerarPdf';
@@ -246,6 +246,10 @@ export default function Orcamentos() {
           <p className="text-[11px] uppercase tracking-[0.4em] text-[#ff5351] font-black mb-2">Boranov</p>
           <div className="flex items-center gap-3">
             <h1 className="text-5xl font-black text-white uppercase italic tracking-tight">Orçamentos</h1>
+            <button onClick={() => navigate('/orcamentos/editor-pdf')} title="Editor visual da capa"
+              className="p-2 text-zinc-600 hover:text-white transition-all">
+              <LayoutTemplate className="w-5 h-5" />
+            </button>
             <button onClick={() => navigate('/orcamentos/configuracoes')} title="Configurações"
               className="p-2 text-zinc-600 hover:text-white transition-all">
               <Settings className="w-5 h-5" />
