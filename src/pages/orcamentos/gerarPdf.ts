@@ -150,7 +150,7 @@ export async function gerarOrcamentoPdf(
       });
      const dataLabel = `Data do orçamento: ${dataFormatada}`;
 const dataSize = 11 * (height / 3509) * (300 / 72);  // fonte menor
-const dataX = 70 * escala;                             // lado esquerdo
+const dataX = 30 * escala;                             // mais para esquerda
 const dataY = height - (3282.81 * (height / 3509)) - 5;
 capaPage.drawText(dataLabel, {
   x: dataX,
@@ -548,7 +548,7 @@ capaPage.drawText(dataLabel, {
     // ── EXTRAS ───────────────────────────────────────────────────
     const extrasValidos = orcamento.extras.filter(e => e.nome && (e.valorDia * e.diarias) > 0);
     if (extrasValidos.length > 0) {
-      await drawSecaoTitulo('Extras');
+      await drawSecaoTitulo('Extras Opcionais');
       for (const extra of extrasValidos) {
         await checkNovaPage(lineHeight + 8);
         const valorExtra = fmt(extra.valorDia * extra.diarias);
