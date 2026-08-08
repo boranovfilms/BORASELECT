@@ -184,8 +184,9 @@ export async function gerarOrcamentoPdf(
       let clienteX: number;
       let clienteY: number;
       if (coordsCapa?.cliente) {
-        // Editor: âncora à esquerda no ponto arrastado
-        clienteX = capaX(coordsCapa.cliente);
+        // Editor: centralizado no ponto arrastado (independe do tamanho do nome)
+        const clienteTextW = fontMedium.widthOfTextAtSize(nomeExibir, clienteSize);
+        clienteX = capaX(coordsCapa.cliente) - clienteTextW / 2;
         clienteY = capaY(coordsCapa.cliente, clienteSize, fontMedium);
       } else {
         // Fallback: centralizado na caixa (comportamento validado)
