@@ -1,8 +1,8 @@
 import { PDFDocument, rgb } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
-import fontBoldUrl from '../../assets/fonts/TT Chocolates Trial Bold.otf?url';
-import fontMediumUrl from '../../assets/fonts/TT Chocolates Trial Medium.otf?url';
-import fontRegularUrl from '../../assets/fonts/TT Chocolates Trial Regular.otf?url';
+import fontBoldUrl from '../../assets/fonts/ChocolatesBold.otf?url';
+import fontMediumUrl from '../../assets/fonts/ChocolatesMedium.otf?url';
+import fontRegularUrl from '../../assets/fonts/ChocolatesRegular.otf?url';
 
 interface ItemBloco {
   nome: string;
