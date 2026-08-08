@@ -541,7 +541,7 @@ export async function gerarOrcamentoPdf(
       font: fontBold,
       color: corBranca,
     });
-    const totalText = fmt(totalFinal);
+    const totalText = fmt(orcamento.valorCliente || totalFinal);
     const totalW = fontBold.widthOfTextAtSize(totalText, 13);
     page.drawText(totalText, {
       x: marginLeft + contentWidth - totalW,
