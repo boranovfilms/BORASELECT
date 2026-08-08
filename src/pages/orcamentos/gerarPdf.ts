@@ -56,6 +56,13 @@ interface ConfiguracaoOrcamento {
   telefone: string;
   email: string;
   site: string;
+  // Coordenadas do editor visual da capa (proporção 0–1, origem no topo-esquerdo).
+  // Opcional: se ausente, a capa usa as posições fixas validadas.
+  capaCoords?: {
+    numero?: { x: number; y: number };
+    cliente?: { x: number; y: number };
+    data?: { x: number; y: number };
+  };
 }
 
 function fmt(v: number): string {
@@ -141,11 +148,26 @@ export async function gerarOrcamentoPdf(
       const { width, height } = capaPage.getSize();
       const escala = width / 2481;
 
+      // Coordenadas vindas do editor visual (se existirem).
+      // Converte proporção (origem topo-esquerdo, y para baixo) para o
+      // sistema do pdf-lib (origem rodapé-esquerdo, y para cima, na linha de base).
+      const coordsCapa = (config as any).capaCoords;
+      const capaX = (c: { x: number; y: number }) => c.x * width;
+      const capaY = (c: { x: number; y: number }, size: number, font: any) =>
+        height - (c.y * height) - font.heightAtSize(size);
+
       // Número do orçamento
       const numText = orcamento.numero;
-      const numX = 1920.72 * escala;
-      const numY = height - (177.46 * (height / 3509)) - 10;
       const numSize = 22 * (height / 3509) * (300 / 72);
+      let numX: number;
+      let numY: number;
+      if (coordsCapa?.numero) {
+        numX = capaX(coordsCapa.numero);
+        numY = capaY(coordsCapa.numero, numSize, fontBold);
+      } else {
+        numX = 1920.72 * escala;
+        numY = height - (177.46 * (height / 3509)) - 10;
+      }
       capaPage.drawText(numText, {
         x: numX,
         y: numY,
@@ -154,15 +176,24 @@ export async function gerarOrcamentoPdf(
         color: corBranca,
       });
 
-      // Nome do cliente — centralizado na caixa (TT Chocolates Medium)
+      // Nome do cliente (TT Chocolates Medium)
       const nomeCompleto = orcamento.nomeCliente.toUpperCase();
       const palavras = nomeCompleto.split(' ');
       const nomeExibir = palavras.length > 2 ? palavras.slice(0, 2).join(' ') : nomeCompleto;
       const clienteSize = 22 * (height / 3509) * (300 / 72);
-      const caixaClienteW = 453.93 * escala;
-      const clienteTextW = fontMedium.widthOfTextAtSize(nomeExibir, clienteSize);
-      const clienteX = (1012.44 * escala) + (caixaClienteW / 2) - (clienteTextW / 2);
-      const clienteY = height - (1444.46 * (height / 3509)) - 5;
+      let clienteX: number;
+      let clienteY: number;
+      if (coordsCapa?.cliente) {
+        // Editor: âncora à esquerda no ponto arrastado
+        clienteX = capaX(coordsCapa.cliente);
+        clienteY = capaY(coordsCapa.cliente, clienteSize, fontMedium);
+      } else {
+        // Fallback: centralizado na caixa (comportamento validado)
+        const caixaClienteW = 453.93 * escala;
+        const clienteTextW = fontMedium.widthOfTextAtSize(nomeExibir, clienteSize);
+        clienteX = (1012.44 * escala) + (caixaClienteW / 2) - (clienteTextW / 2);
+        clienteY = height - (1444.46 * (height / 3509)) - 5;
+      }
       capaPage.drawText(nomeExibir, {
         x: clienteX,
         y: clienteY,
@@ -178,8 +209,15 @@ export async function gerarOrcamentoPdf(
       });
       const dataLabel = `Data do orçamento: ${dataFormatada}`;
       const dataSize = 11 * (height / 3509) * (300 / 72);  // fonte menor
-      const dataX = 30 * escala;                             // mais para esquerda
-      const dataY = height - (3282.81 * (height / 3509)) - 5;
+      let dataX: number;
+      let dataY: number;
+      if (coordsCapa?.data) {
+        dataX = capaX(coordsCapa.data);
+        dataY = capaY(coordsCapa.data, dataSize, fontBold);
+      } else {
+        dataX = 30 * escala;                             // mais para esquerda
+        dataY = height - (3282.81 * (height / 3509)) - 5;
+      }
       capaPage.drawText(dataLabel, {
         x: dataX,
         y: dataY,
