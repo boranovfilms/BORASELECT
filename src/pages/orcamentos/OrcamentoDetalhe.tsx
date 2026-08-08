@@ -363,7 +363,7 @@ export default function OrcamentoDetalhe() {
         const ref = await addDoc(collection(db, 'orcamentos'), dados);
         setForm(prev => ({ ...prev, id: ref.id, ...calc }));
         toast.success('Orçamento salvo!');
-        navigate(`/orcamentos/${ref.id}`);
+        navigate('/orcamentos');
       } else {
         const versaoAtual = form.versao || 1;
         const novaVersao = versaoAtual + 1;
@@ -440,6 +440,7 @@ export default function OrcamentoDetalhe() {
       }, primeiroNome(form.nomeCliente || ''));
 
       toast.success('PDF gerado!');
+      navigate('/orcamentos');
     } catch (error: any) {
       toast.error(`Erro ao gerar PDF: ${error.message}`);
     } finally {
