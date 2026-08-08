@@ -982,7 +982,7 @@ export default function OrcamentoDetalhe() {
                   {fmt(form.lucroReal || 0)}
                 </span>
               </div>
-              <div className="flex items-center justify-between p-3 bg-zinc-900 border border-zinc800 rounded-xl">
+              <div className="flex items-center justify-between p-3 bg-zinc-900 border border-zinc-800 rounded-xl">
                 <span className="text-xs text-zinc-500">Condição de pagamento</span>
                 <span className="text-xs font-black text-white">{form.condicaoPagamento}</span>
               </div>
