@@ -153,6 +153,7 @@ export default function Orcamentos() {
         email: config.email || '',
         site: config.site || '',
         capaCoords: config.capaCoords || null,
+        timbradoMargens: config.timbradoMargens || null,
       }, orc.nomeCliente?.trim().split(' ')[0] || 'BORANOV');
 
       // Marca como PDF gerado
