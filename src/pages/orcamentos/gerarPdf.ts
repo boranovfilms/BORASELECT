@@ -29,6 +29,7 @@ interface Extra {
 interface OrcamentoParaPdf {
   numero: string;
   nomeCliente: string;
+  nomeComercial: string;
   nomeEvento: string;
   cnpjCpf: string;
   emailPrincipal: string;
@@ -176,8 +177,11 @@ export async function gerarOrcamentoPdf(
         color: corBranca,
       });
 
-      // Nome do cliente (TT Chocolates Medium)
-      const nomeCompleto = orcamento.nomeCliente.toUpperCase();
+      // Nome do cliente (TT Chocolates Medium) — usa o nome comercial; se vazio, o nome do cliente
+      const nomeParaCapa = (orcamento.nomeComercial && orcamento.nomeComercial.trim())
+        ? orcamento.nomeComercial
+        : orcamento.nomeCliente;
+      const nomeCompleto = nomeParaCapa.toUpperCase();
       const palavras = nomeCompleto.split(' ');
       const nomeExibir = palavras.length > 2 ? palavras.slice(0, 2).join(' ') : nomeCompleto;
       const clienteSize = 22 * (height / 3509) * (300 / 72);
