@@ -13,6 +13,7 @@ interface Orcamento {
   numero: string;
   versao: number;
   nomeCliente: string;
+  nomeComercial?: string;
   nomeEvento: string;
   valorCliente: number;
   status: 'rascunho' | 'enviado' | 'aprovado' | 'reprovado' | 'alterado' | 'cancelado';
@@ -125,6 +126,7 @@ export default function Orcamentos() {
       await gerarOrcamentoPdf({
         numero: orc.numero || '',
         nomeCliente: orc.nomeCliente || '',
+        nomeComercial: orc.nomeComercial || '',
         nomeEvento: orc.nomeEvento || '',
         cnpjCpf: orc.cnpjCpf || '',
         emailPrincipal: orc.emailPrincipal || '',
