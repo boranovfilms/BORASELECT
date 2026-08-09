@@ -472,12 +472,48 @@ export async function gerarOrcamentoPdf(
     };
 
     // ============================================================
+    // DILUIÇÃO DOS VALORES (margem/nota diluídas nos blocos)
+    // Os valores mostrados por bloco são ajustados para que
+    // (soma dos blocos + despesas) = valor do cliente (TOTAL).
+    // A margem nunca aparece separada; despesas ficam no valor real.
+    // ============================================================
+    const totalDespesas = (orcamento.despAlimentacao || 0) +
+      (orcamento.despTransporte || 0) +
+      (orcamento.despHospedagem || 0) +
+      (orcamento.despPedagio || 0);
+
+    const blocosNome = orcamento.blocos.filter(b => b.nome);
+    const brutoPorBloco = blocosNome.map(b => calcularTotalBloco(b, orcamento.diarias || 1));
+    const somaBruta = brutoPorBloco.reduce((a, v) => a + v, 0);
+    const alvoBlocos = (orcamento.valorCliente || 0) - totalDespesas;
+
+    const valorDiluido = new Map<any, number>();
+    if (somaBruta > 0 && alvoBlocos > 0) {
+      let acumulado = 0;
+      blocosNome.forEach((b, i) => {
+        let v: number;
+        if (i === blocosNome.length - 1) {
+          v = Math.round((alvoBlocos - acumulado) * 100) / 100; // último absorve o arredondamento
+        } else {
+          v = Math.round(alvoBlocos * (brutoPorBloco[i] / somaBruta) * 100) / 100;
+          acumulado += v;
+        }
+        valorDiluido.set(b, v);
+      });
+    } else {
+      // sem diluição possível: usa o valor cru
+      blocosNome.forEach((b, i) => valorDiluido.set(b, brutoPorBloco[i]));
+    }
+    const getValorBloco = (b: any) =>
+      valorDiluido.has(b) ? (valorDiluido.get(b) as number) : calcularTotalBloco(b, orcamento.diarias || 1);
+
+    // ============================================================
     // MIOLO — blocos de serviço (cada bloco inteiro, sem cortar)
     // ============================================================
     for (const bloco of orcamento.blocos) {
       if (!bloco.nome) continue;
       const itensPdf = (bloco.itens || []) as any[];
-      const totalBloco = calcularTotalBloco(bloco, orcamento.diarias || 1);
+      const totalBloco = getValorBloco(bloco);
 
       // altura estimada: título + itens (compactos) + valor + respiro
       const alturaBloco = 30 + itensPdf.length * itemHeight + (totalBloco > 0 ? 24 : 0) + sectionGap;
@@ -515,11 +551,6 @@ export async function gerarOrcamentoPdf(
     }
 
     // ── MIOLO — despesas de deslocamento (bloco inteiro) ─────────
-    const totalDesp = (orcamento.despAlimentacao || 0) +
-      (orcamento.despTransporte || 0) +
-      (orcamento.despHospedagem || 0) +
-      (orcamento.despPedagio || 0);
-
     const despesas = [
       { label: 'Alimentação', valor: orcamento.despAlimentacao },
       { label: 'Transporte', valor: orcamento.despTransporte },
@@ -549,7 +580,7 @@ export async function gerarOrcamentoPdf(
         color: corLinha,
       });
       y -= 10;
-      const totalDespText = fmt(totalDesp);
+      const totalDespText = fmt(totalDespesas);
       const totalDespW = fontBold.widthOfTextAtSize(totalDespText, 9);
       page.drawText('Total', {
         x: marginLeft + 8,
@@ -618,23 +649,20 @@ export async function gerarOrcamentoPdf(
 
     // Lista dos blocos com valores
     const blocosComValor = orcamento.blocos.filter(b => b.nome);
-    const totalFinal = blocosComValor.reduce((acc, b) =>
-      acc + calcularTotalBloco(b, orcamento.diarias || 1), 0);
+    const totalFinal = blocosComValor.reduce((acc, b) => acc + getValorBloco(b), 0) + totalDespesas;
 
-    for (const bloco of blocosComValor) {
-      await checkNovaPage(24);
-      const totalBloco = calcularTotalBloco(bloco, orcamento.diarias || 1);
-      const valorBloco = fmt(totalBloco);
-      const vW = fontBold.widthOfTextAtSize(valorBloco, 10);
-      page.drawText(bloco.nome, {
+    const drawLinhaResumo = (nome: string, valor: number, mostrarValor: boolean) => {
+      const valorTxt = fmt(valor);
+      const vW = fontBold.widthOfTextAtSize(valorTxt, 10);
+      page.drawText(nome, {
         x: marginLeft + 4,
         y,
         size: 10,
         font: fontBold,
         color: corPreta,
       });
-      if (totalBloco > 0) {
-        page.drawText(valorBloco, {
+      if (mostrarValor) {
+        page.drawText(valorTxt, {
           x: marginLeft + contentWidth - vW,
           y,
           size: 10,
@@ -651,6 +679,18 @@ export async function gerarOrcamentoPdf(
         color: corLinha,
       });
       y -= 13;
+    };
+
+    for (const bloco of blocosComValor) {
+      await checkNovaPage(24);
+      const valorBloco = getValorBloco(bloco);
+      drawLinhaResumo(bloco.nome, valorBloco, valorBloco > 0);
+    }
+
+    // Linha de Despesas na listagem final (valor real)
+    if (totalDespesas > 0) {
+      await checkNovaPage(24);
+      drawLinhaResumo('Despesas', totalDespesas, true);
     }
 
     // TOTAL
