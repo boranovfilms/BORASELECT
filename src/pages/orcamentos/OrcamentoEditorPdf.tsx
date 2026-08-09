@@ -153,6 +153,18 @@ export default function OrcamentoEditorPdf() {
         )}
       </header>
 
+      {/* Alternador entre editores */}
+      <div className="flex items-center gap-1 bg-[#1f1f1f] border border-zinc-800 rounded-xl p-1 w-fit">
+        <button
+          className="px-4 h-8 rounded-lg text-[10px] font-black uppercase tracking-widest bg-[#ff5351] text-white transition-all">
+          Capa
+        </button>
+        <button onClick={() => navigate('/orcamentos/editor-timbrado')}
+          className="px-4 h-8 rounded-lg text-[10px] font-black uppercase tracking-widest text-zinc-400 hover:text-white transition-all">
+          Timbrado
+        </button>
+      </div>
+
       {!capaJpgUrl ? (
         <div className="bg-[#1f1f1f] border border-zinc-800 rounded-[24px] p-10 flex flex-col items-center gap-4 text-center">
           <ImageOff className="w-10 h-10 text-zinc-700" />
