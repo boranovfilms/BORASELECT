@@ -241,13 +241,21 @@ export async function gerarOrcamentoPdf(
       ? await fetchPdfBytes(config.timbradoPdfUrl)
       : null;
 
+    // Margens do conteúdo em proporção (0–1). Fallback = equivalente às margens
+    // fixas validadas (left/right 75pt, top 75pt, bottom 110pt em página 595x842).
+    const mrg = (config as any).timbradoMargens;
+    const mLeft = mrg?.left ?? (75 / 595);
+    const mRight = mrg?.right ?? (75 / 595);
+    const mTop = mrg?.top ?? (75 / 842);
+    const mBottom = mrg?.bottom ?? (110 / 842);
+
     let page: any;
     let pageWidth = 595;
     let pageHeight = 842;
-    const marginLeft = 75;
-    const marginRight = 75;
-    const contentWidth = pageWidth - marginLeft - marginRight;
-    const bottomLimit = 110;
+    let marginLeft = 75;
+    let marginRight = 75;
+    let contentWidth = pageWidth - marginLeft - marginRight;
+    let bottomLimit = 110;
     let y = 0;
 
     const adicionarPagina = async () => {
@@ -263,7 +271,12 @@ export async function gerarOrcamentoPdf(
         pageWidth = 595;
         pageHeight = 842;
       }
-      y = pageHeight - 75;
+      // Aplica as margens (proporção) ao tamanho real da página
+      marginLeft = mLeft * pageWidth;
+      marginRight = mRight * pageWidth;
+      contentWidth = pageWidth - marginLeft - marginRight;
+      bottomLimit = mBottom * pageHeight;
+      y = pageHeight - (mTop * pageHeight);
     };
 
     const checkNovaPage = async (espacoNecessario: number) => {
