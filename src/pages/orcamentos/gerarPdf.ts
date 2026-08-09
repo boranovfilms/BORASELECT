@@ -457,12 +457,30 @@ export async function gerarOrcamentoPdf(
       y -= lineHeight + sectionGap;
     }
 
-    // ── BLOCOS DE SERVIÇO ────────────────────────────────────────
+    // Helper: garante que um bloco caiba INTEIRO na folha. Se não couber no
+    // espaço restante mas couber numa folha nova, pula para a próxima folha
+    // (assim o bloco nunca é cortado no meio). Blocos maiores que uma folha
+    // inteira fluem normalmente (fallback), sem gerar folha em branco.
+    const usableHeight = () => (pageHeight - (mTop * pageHeight)) - bottomLimit;
+    const garantirBloco = async (altura: number) => {
+      if (y - altura < bottomLimit && altura <= usableHeight()) {
+        await adicionarPagina();
+      }
+    };
+
+    // ============================================================
+    // MIOLO — blocos de serviço (cada bloco inteiro, sem cortar)
+    // ============================================================
     for (const bloco of orcamento.blocos) {
       if (!bloco.nome) continue;
       const itensPdf = (bloco.itens || []) as any[];
-      await drawSecaoTitulo(bloco.nome);
+      const totalBloco = calcularTotalBloco(bloco, orcamento.diarias || 1);
 
+      // altura estimada: título + itens + valor + respiro
+      const alturaBloco = 30 + itensPdf.length * (lineHeight + 8) + (totalBloco > 0 ? 24 : 0) + sectionGap;
+      await garantirBloco(alturaBloco);
+
+      await drawSecaoTitulo(bloco.nome);
       for (const item of itensPdf) {
         await checkNovaPage(lineHeight + 8);
         const nomeItem = `${String(item.quantidade).padStart(2, '0')} — ${item.nome}`;
@@ -477,8 +495,6 @@ export async function gerarOrcamentoPdf(
         drawLinha();
       }
 
-      // Valor do bloco — automático ou manual
-      const totalBloco = calcularTotalBloco(bloco, orcamento.diarias || 1);
       if (totalBloco > 0) {
         await checkNovaPage(30);
         y -= 4;
@@ -496,7 +512,7 @@ export async function gerarOrcamentoPdf(
       y -= sectionGap;
     }
 
-    // ── DESPESAS DE DESLOCAMENTO ─────────────────────────────────
+    // ── MIOLO — despesas de deslocamento (bloco inteiro) ─────────
     const totalDesp = (orcamento.despAlimentacao || 0) +
       (orcamento.despTransporte || 0) +
       (orcamento.despHospedagem || 0) +
@@ -510,9 +526,11 @@ export async function gerarOrcamentoPdf(
     ].filter(d => (d.valor || 0) > 0);
 
     if (despesas.length > 0) {
+      const alturaDesp = 30 + despesas.length * lineHeight + 10 + lineHeight + sectionGap;
+      await garantirBloco(alturaDesp);
+
       await drawSecaoTitulo('Despesas Extras');
       for (const desp of despesas) {
-        await checkNovaPage(lineHeight);
         page.drawText(desp.label, {
           x: marginLeft + 8,
           y,
@@ -522,7 +540,6 @@ export async function gerarOrcamentoPdf(
         });
         y -= lineHeight;
       }
-      await checkNovaPage(20);
       page.drawLine({
         start: { x: marginLeft, y },
         end: { x: marginLeft + contentWidth, y },
@@ -549,22 +566,68 @@ export async function gerarOrcamentoPdf(
       y -= lineHeight + sectionGap;
     }
 
-    // ── PROPOSTA FINAL ───────────────────────────────────────────
+    // ============================================================
+    // PÁGINA DE FECHAMENTO — sempre começa em folha nova
+    // ============================================================
+    await adicionarPagina();
+
+    // Título "PROPOSTA FINAL" centralizado
+    const tituloFim = 'PROPOSTA FINAL';
+    const tituloFimSize = 20;
+    const tituloFimW = fontBold.widthOfTextAtSize(tituloFim, tituloFimSize);
+    page.drawText(tituloFim, {
+      x: marginLeft + (contentWidth - tituloFimW) / 2,
+      y,
+      size: tituloFimSize,
+      font: fontBold,
+      color: corEscura,
+    });
+    y -= 22;
+
+    // Subtítulo: cliente • evento (centralizado)
+    const nomeSub = (orcamento.nomeComercial && orcamento.nomeComercial.trim())
+      ? orcamento.nomeComercial
+      : orcamento.nomeCliente;
+    const partesSub = [nomeSub, orcamento.nomeEvento].filter(s => s && s.trim());
+    if (partesSub.length > 0) {
+      const sub = partesSub.join('   •   ').toUpperCase();
+      const subSize = 9;
+      const subW = fontMedium.widthOfTextAtSize(sub, subSize);
+      page.drawText(sub, {
+        x: marginLeft + (contentWidth - subW) / 2,
+        y,
+        size: subSize,
+        font: fontMedium,
+        color: corCinza,
+      });
+      y -= 14;
+    }
+
+    // Risco vermelho centralizado
+    const riscoW = 70;
+    page.drawRectangle({
+      x: marginLeft + (contentWidth - riscoW) / 2,
+      y: y - 2,
+      width: riscoW,
+      height: 3,
+      color: corVermelha,
+    });
+    y -= 26;
+
+    // Lista dos blocos com valores
     const blocosComValor = orcamento.blocos.filter(b => b.nome);
     const totalFinal = blocosComValor.reduce((acc, b) =>
       acc + calcularTotalBloco(b, orcamento.diarias || 1), 0);
-
-    await drawSecaoTitulo('Proposta Final');
 
     for (const bloco of blocosComValor) {
       await checkNovaPage(lineHeight + 8);
       const totalBloco = calcularTotalBloco(bloco, orcamento.diarias || 1);
       const valorBloco = fmt(totalBloco);
-      const vW = fontBold.widthOfTextAtSize(valorBloco, 9);
+      const vW = fontBold.widthOfTextAtSize(valorBloco, 10);
       page.drawText(bloco.nome, {
-        x: marginLeft + 8,
+        x: marginLeft + 4,
         y,
-        size: 9,
+        size: 10,
         font: fontBold,
         color: corPreta,
       });
@@ -572,7 +635,7 @@ export async function gerarOrcamentoPdf(
         page.drawText(valorBloco, {
           x: marginLeft + contentWidth - vW,
           y,
-          size: 9,
+          size: 10,
           font: fontBold,
           color: corPreta,
         });
@@ -628,9 +691,12 @@ export async function gerarOrcamentoPdf(
     });
     y -= lineHeight;
 
-    // ── EXTRAS ───────────────────────────────────────────────────
+    // ── EXTRAS (bloco inteiro) ───────────────────────────────────
     const extrasValidos = orcamento.extras.filter(e => e.nome && (e.valorDia * e.diarias) > 0);
     if (extrasValidos.length > 0) {
+      const alturaExtras = 30 + extrasValidos.length * (lineHeight + 8) + sectionGap;
+      await garantirBloco(alturaExtras);
+
       await drawSecaoTitulo('Extras Opcionais');
       for (const extra of extrasValidos) {
         await checkNovaPage(lineHeight + 8);
@@ -656,9 +722,26 @@ export async function gerarOrcamentoPdf(
       y -= sectionGap;
     }
 
-    // ── OBSERVAÇÕES ──────────────────────────────────────────────
+    // ── OBSERVAÇÕES / DADOS DE ENTREGA (bloco inteiro) ───────────
     if (orcamento.observacoes) {
-      await checkNovaPage(40);
+      // pré-quebra em linhas para estimar a altura e não cortar o bloco
+      const palavrasObs = orcamento.observacoes.split(' ');
+      const linhasObs: string[] = [];
+      let linhaAtual = '';
+      for (const palavra of palavrasObs) {
+        const teste = linhaAtual ? `${linhaAtual} ${palavra}` : palavra;
+        if (fontRegular.widthOfTextAtSize(teste, 8) > contentWidth) {
+          linhasObs.push(linhaAtual);
+          linhaAtual = palavra;
+        } else {
+          linhaAtual = teste;
+        }
+      }
+      if (linhaAtual) linhasObs.push(linhaAtual);
+
+      const alturaObs = sectionGap + 14 + linhasObs.length * 12 + 6;
+      await garantirBloco(alturaObs);
+
       y -= sectionGap;
       page.drawText('DADOS DE ENTREGA DO MATERIAL', {
         x: marginLeft,
@@ -668,23 +751,45 @@ export async function gerarOrcamentoPdf(
         color: corEscura,
       });
       y -= 14;
-      const palavrasObs = orcamento.observacoes.split(' ');
-      let linha = '';
-      for (const palavra of palavrasObs) {
-        const teste = linha ? `${linha} ${palavra}` : palavra;
-        if (fontRegular.widthOfTextAtSize(teste, 8) > contentWidth) {
-          await checkNovaPage(12);
-          page.drawText(linha, { x: marginLeft, y, size: 8, font: fontRegular, color: corCinza });
-          y -= 12;
-          linha = palavra;
-        } else {
-          linha = teste;
-        }
-      }
-      if (linha) {
-        await checkNovaPage(12);
+      for (const linha of linhasObs) {
         page.drawText(linha, { x: marginLeft, y, size: 8, font: fontRegular, color: corCinza });
+        y -= 12;
       }
+    }
+
+    // ── VALIDADE DA PROPOSTA (no fim) ────────────────────────────
+    {
+      const alturaValidade = 14 + 12 + 14;
+      await garantirBloco(alturaValidade);
+      y -= 14;
+      page.drawLine({
+        start: { x: marginLeft, y },
+        end: { x: marginLeft + contentWidth, y },
+        thickness: 0.5,
+        color: corLinha,
+      });
+      y -= 14;
+      const valLabel = 'VALIDADE DA PROPOSTA';
+      const valLabelSize = 8;
+      const valLabelW = fontBold.widthOfTextAtSize(valLabel, valLabelSize);
+      page.drawText(valLabel, {
+        x: marginLeft + (contentWidth - valLabelW) / 2,
+        y,
+        size: valLabelSize,
+        font: fontBold,
+        color: corVermelha,
+      });
+      y -= 12;
+      const valTxt = 'Esta proposta é válida por 10 dias a partir da data de emissão.';
+      const valTxtSize = 9;
+      const valTxtW = fontRegular.widthOfTextAtSize(valTxt, valTxtSize);
+      page.drawText(valTxt, {
+        x: marginLeft + (contentWidth - valTxtW) / 2,
+        y,
+        size: valTxtSize,
+        font: fontRegular,
+        color: corPreta,
+      });
     }
 
     // ── DOWNLOAD ─────────────────────────────────────────────────
