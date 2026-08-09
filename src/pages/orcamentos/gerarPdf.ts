@@ -142,6 +142,7 @@ export async function gerarOrcamentoPdf(
     // ============================================================
     // PÁGINA 1 — CAPA
     // ============================================================
+    let temCapa = false;
     if (config.capaPdfUrl) {
       const capaBytes = await fetchPdfBytes(config.capaPdfUrl);
       const capaDoc = await PDFDocument.load(capaBytes);
@@ -232,6 +233,7 @@ export async function gerarOrcamentoPdf(
       });
 
       finalPdf.addPage(capaPage);
+      temCapa = true;
     }
 
     // ============================================================
@@ -288,6 +290,7 @@ export async function gerarOrcamentoPdf(
     await adicionarPagina();
 
     const lineHeight = 18;
+    const itemHeight = 13; // espaçamento compacto entre itens de um bloco (sem linha)
     const sectionGap = 14;
     const labelGap = 2; // respiro entre o label (negrito) e o valor
 
@@ -476,13 +479,13 @@ export async function gerarOrcamentoPdf(
       const itensPdf = (bloco.itens || []) as any[];
       const totalBloco = calcularTotalBloco(bloco, orcamento.diarias || 1);
 
-      // altura estimada: título + itens + valor + respiro
-      const alturaBloco = 30 + itensPdf.length * (lineHeight + 8) + (totalBloco > 0 ? 24 : 0) + sectionGap;
+      // altura estimada: título + itens (compactos) + valor + respiro
+      const alturaBloco = 30 + itensPdf.length * itemHeight + (totalBloco > 0 ? 24 : 0) + sectionGap;
       await garantirBloco(alturaBloco);
 
       await drawSecaoTitulo(bloco.nome);
       for (const item of itensPdf) {
-        await checkNovaPage(lineHeight + 8);
+        await checkNovaPage(itemHeight);
         const nomeItem = `${String(item.quantidade).padStart(2, '0')} — ${item.nome}`;
         page.drawText(nomeItem, {
           x: marginLeft + 8,
@@ -491,8 +494,7 @@ export async function gerarOrcamentoPdf(
           font: fontRegular,
           color: corPreta,
         });
-        y -= lineHeight;
-        drawLinha();
+        y -= itemHeight;
       }
 
       if (totalBloco > 0) {
@@ -526,7 +528,7 @@ export async function gerarOrcamentoPdf(
     ].filter(d => (d.valor || 0) > 0);
 
     if (despesas.length > 0) {
-      const alturaDesp = 30 + despesas.length * lineHeight + 10 + lineHeight + sectionGap;
+      const alturaDesp = 30 + despesas.length * itemHeight + 10 + lineHeight + sectionGap;
       await garantirBloco(alturaDesp);
 
       await drawSecaoTitulo('Despesas Extras');
@@ -538,7 +540,7 @@ export async function gerarOrcamentoPdf(
           font: fontRegular,
           color: corCinza,
         });
-        y -= lineHeight;
+        y -= itemHeight;
       }
       page.drawLine({
         start: { x: marginLeft, y },
@@ -620,7 +622,7 @@ export async function gerarOrcamentoPdf(
       acc + calcularTotalBloco(b, orcamento.diarias || 1), 0);
 
     for (const bloco of blocosComValor) {
-      await checkNovaPage(lineHeight + 8);
+      await checkNovaPage(24);
       const totalBloco = calcularTotalBloco(bloco, orcamento.diarias || 1);
       const valorBloco = fmt(totalBloco);
       const vW = fontBold.widthOfTextAtSize(valorBloco, 10);
@@ -640,8 +642,15 @@ export async function gerarOrcamentoPdf(
           color: corPreta,
         });
       }
-      y -= lineHeight;
-      drawLinha();
+      // linha colada logo abaixo do texto (ajuda na leitura do resumo)
+      y -= 5;
+      page.drawLine({
+        start: { x: marginLeft, y },
+        end: { x: marginLeft + contentWidth, y },
+        thickness: 0.5,
+        color: corLinha,
+      });
+      y -= 13;
     }
 
     // TOTAL
@@ -672,18 +681,21 @@ export async function gerarOrcamentoPdf(
     });
     y -= 40;
 
-    // ── PAGAMENTO ────────────────────────────────────────────────
+    // ── FORMA DE PAGAMENTO (rótulo e valor à direita) ────────────
     await checkNovaPage(40);
-    page.drawText('PAGAMENTO', {
-      x: marginLeft,
+    const pagLabel = 'FORMA DE PAGAMENTO';
+    const pagLabelW = fontBold.widthOfTextAtSize(pagLabel, 10);
+    page.drawText(pagLabel, {
+      x: marginLeft + contentWidth - pagLabelW,
       y,
       size: 10,
       font: fontBold,
       color: corEscura,
     });
     y -= 16;
+    const pagTxtW = fontRegular.widthOfTextAtSize(orcamento.condicaoPagamento, 9);
     page.drawText(orcamento.condicaoPagamento, {
-      x: marginLeft,
+      x: marginLeft + contentWidth - pagTxtW,
       y,
       size: 9,
       font: fontRegular,
@@ -694,12 +706,13 @@ export async function gerarOrcamentoPdf(
     // ── EXTRAS (bloco inteiro) ───────────────────────────────────
     const extrasValidos = orcamento.extras.filter(e => e.nome && (e.valorDia * e.diarias) > 0);
     if (extrasValidos.length > 0) {
-      const alturaExtras = 30 + extrasValidos.length * (lineHeight + 8) + sectionGap;
+      y -= 20; // respiro maior entre o pagamento e os extras
+      const alturaExtras = 30 + extrasValidos.length * 18 + sectionGap;
       await garantirBloco(alturaExtras);
 
       await drawSecaoTitulo('Extras Opcionais');
       for (const extra of extrasValidos) {
-        await checkNovaPage(lineHeight + 8);
+        await checkNovaPage(24);
         const valorExtra = fmt(extra.valorDia * extra.diarias);
         const vW = fontBold.widthOfTextAtSize(valorExtra, 9);
         page.drawText(extra.nome, {
@@ -716,8 +729,15 @@ export async function gerarOrcamentoPdf(
           font: fontBold,
           color: corPreta,
         });
-        y -= lineHeight;
-        drawLinha();
+        // linha colada logo abaixo do texto
+        y -= 5;
+        page.drawLine({
+          start: { x: marginLeft, y },
+          end: { x: marginLeft + contentWidth, y },
+          thickness: 0.5,
+          color: corLinha,
+        });
+        y -= 13;
       }
       y -= sectionGap;
     }
@@ -788,6 +808,25 @@ export async function gerarOrcamentoPdf(
         y,
         size: valTxtSize,
         font: fontRegular,
+        color: corPreta,
+      });
+    }
+
+    // ── NUMERAÇÃO DE PÁGINA ──────────────────────────────────────
+    // Capa não recebe número; a contagem começa na 1ª folha após a capa.
+    const paginas = finalPdf.getPages();
+    const primeiraNumerada = temCapa ? 1 : 0;
+    for (let i = primeiraNumerada; i < paginas.length; i++) {
+      const p = paginas[i];
+      const { width: pw } = p.getSize();
+      const numeroPagina = i - primeiraNumerada + 1;
+      const txtPag = String(numeroPagina).padStart(2, '0');
+      const txtPagW = fontBold.widthOfTextAtSize(txtPag, 9);
+      p.drawText(txtPag, {
+        x: pw - (mRight * pw) - txtPagW,
+        y: 24,
+        size: 9,
+        font: fontBold,
         color: corPreta,
       });
     }
