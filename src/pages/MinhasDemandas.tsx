@@ -6,6 +6,21 @@ import { Loader2, ChevronRight, AlertCircle, CheckCircle2, Clock, FileText, Zap 
 import { cn } from '../lib/utils';
 import { DataTable } from '../components/ui/DataTable';
 
+const TOTAL_ETAPAS_FLUXO = 7;
+const pctAprovacao = (status: string): number => {
+  const etapa: Record<string, number> = {
+    rascunho: 1,
+    devolvido: 1,
+    aguardando_cliente: 2,
+    aguardando_validacao_equipe: 3,
+    aprovado: 3,
+    aprovado_equipe: 4,
+    em_producao: 4,
+    concluido: 7,
+  };
+  return Math.round(((etapa[status] || 1) / TOTAL_ETAPAS_FLUXO) * 100);
+};
+
 export default function MinhasDemandas() {
   const [loading, setLoading] = useState(true);
   const [userRole, setUserRole] = useState('cliente');
@@ -137,13 +152,6 @@ export default function MinhasDemandas() {
 
               if (totalPosts > 0 && postsConcluidos === totalPosts) continue;
 
-              const aprovacaoMap: any = {
-                aguardando_cliente: 30,
-                aguardando_validacao_equipe: 60,
-                aprovado_equipe: 100,
-                em_producao: 100,
-              };
-
               itens.push({
                 tipo: 'planejamento',
                 demandaId: d.id,
@@ -153,7 +161,7 @@ export default function MinhasDemandas() {
                 publishDate: data.updatedAt,
                 totalPosts,
                 postsConcluidos,
-                aprovacaoPct: aprovacaoMap[data.status] || 0,
+                aprovacaoPct: pctAprovacao(data.status),
               });
 
               postsDoPlano.forEach(post => {
@@ -238,15 +246,6 @@ export default function MinhasDemandas() {
 
       if (data.status === 'concluido') continue;
 
-      const calcAprovacao = (status: string) => {
-        const map: any = {
-          rascunho: 10, aguardando_cliente: 30,
-          aguardando_validacao_equipe: 50, aprovado_equipe: 100,
-          em_producao: 100, concluido: 100, devolvido: 20,
-        };
-        return map[status] || 0;
-      };
-
       itens.push({
         id: d.id,
         name: data.name,
@@ -255,7 +254,7 @@ export default function MinhasDemandas() {
         updatedAt: data.updatedAt,
         isPost: false,
         isPlanejamento: true,
-        aprovacaoPct: calcAprovacao(data.status),
+        aprovacaoPct: pctAprovacao(data.status),
         postsConcluidos,
         totalPosts,
       });
