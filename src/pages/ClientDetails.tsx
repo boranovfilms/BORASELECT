@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { 
   ArrowLeft, Plus, FileText, Calendar, Clock, ChevronRight, 
-  User, Mail, BadgeCheck, AlertCircle, Loader2, X, Save, Trash2, GitBranch, ChevronDown, Users, Check, Activity, CheckCircle, Clock3, Settings
+  User, Mail, BadgeCheck, AlertCircle, Loader2, Trash2, GitBranch, ChevronDown, Users, Check, Activity, CheckCircle, Clock3, Settings
 } from 'lucide-react';
 import { db } from '../lib/firebase';
 import { doc, getDoc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore';
@@ -31,9 +31,6 @@ export default function ClientDetails() {
   const [availableModels, setAvailableModels] = useState<WorkflowModel[]>([]);
   const [loading, setLoading] = useState(true);
   
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [newPlan, setNewPlan] = useState({ name: '', month: '', text: '' });
-  const [saving, setSaving] = useState(false);
 
   const [workflowModels, setWorkflowModels] = useState<Record<string, string | null>>({});
   const [teamMembers, setTeamMembers] = useState<any[]>([]);
@@ -153,27 +150,6 @@ export default function ClientDetails() {
       toast.error('Erro ao salvar aprovadores.');
     } finally {
       setSavingApprovers(false);
-    }
-  };
-
-  const handleCreatePlan = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSaving(true);
-    try {
-      await contentPlanService.createPlan({
-        clientId: clientId!,
-        name: newPlan.name,
-        monthReference: newPlan.month,
-        currentText: newPlan.text
-      });
-      toast.success('Planejamento criado!');
-      setIsModalOpen(false);
-      setNewPlan({ name: '', month: '', text: '' });
-      loadData();
-    } catch (error) {
-      toast.error('Erro ao criar planejamento.');
-    } finally {
-      setSaving(false);
     }
   };
 
@@ -395,41 +371,6 @@ export default function ClientDetails() {
         />
       </section>
 
-      {isModalOpen && (
-        <div className="fixed inset-0 z-[300] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setIsModalOpen(false)} />
-          <div className="relative w-full max-w-3xl bg-[#151515] rounded-[32px] border border-zinc-800 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
-            <header className="p-6 border-b border-zinc-800 flex items-center justify-between bg-zinc-900/30">
-              <h3 className="text-xl font-black text-white uppercase tracking-tighter italic">Novo Planejamento</h3>
-              <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-zinc-800 rounded-full text-zinc-500"><X className="w-6 h-6" /></button>
-            </header>
-            <form onSubmit={handleCreatePlan}>
-              <div className="p-8 space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1">Nome da Campanha</label>
-                    <input required type="text" value={newPlan.name} onChange={e => setNewPlan({...newPlan, name: e.target.value})} placeholder="Ex: Campanha de Inverno" className="w-full h-12 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white focus:border-[#ff5351] outline-none" />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1">Mês de Referência</label>
-                    <input required type="text" value={newPlan.month} onChange={e => setNewPlan({...newPlan, month: e.target.value})} placeholder="Ex: Junho 2026" className="w-full h-12 bg-zinc-900 border border-zinc-800 rounded-xl px-4 text-white focus:border-[#ff5351] outline-none" />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1">Texto do Planejamento</label>
-                  <textarea required rows={10} value={newPlan.text} onChange={e => setNewPlan({...newPlan, text: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl p-5 text-sm text-white focus:border-[#ff5351] outline-none resize-none" placeholder="Cole aqui o texto completo da redatora..." />
-                </div>
-              </div>
-              <footer className="p-6 bg-zinc-900/50 border-t border-zinc-800 flex gap-3">
-                <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 h-12 text-xs font-black uppercase tracking-widest text-zinc-500 hover:text-white transition-all bg-zinc-900 rounded-xl border border-zinc-800">Cancelar</button>
-                <button type="submit" disabled={saving} className="flex-1 h-12 bg-[#ff5351] text-white text-xs font-black uppercase tracking-widest rounded-xl hover:brightness-110 flex items-center justify-center gap-2">
-                  {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Salvar Planejamento
-                </button>
-              </footer>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
