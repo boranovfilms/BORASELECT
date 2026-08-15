@@ -87,6 +87,11 @@ export default function ContentPlanDetails() {
   /* estado da visão nova */
   const [modo, setModo] = useState<'agenda' | 'linha'>('agenda');
   const [aberto, setAberto] = useState<number | null>(null);
+  /* conferência do cliente / equipe */
+  const [editandoConteudo, setEditandoConteudo] = useState(false);
+  const [rascunhoEdicao, setRascunhoEdicao] = useState<any>({});
+  const [motivoTexto, setMotivoTexto] = useState('');
+  const [notaAberta, setNotaAberta] = useState<Record<string, boolean>>({});
   const [arrastando, setArrastando] = useState<number | null>(null);
   const [diaAlvo, setDiaAlvo] = useState<string | null>(null);
   const [ultimoMove, setUltimoMove] = useState<{ idx: number; de: any } | null>(null);
@@ -263,7 +268,134 @@ export default function ContentPlanDetails() {
     try { await gravarPosts(novos); } catch { toast.error('Erro ao desfazer'); }
   };
 
-  /* ---------------- ações originais (mantidas) ---------------- */
+  /* ---------- CONFERÊNCIA ITEM A ITEM (cliente / equipe do cliente) ---------- */
+
+  /* fase de conferência: o cliente confere quando aguarda ele; a equipe quando aguarda validação */
+  const emConferencia =
+    (isCliente && plan?.status === 'aguardando_cliente') ||
+    (isEquipe && plan?.status === 'aguardando_validacao_equipe');
+
+  const acaoAprovar = isEquipe ? 'validado_equipe' : 'aprovado';
+  const acaoEditar = isEquipe ? 'editado_equipe' : 'editado';
+
+  /* lê a decisão DESTA fase (ignora decisões de fases anteriores) */
+  const decisaoDe = (p: any): 'ok' | 'no' | null => {
+    const aps = (p?.approvals || []).filter((a: any) =>
+      isEquipe ? ['validado_equipe', 'reprovado'].includes(a.action)
+               : ['aprovado', 'reprovado'].includes(a.action)
+    );
+    if (!aps.length) return null;
+    const ultima = aps[aps.length - 1];
+    return ultima.action === 'reprovado' ? 'no' : 'ok';
+  };
+
+  const edicoesDe = (p: any) =>
+    (p?.approvals || []).filter((a: any) => ['editado', 'editado_equipe'].includes(a.action));
+
+  const motivoDe = (p: any) => {
+    const reps = (p?.approvals || []).filter((a: any) => a.action === 'reprovado');
+    return reps.length ? reps[reps.length - 1] : null;
+  };
+
+  const conferidos = conteudos.filter(c => decisaoDe(c.raw)).length;
+  const aprovadosCount = conteudos.filter(c => decisaoDe(c.raw) === 'ok').length;
+  const reprovadosCount = conteudos.filter(c => decisaoDe(c.raw) === 'no').length;
+  const faltamConferir = conteudos.length - conferidos;
+
+  const registro = (action: string, extras: any = {}) => ({
+    userId: user?.uid || '',
+    userName: userName || user?.email || '',
+    userEmail: user?.email || '',
+    action,
+    comment: extras.comment ?? null,
+    textBefore: extras.textBefore ?? null,
+    textAfter: extras.textAfter ?? null,
+    date: new Date().toISOString(),
+  });
+
+  const gravarPost = async (idx: number, mudancas: any, novoRegistro: any) => {
+    const alvo = posts[idx];
+    const novos = posts.map((p, i) =>
+      (alvo?.id ? p.id === alvo.id : i === idx)
+        ? { ...p, ...mudancas, approvals: [...(p.approvals || []), novoRegistro] }
+        : p
+    );
+    setPosts(novos);
+    await gravarPosts(novos);
+    return novos;
+  };
+
+  const aprovarConteudo = async (idx: number) => {
+    try {
+      await gravarPost(idx, {}, registro(acaoAprovar));
+      toast.success('Conteúdo aprovado');
+      irParaProximoPendente(idx);
+    } catch { toast.error('Erro ao aprovar'); }
+  };
+
+  const reprovarConteudo = async (idx: number) => {
+    const motivo = motivoTexto.trim();
+    if (!motivo) { toast.error('Escreva o motivo da reprovação'); return; }
+    try {
+      await gravarPost(idx, {}, registro('reprovado', { comment: motivo }));
+      setMotivoTexto('');
+      toast.success('Conteúdo reprovado — o redator será avisado');
+      irParaProximoPendente(idx);
+    } catch { toast.error('Erro ao reprovar'); }
+  };
+
+  const salvarEdicaoConteudo = async (idx: number) => {
+    const orig = posts[idx];
+    const mudou: string[] = [];
+    const mudancas: any = {};
+    const rotulos: Record<string, string> = {
+      caption: 'Legenda', textoArte: 'Texto da arte', hashtags: 'Hashtags',
+      cta: 'CTA', sugestaoVisual: 'Sugestão visual', duracao: 'Duração', headline: 'Tema',
+    };
+
+    Object.keys(rascunhoEdicao).forEach(k => {
+      if (k === 'slides' || k === 'cenas') return;
+      if (String(rascunhoEdicao[k] ?? '') !== String(orig[k] ?? '')) {
+        mudancas[k] = rascunhoEdicao[k];
+        mudou.push(rotulos[k] || k);
+      }
+    });
+    ['slides', 'cenas'].forEach(campo => {
+      if (!rascunhoEdicao[campo]) return;
+      if (JSON.stringify(rascunhoEdicao[campo]) !== JSON.stringify(orig[campo] || [])) {
+        mudancas[campo] = rascunhoEdicao[campo];
+        mudou.push(campo === 'slides' ? 'Slides' : 'Roteiro');
+      }
+    });
+
+    if (!mudou.length) { setEditandoConteudo(false); toast('Nada foi alterado'); return; }
+
+    try {
+      await gravarPost(idx, mudancas, registro(acaoEditar, { comment: mudou.join(' · ') }));
+      setEditandoConteudo(false);
+      toast.success(`${mudou.length} campo(s) alterado(s)`);
+    } catch { toast.error('Erro ao salvar alterações'); }
+  };
+
+  const irParaProximoPendente = (atualIdx: number) => {
+    const prox = conteudos.find(c => c.idx !== atualIdx && !decisaoDe(posts[c.idx]));
+    if (prox) { setAberto(prox.idx); setMotivoTexto(''); setEditandoConteudo(false); }
+    else setAberto(null);
+  };
+
+  const avisarEquipeInterna = async (titulo: string, descricao: string, tipo: string) => {
+    const snap = await getDocs(collection(db, 'boraselect'));
+    for (const m of snap.docs) {
+      const email = m.data().email?.toLowerCase();
+      if (!email) continue;
+      await notificacaoService.criar({
+        para: email, tipo, titulo, descricao, planId: planId!,
+        visto: false, criadoEm: new Date().toISOString()
+      });
+    }
+  };
+
+  /* ---------- ações originais (mantidas) ---------- */
   const handleSaveText = async () => {
     if (!planId || !plan || !user) return;
     setSaving(true);
@@ -339,8 +471,19 @@ export default function ContentPlanDetails() {
 
   const handleClientApprove = async () => {
     if (!planId || !plan || !user) return;
+    if (faltamConferir > 0) {
+      toast.error(`Faltam ${faltamConferir} conteúdo(s) para conferir`);
+      return;
+    }
     setSaving(true);
     try {
+      if (reprovadosCount > 0) {
+        await avisarEquipeInterna(
+          'Planejamento conferido — há conteúdos reprovados',
+          `"${plan.name}": ${aprovadosCount} aprovado(s) e ${reprovadosCount} reprovado(s) pelo cliente.`,
+          'planejamento_com_reprovados'
+        );
+      }
       if (hasTeam) {
         await contentPlanService.updateStatus(planId, 'aguardando_validacao_equipe');
         const teamSnap = await getDocs(query(
@@ -373,8 +516,19 @@ export default function ContentPlanDetails() {
 
   const handleEquipeValidate = async () => {
     if (!planId || !plan) return;
+    if (faltamConferir > 0) {
+      toast.error(`Faltam ${faltamConferir} conteúdo(s) para conferir`);
+      return;
+    }
     setSaving(true);
     try {
+      if (reprovadosCount > 0) {
+        await avisarEquipeInterna(
+          'Validação concluída — há conteúdos reprovados',
+          `"${plan.name}": ${reprovadosCount} conteúdo(s) reprovado(s) na validação da equipe do cliente.`,
+          'planejamento_com_reprovados'
+        );
+      }
       await criarPostsEFinalizar();
       await loadAll();
     } catch (error) {
@@ -524,7 +678,35 @@ export default function ContentPlanDetails() {
         </div>
       ) : (
         <>
-          {/* -------- BARRA DE MODO -------- */}
+          {/* -------- BARRA DE MODO / CONFERÊNCIA -------- */}
+          {emConferencia ? (
+            <div className="bg-[#1f1f1f] border border-zinc-800 rounded-[22px] p-5 md:px-6">
+              <div className="flex justify-between items-center gap-3 flex-wrap mb-3.5">
+                <h2 className="text-[14px] font-black uppercase tracking-[0.14em] text-white">Conferência</h2>
+                <span className="font-display text-[15px] font-black text-white">
+                  {conferidos} de {conteudos.length} <span className="text-zinc-500 text-[12px] font-semibold">conferidos</span>
+                </span>
+              </div>
+              <div className="flex gap-1.5">
+                {conteudos.map(c => {
+                  const d = decisaoDe(posts[c.idx]);
+                  return (
+                    <div key={c.idx} className={cn(
+                      "flex-1 h-[7px] rounded-full transition-colors",
+                      d === 'ok' ? "bg-emerald-500" : d === 'no' ? "bg-[#ff5351]" : "bg-[#2e2e2e]"
+                    )} />
+                  );
+                })}
+              </div>
+              <p className="mt-3 text-[12.5px] text-zinc-500">
+                {faltamConferir > 0
+                  ? <>Abra cada conteúdo e marque como aprovado ou reprovado. <b className="text-amber-300">Faltam {faltamConferir}.</b></>
+                  : reprovadosCount > 0
+                    ? <><b className="text-zinc-300">Tudo conferido.</b> {aprovadosCount} aprovado(s), {reprovadosCount} reprovado(s) — os reprovados voltam para o redator.</>
+                    : <><b className="text-zinc-300">Tudo conferido e aprovado.</b> Você já pode liberar o planejamento.</>}
+              </p>
+            </div>
+          ) : (
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <div className="inline-flex bg-[#1f1f1f] border border-zinc-800 rounded-2xl p-1.5">
               {([['agenda', 'Agenda', CalendarDays], ['linha', 'Linha', List]] as const).map(([k, label, Icon]) => (
@@ -546,6 +728,7 @@ export default function ContentPlanDetails() {
                 : 'Ordem de publicação · intervalo entre os cards'}
             </p>
           </div>
+          )}
 
           {/* aviso de data alterada — ao lado do seletor, some sozinho */}
           {ultimoMove && (
@@ -563,7 +746,7 @@ export default function ContentPlanDetails() {
           )}
 
           {/* -------- AGENDA -------- */}
-          {modo === 'agenda' && (
+          {modo === 'agenda' && !emConferencia && (
             <div className="bg-[#1f1f1f] border border-zinc-800 rounded-[26px] p-4 md:p-5">
               <div className="grid grid-cols-7 gap-[7px] mb-2">
                 {['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'].map(d => (
@@ -646,11 +829,15 @@ export default function ContentPlanDetails() {
           )}
 
           {/* -------- LINHA DO TEMPO -------- */}
-          {modo === 'linha' && (
+          {(modo === 'linha' || emConferencia) && (
             <div className="relative pl-8">
               <div className="absolute left-2 top-3 bottom-3 w-0.5 bg-[#282828]" />
               {comData.map((c, k) => {
                 const t = TIPOS[c.tipo];
+                const dec = emConferencia ? decisaoDe(posts[c.idx]) : null;
+                const eds = emConferencia ? edicoesDe(posts[c.idx]) : [];
+                const mot = emConferencia ? motivoDe(posts[c.idx]) : null;
+                const corBorda = dec === 'ok' ? '#22c55e' : dec === 'no' ? '#ff5351' : t.cor;
                 const dif = k > 0
                   ? Math.round((c.data!.getTime() - comData[k - 1].data!.getTime()) / 86400000)
                   : null;
@@ -668,12 +855,12 @@ export default function ContentPlanDetails() {
                     )}
                     <div className="relative mb-3">
                       <span
-                        className="absolute -left-[26px] top-6 w-3 h-3 rounded-full bg-[#131313] border-2"
-                        style={{ borderColor: t.cor }}
+                        className="absolute -left-[26px] top-6 w-3 h-3 rounded-full border-2"
+                        style={{ borderColor: corBorda, background: dec ? corBorda : '#131313' }}
                       />
                       <div
-                        onClick={() => setAberto(c.idx)}
-                        style={{ borderLeftColor: t.cor }}
+                        onClick={() => { setAberto(c.idx); setEditandoConteudo(false); setMotivoTexto(mot?.comment || ''); }}
+                        style={{ borderLeftColor: corBorda }}
                         className="bg-[#1f1f1f] border border-zinc-800 border-l-4 rounded-[20px] px-5 py-4 flex gap-4 items-center cursor-pointer hover:border-zinc-700 transition-colors"
                       >
                         <div className="text-center shrink-0 w-[50px]">
@@ -685,17 +872,87 @@ export default function ContentPlanDetails() {
                           </div>
                         </div>
                         <div className="flex-1 min-w-0">
-                          <span
-                            className="text-[9.5px] font-black uppercase tracking-[0.15em] px-2.5 py-1 rounded-full"
-                            style={{ background: t.bg, color: t.texto }}
-                          >
-                            {c.tipo}
-                          </span>
+                          <div className="flex items-center gap-1 flex-wrap">
+                            <span
+                              className="text-[9.5px] font-black uppercase tracking-[0.15em] px-2.5 py-1 rounded-full"
+                              style={{ background: t.bg, color: t.texto }}
+                            >
+                              {c.tipo}
+                            </span>
+                            {mot && (
+                              <button
+                                onClick={e => { e.stopPropagation(); setNotaAberta(p => ({ ...p, ['r' + c.idx]: !p['r' + c.idx] })); }}
+                                className={cn(
+                                  "inline-flex items-center gap-1.5 text-[9px] font-black uppercase tracking-[0.08em] rounded-md px-2 py-[3px] ml-1.5 border transition-colors",
+                                  notaAberta['r' + c.idx]
+                                    ? "bg-[#ff5351] text-white border-[#ff5351]"
+                                    : "text-[#c98a89] border-[#ff5351]/30 hover:text-[#ff8c8b]"
+                                )}
+                              >
+                                ✕ Motivo
+                              </button>
+                            )}
+                            {eds.length > 0 && (
+                              <button
+                                onClick={e => { e.stopPropagation(); setNotaAberta(p => ({ ...p, ['e' + c.idx]: !p['e' + c.idx] })); }}
+                                className={cn(
+                                  "inline-flex items-center gap-1.5 text-[9px] font-black uppercase tracking-[0.08em] rounded-md px-2 py-[3px] ml-1.5 border transition-colors",
+                                  notaAberta['e' + c.idx]
+                                    ? "bg-[#8ba3ff] text-[#0d1330] border-[#8ba3ff]"
+                                    : "text-[#8f9ec8] border-[#8ba3ff]/30 hover:text-[#b9c6ff]"
+                                )}
+                              >
+                                ✎ Editado {eds.length}
+                              </button>
+                            )}
+                          </div>
                           <h4 className="text-[15px] font-bold text-white mt-1.5 mb-0.5 truncate">{c.tema}</h4>
                           <p className="text-[12.5px] text-zinc-500 truncate">{c.raw.caption || c.raw.legenda || ''}</p>
                         </div>
-                        <span className="text-zinc-700 text-lg">›</span>
+                        {emConferencia ? (
+                          <div className="shrink-0 flex flex-col items-center gap-1 min-w-[74px]">
+                            <div className={cn(
+                              "w-[26px] h-[26px] rounded-full border-2 flex items-center justify-center text-[13px] font-black",
+                              dec === 'ok' ? "border-emerald-500 bg-emerald-500/15 text-emerald-500"
+                              : dec === 'no' ? "border-[#ff5351] bg-[#ff5351]/15 text-[#ff5351]"
+                              : "border-zinc-700 text-zinc-700"
+                            )}>
+                              {dec === 'ok' ? '✓' : dec === 'no' ? '✕' : ''}
+                            </div>
+                            <span className={cn(
+                              "text-[8.5px] font-black uppercase tracking-[0.1em]",
+                              dec === 'ok' ? "text-emerald-500" : dec === 'no' ? "text-[#ff5351]" : "text-zinc-700"
+                            )}>
+                              {dec === 'ok' ? (isEquipe ? 'Validado' : 'Aprovado') : dec === 'no' ? 'Reprovado' : 'A conferir'}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-zinc-700 text-lg">›</span>
+                        )}
                       </div>
+
+                      {mot && notaAberta['r' + c.idx] && (
+                        <div className="mt-2 bg-[#ff5351]/[0.07] border border-[#ff5351]/20 border-l-4 border-l-[#ff5351] rounded-r-[16px] px-4 py-3">
+                          <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#ff8c8b] mb-1">Motivo da reprovação</p>
+                          <p className="text-[12.5px] text-zinc-300">{mot.comment}</p>
+                          <p className="text-[10.5px] text-zinc-600 mt-1.5">
+                            {mot.userName} · {new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(mot.date))}
+                          </p>
+                        </div>
+                      )}
+                      {eds.length > 0 && notaAberta['e' + c.idx] && (
+                        <div className="mt-2 bg-[#8ba3ff]/[0.06] border border-[#8ba3ff]/20 border-l-4 border-l-[#8ba3ff] rounded-r-[16px] px-4 py-3 space-y-2">
+                          <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#b9c6ff]">Alterações feitas</p>
+                          {eds.map((e: any, n: number) => (
+                            <div key={n}>
+                              <p className="text-[12.5px] text-zinc-300">{e.comment || 'conteúdo editado'}</p>
+                              <p className="text-[10.5px] text-zinc-600 mt-0.5">
+                                {e.userName} · {new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(e.date))}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
                 );
@@ -853,7 +1110,145 @@ export default function ContentPlanDetails() {
               {detalhe.tema}
             </h3>
 
-            {camposDoTipo(detalhe).map(([k, v]) => (
+            {emConferencia && (
+              <div className="flex items-center justify-between gap-3 flex-wrap mt-4 mb-1">
+                {editandoConteudo ? (
+                  <>
+                    <span className="text-[10px] font-black uppercase tracking-[0.14em] text-[#b9c6ff]">Modo edição</span>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setEditandoConteudo(false)}
+                        className="px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-[0.13em] border border-zinc-800 text-zinc-500 hover:text-zinc-300"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        onClick={() => salvarEdicaoConteudo(detalhe.idx)}
+                        className="px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-[0.13em] bg-[#8ba3ff] text-[#0d1330]"
+                      >
+                        Salvar alterações
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-[10px] font-black uppercase tracking-[0.14em] text-zinc-500">Conteúdo</span>
+                    <button
+                      onClick={() => { setRascunhoEdicao({ ...posts[detalhe.idx] }); setEditandoConteudo(true); }}
+                      className="px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-[0.13em] border border-zinc-800 text-zinc-500 hover:text-zinc-200"
+                    >
+                      ✎ Editar texto
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+
+            {emConferencia && editandoConteudo ? (
+              <div className="mt-2">
+                <div className="py-3 border-t border-[#242424]">
+                  <span className="block text-[10px] font-black uppercase tracking-[0.14em] text-zinc-500 mb-1.5">Publicar em</span>
+                  <p className="text-[13.5px] text-zinc-500">
+                    {detalhe.data ? paraBR(detalhe.data) : 'sem data'}
+                    <span className="text-[10.5px] text-zinc-600 ml-2">· definido pela Boranov</span>
+                  </p>
+                </div>
+
+                {[
+                  ['headline', 'Tema', false],
+                  ...(detalhe.tipo === 'FEED' ? [['textoArte', 'Texto da arte', true]] : []),
+                  ['caption', 'Legenda', true],
+                  ['hashtags', 'Hashtags', false],
+                  ['cta', 'CTA', false],
+                  ...(detalhe.tipo === 'REEL' ? [['duracao', 'Duração', false]] : []),
+                  ['sugestaoVisual', detalhe.tipo === 'REEL' ? 'Sugestão visual (capa)' : 'Sugestão visual', true],
+                ].map(([campo, rotulo, grande]: any) => (
+                  <div key={campo} className="py-3 border-t border-[#242424]">
+                    <span className="block text-[10px] font-black uppercase tracking-[0.14em] text-zinc-500 mb-1.5">{rotulo}</span>
+                    {grande ? (
+                      <textarea
+                        rows={3}
+                        value={rascunhoEdicao[campo] || ''}
+                        onChange={e => setRascunhoEdicao((r: any) => ({ ...r, [campo]: e.target.value }))}
+                        className="w-full bg-[#151515] border border-zinc-800 rounded-xl px-3.5 py-2.5 text-[13.5px] text-zinc-200 outline-none focus:border-[#8ba3ff] resize-y"
+                      />
+                    ) : (
+                      <input
+                        type="text"
+                        value={rascunhoEdicao[campo] || ''}
+                        onChange={e => setRascunhoEdicao((r: any) => ({ ...r, [campo]: e.target.value }))}
+                        className="w-full bg-[#151515] border border-zinc-800 rounded-xl px-3.5 py-2.5 text-[13.5px] text-zinc-200 outline-none focus:border-[#8ba3ff]"
+                      />
+                    )}
+                  </div>
+                ))}
+
+                {/* slides do carrossel */}
+                {detalhe.tipo === 'CARROSSEL' && Array.isArray(rascunhoEdicao.slides) && (
+                  <div className="py-3 border-t border-[#242424]">
+                    <span className="block text-[10px] font-black uppercase tracking-[0.14em] text-zinc-500 mb-2">Slides</span>
+                    {rascunhoEdicao.slides.map((s: any, n: number) => (
+                      <div key={n} className="flex gap-2.5 mb-2 items-start">
+                        <div className="w-[26px] h-[26px] mt-2 shrink-0 rounded-lg bg-[#8ba3ff]/15 border border-[#8ba3ff]/30 text-[#b9c6ff] font-black text-[12px] flex items-center justify-center">
+                          {n + 1}
+                        </div>
+                        <div className="flex-1 min-w-0 flex flex-col gap-1.5">
+                          <input
+                            type="text" placeholder="Título do slide" value={s?.title || ''}
+                            onChange={e => setRascunhoEdicao((r: any) => {
+                              const arr = [...r.slides]; arr[n] = { ...arr[n], title: e.target.value }; return { ...r, slides: arr };
+                            })}
+                            className="w-full bg-[#151515] border border-zinc-800 rounded-xl px-3.5 py-2 text-[13px] text-zinc-200 outline-none focus:border-[#8ba3ff]"
+                          />
+                          <input
+                            type="text" placeholder="Descrição" value={s?.description || ''}
+                            onChange={e => setRascunhoEdicao((r: any) => {
+                              const arr = [...r.slides]; arr[n] = { ...arr[n], description: e.target.value }; return { ...r, slides: arr };
+                            })}
+                            className="w-full bg-[#151515] border border-zinc-800 rounded-xl px-3.5 py-2 text-[12.5px] text-zinc-400 outline-none focus:border-[#8ba3ff]"
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* cenas do reel */}
+                {detalhe.tipo === 'REEL' && Array.isArray(rascunhoEdicao.cenas) && (
+                  <div className="py-3 border-t border-[#242424]">
+                    <span className="block text-[10px] font-black uppercase tracking-[0.14em] text-zinc-500 mb-2">Roteiro</span>
+                    {rascunhoEdicao.cenas.map((s: any, n: number) => (
+                      <div key={n} className="flex gap-2.5 mb-2 items-start">
+                        <span className="mt-2 shrink-0 bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 rounded-lg px-2.5 py-1 text-[9.5px] font-black uppercase tracking-[0.1em] whitespace-nowrap">
+                          Cena {n + 1}
+                        </span>
+                        <div className="flex-1 min-w-0 flex flex-col gap-1.5">
+                          <input
+                            type="text" placeholder="Título da cena" value={s?.title || ''}
+                            onChange={e => setRascunhoEdicao((r: any) => {
+                              const arr = [...r.cenas]; arr[n] = { ...arr[n], title: e.target.value }; return { ...r, cenas: arr };
+                            })}
+                            className="w-full bg-[#151515] border border-zinc-800 rounded-xl px-3.5 py-2 text-[13px] text-zinc-200 outline-none focus:border-emerald-500/60"
+                          />
+                          <textarea
+                            rows={2} placeholder="Descrição" value={s?.description || ''}
+                            onChange={e => setRascunhoEdicao((r: any) => {
+                              const arr = [...r.cenas]; arr[n] = { ...arr[n], description: e.target.value }; return { ...r, cenas: arr };
+                            })}
+                            className="w-full bg-[#151515] border border-zinc-800 rounded-xl px-3.5 py-2 text-[12.5px] text-zinc-400 outline-none focus:border-emerald-500/60 resize-y"
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <p className="text-[11.5px] text-zinc-600 mt-3 leading-relaxed">
+                  Ao salvar, o sistema registra quais campos você mudou, com seu nome, data e hora. A equipe da Boranov é avisada.
+                </p>
+              </div>
+            ) : (
+            camposDoTipo(detalhe).map(([k, v]) => (
               <div key={k} className="flex gap-5 py-3.5 border-t border-[#242424]">
                 <div className="min-w-[150px] shrink-0 text-[10px] font-black uppercase tracking-[0.14em] text-zinc-500 pt-0.5">{k}</div>
                 <div className="flex-1 min-w-0 text-[14px] text-zinc-200 leading-[1.7]">
@@ -894,22 +1289,94 @@ export default function ContentPlanDetails() {
                   ) : String(v)}
                 </div>
               </div>
-            ))}
+            )))}
 
-            <div className="flex gap-2 mt-5 pt-4 border-t border-[#242424]">
-              <button
-                onClick={() => toast('A edição de conteúdo entra na próxima fatia')}
-                className="px-5 py-2.5 bg-[#ff5351] text-white rounded-2xl text-[10.5px] font-black uppercase tracking-[0.14em] hover:brightness-110 transition-all"
-              >
-                Editar conteúdo
-              </button>
-              <button
-                onClick={() => setAberto(null)}
-                className="px-5 py-2.5 border border-zinc-800 text-zinc-500 rounded-2xl text-[10.5px] font-black uppercase tracking-[0.14em] hover:text-white transition-all"
-              >
-                Fechar
-              </button>
-            </div>
+            {/* -------- DECISÃO (só na conferência e fora do modo edição) -------- */}
+            {emConferencia && !editandoConteudo && (() => {
+              const dec = decisaoDe(posts[detalhe.idx]);
+              return (
+                <div className="mt-5 pt-4 border-t border-[#242424]">
+                  <p className="text-[10px] font-black uppercase tracking-[0.14em] text-zinc-500 mb-2.5">
+                    Sua decisão sobre este conteúdo
+                  </p>
+                  <div className="flex gap-2.5 flex-wrap">
+                    <button
+                      onClick={() => aprovarConteudo(detalhe.idx)}
+                      className={cn(
+                        "px-5 py-3 rounded-2xl text-[10.5px] font-black uppercase tracking-[0.14em] border transition-all",
+                        dec === 'ok'
+                          ? "bg-emerald-500 text-[#08240f] border-emerald-500"
+                          : "border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/10"
+                      )}
+                    >
+                      ✓ {isEquipe ? 'Validar' : 'Aprovar'}
+                    </button>
+                    <button
+                      onClick={() => { if (dec !== 'no') setMotivoTexto(''); setNotaAberta(p => ({ ...p, form: true })); }}
+                      className={cn(
+                        "px-5 py-3 rounded-2xl text-[10.5px] font-black uppercase tracking-[0.14em] border transition-all",
+                        dec === 'no'
+                          ? "bg-[#ff5351] text-white border-[#ff5351]"
+                          : "border-[#ff5351]/35 text-[#ff8c8b] hover:bg-[#ff5351]/10"
+                      )}
+                    >
+                      ✕ Reprovar
+                    </button>
+                  </div>
+
+                  {(notaAberta.form || dec === 'no') && (
+                    <div className="mt-3.5">
+                      <span className="block text-[10px] font-black uppercase tracking-[0.14em] text-zinc-500 mb-1.5">
+                        Por que está reprovando? (obrigatório)
+                      </span>
+                      <textarea
+                        rows={3}
+                        value={motivoTexto}
+                        onChange={e => setMotivoTexto(e.target.value)}
+                        placeholder="Ex.: trocar o tema para a safra nova; a legenda está longa demais."
+                        className="w-full bg-[#151515] border border-zinc-800 rounded-xl px-3.5 py-2.5 text-[13.5px] text-zinc-200 outline-none focus:border-[#ff5351] resize-y"
+                      />
+                      <button
+                        onClick={() => reprovarConteudo(detalhe.idx)}
+                        className="mt-2.5 px-5 py-2.5 bg-[#ff5351] text-white rounded-2xl text-[10.5px] font-black uppercase tracking-[0.14em] hover:brightness-110"
+                      >
+                        Salvar reprovação
+                      </button>
+                    </div>
+                  )}
+
+                  <p className="text-[11.5px] text-zinc-600 mt-3 leading-relaxed">
+                    Precisa mudar só uma palavra? Use <b className="text-zinc-400">Editar texto</b> acima em vez de reprovar.
+                  </p>
+
+                  <div className="flex gap-2 mt-4 pt-4 border-t border-[#242424]">
+                    <button
+                      onClick={() => setAberto(null)}
+                      className="flex-1 px-4 py-3 border border-zinc-800 text-zinc-500 rounded-2xl text-[10.5px] font-black uppercase tracking-[0.12em] hover:text-zinc-300"
+                    >
+                      Fechar
+                    </button>
+                    <button
+                      onClick={() => irParaProximoPendente(detalhe.idx)}
+                      className="flex-1 px-4 py-3 bg-[#ff5351] text-white rounded-2xl text-[10.5px] font-black uppercase tracking-[0.12em] hover:brightness-110"
+                    >
+                      Próximo a conferir ›
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {!emConferencia && (
+              <div className="flex gap-2 mt-5 pt-4 border-t border-[#242424]">
+                <button
+                  onClick={() => setAberto(null)}
+                  className="px-5 py-2.5 border border-zinc-800 text-zinc-500 rounded-2xl text-[10.5px] font-black uppercase tracking-[0.14em] hover:text-white transition-all"
+                >
+                  Fechar
+                </button>
+              </div>
+            )}
           </aside>
         </>
       )}
@@ -918,8 +1385,13 @@ export default function ContentPlanDetails() {
       {canApprove && (
         <div className="fixed bottom-0 left-0 right-0 p-6 bg-black/90 backdrop-blur-md border-t border-zinc-800 z-30">
           <div className="max-w-6xl mx-auto flex items-center justify-between gap-4 flex-wrap">
-            <p className="text-[13px] text-zinc-500 max-w-md">
+            <p className="text-[13px] text-zinc-500 max-w-lg">
               {plan.status === 'rascunho' && <><b className="text-zinc-300 font-semibold">Nada foi enviado ainda.</b> Ao enviar, o dono do cliente recebe o planejamento para aprovar o texto.</>}
+              {emConferencia && (faltamConferir > 0
+                ? <><b className="text-zinc-300 font-semibold">Faltam {faltamConferir} conteúdo(s) para conferir.</b> O botão libera quando todos estiverem marcados.</>
+                : reprovadosCount > 0
+                  ? <>Os {aprovadosCount} aprovados seguem para produção. Os {reprovadosCount} reprovados aguardam revisão do redator.</>
+                  : <>Todos os conteúdos foram aprovados. O planejamento segue adiante.</>)}
             </p>
             <div className="flex items-center gap-3 ml-auto">
               {isMasterOrRedator && plan.status === 'rascunho' && (
@@ -944,21 +1416,35 @@ export default function ContentPlanDetails() {
               {isCliente && plan.status === 'aguardando_cliente' && (
                 <button
                   onClick={handleClientApprove}
-                  disabled={saving}
-                  className="h-12 px-7 bg-[#ff5351] text-white rounded-2xl font-black uppercase tracking-widest text-[10px] hover:brightness-110 transition-all flex items-center gap-2 shadow-xl"
+                  disabled={saving || faltamConferir > 0}
+                  className={cn(
+                    "h-12 px-7 rounded-2xl font-black uppercase tracking-widest text-[10px] transition-all flex items-center gap-2",
+                    faltamConferir > 0
+                      ? "bg-zinc-800 text-zinc-600 cursor-not-allowed"
+                      : "bg-[#ff5351] text-white hover:brightness-110 shadow-xl"
+                  )}
                 >
                   {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                  Aprovar planejamento
+                  {reprovadosCount > 0 && faltamConferir === 0
+                    ? `Enviar conferência (${aprovadosCount} aprovados)`
+                    : 'Aprovar planejamento'}
                 </button>
               )}
               {isEquipe && plan.status === 'aguardando_validacao_equipe' && (
                 <button
                   onClick={handleEquipeValidate}
-                  disabled={saving}
-                  className="h-12 px-7 bg-emerald-500 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] hover:brightness-110 transition-all flex items-center gap-2 shadow-xl"
+                  disabled={saving || faltamConferir > 0}
+                  className={cn(
+                    "h-12 px-7 rounded-2xl font-black uppercase tracking-widest text-[10px] transition-all flex items-center gap-2",
+                    faltamConferir > 0
+                      ? "bg-zinc-800 text-zinc-600 cursor-not-allowed"
+                      : "bg-emerald-500 text-white hover:brightness-110 shadow-xl"
+                  )}
                 >
                   {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                  Validar planejamento
+                  {reprovadosCount > 0 && faltamConferir === 0
+                    ? `Enviar validação (${aprovadosCount} validados)`
+                    : 'Validar planejamento'}
                 </button>
               )}
             </div>
