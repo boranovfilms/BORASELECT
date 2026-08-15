@@ -40,6 +40,9 @@ export interface ContentPost {
   hashtags: string;
   roteiro: string | null;
   strategicFunction: string | null;
+  textoArte?: string | null;
+  sugestaoVisual?: string | null;
+  duracao?: string | null;
   status: 'pendente' | 'aprovado' | 'reprovado' | 'em_revisao' | 'descartado' | 'validado_equipe';
   approvals: PostApproval[];
   tasks?: MicroTask[];
@@ -151,6 +154,105 @@ export function parsePostsFromText(text: string): ContentPost[] {
   });
 
   return posts.sort((a, b) => a.number - b.number);
+}
+
+// =============================================================
+// PARSER NOVO — lê o formato padrão (MODELO_PLANEJAMENTO_PADRAO)
+// Cabeçalho "# PLANEJAMENTO: ..." + blocos "## CONTEÚDO N — TIPO"
+// Retorna também título/cliente/tipo/período para o importador.
+// =============================================================
+export interface PlanejamentoParseado {
+  titulo: string;
+  cliente: string;
+  tipo: string;
+  periodo: string;
+  posts: ContentPost[];
+}
+
+export function parsePlanejamentoPadrao(text: string): PlanejamentoParseado {
+  const resultado: PlanejamentoParseado = { titulo: '', cliente: '', tipo: '', periodo: '', posts: [] };
+
+  const tituloMatch = text.match(/#\s*PLANEJAMENTO:\s*(.+)/i);
+  if (tituloMatch) {
+    resultado.titulo = tituloMatch[1].trim();
+    const partes = resultado.titulo.split(' - ').map(p => p.trim());
+    if (partes.length >= 3) {
+      resultado.tipo = partes[0].replace(/planejamento/i, '').trim();
+      resultado.periodo = partes[1];
+      resultado.cliente = partes.slice(2).join(' - ');
+    }
+  }
+
+  const blocos = text.split(/(?=^##\s*CONTE[\u00daU]DO\s+\d+)/im);
+  const typeMap: Record<string, ContentPost['type']> = {
+    'FEED': 'FEED', 'CARROSSEL': 'CARROSSEL', 'REEL': 'REEL', 'REELS': 'REEL',
+    'STORIES': 'STORIES', 'STORY': 'STORIES', 'VIDEO': 'VIDEO', 'V\u00cdDEO': 'VIDEO',
+    'ARTE EST\u00c1TICA': 'FEED', 'ARTE': 'FEED'
+  };
+  const ROTULOS = 'Tipo|Tema|Data|CTA|Legenda|Hashtags|Texto da arte|Sugest[\u00e3a]o visual(?:\\s*\\(capa\\))?|Slides|Dura[\u00e7c][\u00e3a]o|Roteiro';
+
+  const campoLinha = (bloco: string, rotulo: string): string => {
+    const m = bloco.match(new RegExp(`^${rotulo}\\s*:\\s*(.*)$`, 'im'));
+    const v = m ? m[1].trim() : '';
+    if (new RegExp(`^(?:${ROTULOS})\\s*:?$`, 'i').test(v)) return '';
+    return v;
+  };
+  const campoBloco = (bloco: string, rotulo: string): string => {
+    const re = new RegExp(`(?:^|\\n)${rotulo}\\s*:[ \\t]*\\n?([\\s\\S]*?)(?=\\n(?:${ROTULOS})\\s*:|\\n##|$)`, 'i');
+    const m = bloco.match(re);
+    return m ? m[1].trim() : '';
+  };
+
+  blocos.forEach((bloco, index) => {
+    const header = bloco.match(/##\s*CONTE[\u00daU]DO\s+(\d+)\s*[\u2014-]?\s*(.*)$/im);
+    if (!header) return;
+    const number = parseInt(header[1]);
+    let rawType = (campoLinha(bloco, 'Tipo') || header[2] || '').toUpperCase().trim();
+    rawType = rawType.replace(/\s*[\u2014-].*/, '').trim();
+    const type = typeMap[rawType] || 'FEED';
+
+    const post: ContentPost = {
+      id: `post_${number}_${Date.now()}_${index}`,
+      number,
+      type,
+      publishDate: campoLinha(bloco, 'Data'),
+      headline: campoLinha(bloco, 'Tema'),
+      caption: campoBloco(bloco, 'Legenda'),
+      cta: campoLinha(bloco, 'CTA'),
+      hashtags: campoLinha(bloco, 'Hashtags'),
+      textoArte: campoBloco(bloco, 'Texto da arte') || null,
+      sugestaoVisual: campoBloco(bloco, 'Sugest[\u00e3a]o visual(?:\\s*\\(capa\\))?') || null,
+      roteiro: null,
+      strategicFunction: null,
+      duracao: null,
+      slides: null,
+      status: 'pendente',
+      approvals: []
+    };
+
+    if (type === 'CARROSSEL') {
+      const sb = campoBloco(bloco, 'Slides');
+      const slides: SlideData[] = [];
+      sb.split('\n').forEach(l => {
+        const m = l.match(/^-\s*Slide[^:]*:\s*(.+)$/i);
+        if (m) {
+          const p = m[1].split('|');
+          slides.push({ title: (p[0] || '').trim(), description: (p[1] || '').trim() });
+        }
+      });
+      post.slides = slides.length ? slides : null;
+    }
+
+    if (type === 'REEL' || type === 'VIDEO') {
+      post.roteiro = campoBloco(bloco, 'Roteiro') || null;
+      post.duracao = campoLinha(bloco, 'Dura[\u00e7c][\u00e3a]o') || null;
+    }
+
+    resultado.posts.push(post);
+  });
+
+  resultado.posts.sort((a, b) => a.number - b.number);
+  return resultado;
 }
 
 export const contentPlanService = {
