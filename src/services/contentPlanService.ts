@@ -274,6 +274,9 @@ export const contentPlanService = {
         hashtags: post.hashtags,
         roteiro: post.roteiro || null,
         strategicFunction: post.strategicFunction || null,
+        textoArte: post.textoArte || null,
+        sugestaoVisual: post.sugestaoVisual || null,
+        duracao: post.duracao || null,
         slides: post.slides || null,
         status: post.status,
         approvals: post.approvals || []
