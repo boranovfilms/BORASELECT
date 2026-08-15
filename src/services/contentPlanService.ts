@@ -199,9 +199,9 @@ export function parsePlanejamentoPadrao(text: string): PlanejamentoParseado {
     return v;
   };
   const campoBloco = (bloco: string, rotulo: string): string => {
-    const re = new RegExp(`(?:^|\\n)${rotulo}\\s*:[ \\t]*\\n?([\\s\\S]*?)(?=\\n(?:${ROTULOS})\\s*:|\\n##|$)`, 'i');
+    const re = new RegExp(`(?:^|\\n)${rotulo}\\s*:[ \\t]*\\n?([\\s\\S]*?)(?=\\n(?:${ROTULOS})\\s*:|\\n##|\\n---|$)`, 'i');
     const m = bloco.match(re);
-    return m ? m[1].trim() : '';
+    return (m ? m[1] : '').replace(/\s*-{3,}\s*$/, '').trim();
   };
 
   blocos.forEach((bloco, index) => {
