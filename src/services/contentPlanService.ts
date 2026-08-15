@@ -48,6 +48,7 @@ export interface ContentPost {
   tasks?: MicroTask[];
   fase?: string;
   slides?: SlideData[] | null;
+  cenas?: SlideData[] | null;
 }
 
 export type TaskDept = 'video' | 'design' | 'redacao' | 'midia_social';
@@ -244,8 +245,18 @@ export function parsePlanejamentoPadrao(text: string): PlanejamentoParseado {
     }
 
     if (type === 'REEL' || type === 'VIDEO') {
-      post.roteiro = campoBloco(bloco, 'Roteiro') || null;
+      const rb = campoBloco(bloco, 'Roteiro');
+      post.roteiro = rb || null;
       post.duracao = campoLinha(bloco, 'Dura[\u00e7c][\u00e3a]o') || null;
+      const cenas: SlideData[] = [];
+      rb.split('\n').forEach(l => {
+        const m = l.match(/^-\s*Cena[^:]*:\s*(.+)$/i);
+        if (m) {
+          const p = m[1].split('|');
+          cenas.push({ title: (p[0] || '').trim(), description: (p[1] || '').trim() });
+        }
+      });
+      post.cenas = cenas.length ? cenas : null;
     }
 
     resultado.posts.push(post);
@@ -278,6 +289,7 @@ export const contentPlanService = {
         sugestaoVisual: post.sugestaoVisual || null,
         duracao: post.duracao || null,
         slides: post.slides || null,
+        cenas: post.cenas || null,
         status: post.status,
         approvals: post.approvals || []
       })),
@@ -477,6 +489,7 @@ export const contentPlanService = {
         sugestaoVisual: post.sugestaoVisual || null,
         duracao: post.duracao || null,
         roteiro: post.roteiro || null,
+        cenas: post.cenas || null,
         publishDate: post.publishDate || '',
         status: 'aguardando_delegacao',
         tasks: [],
