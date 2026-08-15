@@ -228,8 +228,12 @@ export default function ContentPlanDetails() {
     const atual = conteudos[idx]?.data;
     if (atual && atual.getDate() === dia && atual.getMonth() === mesRef.mes) return;
 
-    const anterior = posts[idx]?.publishDate ?? posts[idx]?.data ?? posts[idx]?.date ?? null;
-    const novos = posts.map((p, i) => i === idx ? { ...p, publishDate: paraBR(alvo) } : p);
+    /* casa pelo id do post — mais seguro que a posição no array */
+    const postId = posts[idx]?.id;
+    const anterior = posts[idx]?.publishDate ?? null;
+    const novos = posts.map((p, i) =>
+      (postId ? p.id === postId : i === idx) ? { ...p, publishDate: paraBR(alvo) } : p
+    );
 
     setPosts(novos);
     setUltimoMove({ idx, de: anterior });
@@ -434,6 +438,7 @@ export default function ContentPlanDetails() {
     if (c.tipo === 'REEL') f.push(['Duração', p.duracao], ['Roteiro', p.roteiro], ['Sugestão visual (capa)', p.sugestaoVisual]);
     if (c.tipo === 'STORIES') f.push(['Sugestão visual', p.sugestaoVisual]);
     f.push(['Hashtags', p.hashtags], ['CTA', p.cta]);
+    if (p.strategicFunction) f.push(['Função estratégica', p.strategicFunction]);
     f.push(['Publicar em', c.data ? paraBR(c.data) : 'sem data']);
     return f.filter(([, v]) => v !== undefined && v !== null && v !== '');
   };
@@ -708,6 +713,9 @@ export default function ContentPlanDetails() {
         </button>
         {showTexto && (
           <div className="px-6 pb-6">
+            <p className="mb-4 text-[12px] text-amber-400/80 bg-amber-500/5 border border-amber-500/20 rounded-xl px-4 py-3">
+              Este é o texto de origem, guardado como referência. Editar aqui não altera os conteúdos da agenda.
+            </p>
             {canEdit && !isEditing && (
               <button
                 onClick={() => setIsEditing(true)}
@@ -828,9 +836,14 @@ export default function ContentPlanDetails() {
                   {Array.isArray(v) ? (
                     <div className="flex flex-col gap-1.5">
                       {v.map((s: any, n: number) => (
-                        <span key={n} className="bg-[#151515] border border-zinc-800 rounded-[10px] px-3 py-1.5 text-[12px] text-zinc-400">
+                        <span key={n} className="bg-[#151515] border border-zinc-800 rounded-[10px] px-3 py-2 text-[12px] text-zinc-400 block">
                           <b className="text-[#ff5351] font-black mr-2">{n + 1}</b>
-                          {typeof s === 'string' ? s : (s?.texto || s?.text || JSON.stringify(s))}
+                          {typeof s === 'string' ? s : (
+                            <>
+                              <span className="text-zinc-200">{s?.title}</span>
+                              {s?.description && <span className="block text-zinc-500 mt-0.5 ml-6">{s.description}</span>}
+                            </>
+                          )}
                         </span>
                       ))}
                     </div>
