@@ -95,6 +95,13 @@ export default function ContentPlanDetails() {
 
   useEffect(() => { loadAll(); }, [planId]);
 
+  /* o aviso de "data alterada" some sozinho depois de 6s */
+  useEffect(() => {
+    if (!ultimoMove) return;
+    const t = setTimeout(() => setUltimoMove(null), 6000);
+    return () => clearTimeout(t);
+  }, [ultimoMove]);
+
   const loadAll = async () => {
     if (!planId) return;
     setLoading(true);
@@ -538,6 +545,21 @@ export default function ContentPlanDetails() {
             </p>
           </div>
 
+          {/* aviso de data alterada — ao lado do seletor, some sozinho */}
+          {ultimoMove && (
+            <div className="-mt-2 flex justify-start">
+              <div className="inline-flex items-center gap-3 bg-[#242424] border border-zinc-700 rounded-2xl px-4 py-2">
+                <span className="text-[12px] font-semibold text-zinc-300">Data alterada</span>
+                <button
+                  onClick={desfazerMove}
+                  className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.12em] text-zinc-400 hover:text-white border border-zinc-700 rounded-[10px] px-2.5 py-1"
+                >
+                  <Undo2 className="w-3 h-3" /> Desfazer
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* -------- AGENDA -------- */}
           {modo === 'agenda' && (
             <div className="bg-[#1f1f1f] border border-zinc-800 rounded-[26px] p-4 md:p-5">
@@ -868,19 +890,6 @@ export default function ContentPlanDetails() {
             </div>
           </aside>
         </>
-      )}
-
-      {/* -------- TOAST DE DESFAZER -------- */}
-      {ultimoMove && (
-        <div className="fixed left-1/2 -translate-x-1/2 bottom-28 bg-[#242424] border border-zinc-700 rounded-2xl px-5 py-3 flex items-center gap-3.5 z-40">
-          <span className="text-[12.5px] font-semibold text-zinc-200">Data alterada</span>
-          <button
-            onClick={desfazerMove}
-            className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.12em] text-zinc-400 hover:text-white border border-zinc-700 rounded-[10px] px-3 py-1.5"
-          >
-            <Undo2 className="w-3 h-3" /> Desfazer
-          </button>
-        </div>
       )}
 
       {/* -------- BARRA DE AÇÃO (mantida) -------- */}
