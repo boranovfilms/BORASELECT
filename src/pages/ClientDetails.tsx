@@ -169,42 +169,22 @@ export default function ClientDetails() {
   };
 
   const calcularProgresoPlano = (plan: ContentPlan): number => {
-    let etapasCumpridas = 0;
-    const totalEtapas = linkedModel?.stages?.length || 12;
-
-    console.log('Calculando progresso para:', plan.name, 'Status:', plan.status, 'Total etapas:', totalEtapas);
-
-    // Etapa 1: REDAÇÃO — plano existe (sempre cumprida)
-    if (plan.id) {
-      etapasCumpridas = 1;
+    const TOTAL_ETAPAS = 7;
+    const etapaPorStatus: Record<string, number> = {
+      rascunho: 1,
+      devolvido: 1,
+      aguardando_cliente: 2,
+      aguardando_validacao_equipe: 3,
+      aprovado: 3,
+      aprovado_equipe: 4,
+      em_producao: 4,
+      concluido: 7,
+    };
+    let etapa = etapaPorStatus[plan.status] || 1;
+    if (plan.posts?.some(p => (p as any).tasks?.length > 0)) {
+      etapa = Math.max(etapa, 4);
     }
-
-    // Etapa 2: APROVAÇÃO BORANOV — plano saiu de rascunho
-    if (plan.status && plan.status !== 'rascunho') {
-      etapasCumpridas = Math.max(etapasCumpridas, 2);
-    }
-
-    // Etapa 3: APROVAÇÃO CLIENTE — plano tem status aprovado/aprovado_equipe
-    if (plan.status === 'aprovado' || plan.status === 'aprovado_equipe' || plan.status === 'aguardando_validacao_equipe') {
-      etapasCumpridas = Math.max(etapasCumpridas, 3);
-    }
-
-    // Etapa 4: VALIDAÇÃO EQUIPE — plano tem status aprovado_equipe
-    if (plan.status === 'aprovado_equipe') {
-      etapasCumpridas = Math.max(etapasCumpridas, 4);
-    }
-
-    // Etapa 5: PRODUÇÃO — se temos posts com tasks
-    if (plan.posts && plan.posts.length > 0) {
-      const postsComTasks = plan.posts.filter(p => (p as any).tasks && (p as any).tasks.length > 0).length;
-      if (postsComTasks > 0) {
-        etapasCumpridas = Math.max(etapasCumpridas, 5);
-      }
-    }
-
-    const percent = totalEtapas > 0 ? Math.round((etapasCumpridas / totalEtapas) * 100) : 0;
-    console.log('Resultado:', etapasCumpridas, 'de', totalEtapas, '=', percent + '%');
-    return percent;
+    return Math.round((etapa / TOTAL_ETAPAS) * 100);
   };
 
   const getStatusBadge = (status: string) => {
@@ -218,7 +198,7 @@ export default function ClientDetails() {
       em_producao: { label: 'Em Produção', class: 'bg-purple-500/10 text-purple-400 border-purple-500/20' },
     };
     const config = configs[status] || configs.rascunho;
-    return <span className={cn("px-3 py-1 rounded-full border text-[9px] font-black uppercase tracking-widest", config.class)}>{config.label}</span>;
+    return <span className={cn("inline-block whitespace-nowrap px-3 py-1 rounded-full border text-[9px] font-black uppercase tracking-widest", config.class)}>{config.label}</span>;
   };
 
   if (loading) return <div className="min-h-[60vh] flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-[#ff5351]" /></div>;
