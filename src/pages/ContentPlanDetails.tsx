@@ -436,17 +436,19 @@ export default function ContentPlanDetails() {
 
   const detalhe = aberto !== null ? conteudos[aberto] : null;
 
-  /* campos da gaveta, variando por tipo */
+  /* campos da gaveta — ordem: data, conteúdo, e instrução de produção por último */
   const camposDoTipo = (c: any): [string, any][] => {
     const p = c.raw;
-    const f: [string, any][] = [['Legenda', p.caption || p.legenda]];
-    if (c.tipo === 'FEED') f.push(['Texto da arte', p.textoArte], ['Sugestão visual', p.sugestaoVisual]);
-    if (c.tipo === 'CARROSSEL') f.push(['Slides', p.slides], ['Sugestão visual', p.sugestaoVisual]);
-    if (c.tipo === 'REEL') f.push(['Duração', p.duracao], ['Roteiro', p.roteiro], ['Sugestão visual (capa)', p.sugestaoVisual]);
-    if (c.tipo === 'STORIES') f.push(['Sugestão visual', p.sugestaoVisual]);
-    f.push(['Hashtags', p.hashtags], ['CTA', p.cta]);
+    const f: [string, any][] = [['Publicar em', c.data ? paraBR(c.data) : 'sem data']];
+    if (c.tipo === 'FEED') f.push(['Texto da arte', p.textoArte]);
+    if (c.tipo === 'CARROSSEL') f.push(['Slides', p.slides]);
+    if (c.tipo === 'REEL') f.push(['Roteiro', p.cenas?.length ? { __cenas: p.cenas } : p.roteiro]);
+    f.push(['Legenda', p.caption || p.legenda]);
+    f.push(['Hashtags', p.hashtags]);
+    f.push(['CTA', p.cta]);
+    if (c.tipo === 'REEL') f.push(['Duração', p.duracao]);
     if (p.strategicFunction) f.push(['Função estratégica', p.strategicFunction]);
-    f.push(['Publicar em', c.data ? paraBR(c.data) : 'sem data']);
+    f.push([c.tipo === 'REEL' ? 'Sugestão visual (capa)' : 'Sugestão visual', p.sugestaoVisual]);
     return f.filter(([, v]) => v !== undefined && v !== null && v !== '');
   };
 
@@ -833,7 +835,7 @@ export default function ContentPlanDetails() {
       {detalhe && (
         <>
           <div className="fixed inset-0 bg-black/70 z-40" onClick={() => setAberto(null)} />
-          <aside className="fixed top-0 right-0 bottom-0 w-full sm:w-[560px] bg-[#171717] border-l border-zinc-800 z-50 overflow-y-auto p-8 pb-16">
+          <aside className="fixed top-0 right-0 bottom-0 w-full sm:w-[780px] bg-[#171717] border-l border-zinc-800 z-50 overflow-y-auto p-8 sm:px-10 pb-16">
             <button
               onClick={() => setAberto(null)}
               className="absolute top-5 right-6 text-zinc-500 hover:text-white"
@@ -852,21 +854,41 @@ export default function ContentPlanDetails() {
             </h3>
 
             {camposDoTipo(detalhe).map(([k, v]) => (
-              <div key={k} className="flex gap-4 py-3 border-t border-[#242424]">
-                <div className="min-w-[120px] shrink-0 text-[10px] font-black uppercase tracking-[0.14em] text-zinc-500">{k}</div>
-                <div className="text-[13.5px] text-zinc-200 leading-relaxed">
-                  {Array.isArray(v) ? (
-                    <div className="flex flex-col gap-1.5">
+              <div key={k} className="flex gap-5 py-3.5 border-t border-[#242424]">
+                <div className="min-w-[150px] shrink-0 text-[10px] font-black uppercase tracking-[0.14em] text-zinc-500 pt-0.5">{k}</div>
+                <div className="flex-1 min-w-0 text-[14px] text-zinc-200 leading-[1.7]">
+                  {v && typeof v === 'object' && (v as any).__cenas ? (
+                    <div className="flex flex-col gap-2">
+                      {(v as any).__cenas.map((s: any, n: number) => (
+                        <div key={n} className="bg-[#151515] border border-zinc-800 rounded-[14px] px-3.5 py-3 flex gap-3 items-start">
+                          <span className="shrink-0 bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 rounded-lg px-2.5 py-1 text-[9.5px] font-black uppercase tracking-[0.1em] whitespace-nowrap mt-0.5">
+                            Cena {n + 1}
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-[13.5px] font-bold text-white leading-snug">{s?.title}</p>
+                            {s?.description && <p className="text-[12.5px] text-zinc-500 mt-1 leading-relaxed">{s.description}</p>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : Array.isArray(v) ? (
+                    <div className="flex flex-col gap-2">
                       {v.map((s: any, n: number) => (
-                        <span key={n} className="bg-[#151515] border border-zinc-800 rounded-[10px] px-3 py-2 text-[12px] text-zinc-400 block">
-                          <b className="text-[#ff5351] font-black mr-2">{n + 1}</b>
-                          {typeof s === 'string' ? s : (
-                            <>
-                              <span className="text-zinc-200">{s?.title}</span>
-                              {s?.description && <span className="block text-zinc-500 mt-0.5 ml-6">{s.description}</span>}
-                            </>
-                          )}
-                        </span>
+                        <div key={n} className="bg-[#151515] border border-zinc-800 rounded-[14px] px-3.5 py-3 flex gap-3 items-start">
+                          <div className="w-[26px] h-[26px] shrink-0 rounded-lg bg-[#8ba3ff]/15 border border-[#8ba3ff]/30 text-[#b9c6ff] font-black text-[12px] flex items-center justify-center">
+                            {n + 1}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            {typeof s === 'string' ? (
+                              <p className="text-[13.5px] text-zinc-200 leading-snug">{s}</p>
+                            ) : (
+                              <>
+                                <p className="text-[13.5px] font-bold text-white leading-snug">{s?.title}</p>
+                                {s?.description && <p className="text-[12.5px] text-zinc-500 mt-1 leading-relaxed">{s.description}</p>}
+                              </>
+                            )}
+                          </div>
+                        </div>
                       ))}
                     </div>
                   ) : String(v)}
