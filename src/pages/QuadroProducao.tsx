@@ -199,6 +199,15 @@ export default function QuadroProducao() {
 
   const iniciais = (n: string) => n ? n.split(' ').map(x => x[0]).join('').slice(0, 2).toUpperCase() : '';
 
+  /* "CANAPLAN CONSULTORIA TECNICA LTDA" → "Canaplan" */
+  const nomeCurto = (n: string) => {
+    if (!n) return '';
+    const limpo = n.replace(/\b(LTDA|ME|EIRELI|S\/A|SA|EPP|MEI)\b\.?/gi, '').trim();
+    const palavras = limpo.split(/\s+/);
+    const curto = palavras.length > 2 ? palavras.slice(0, 2).join(' ') : limpo;
+    return curto.charAt(0).toUpperCase() + curto.slice(1).toLowerCase();
+  };
+
   /* pílula de prazo: até 3 vermelho · até 5 amarelo · até 10 verde · acima cinza */
   const Prazo = ({ t }: { t: any }) => {
     if (t.status === 'concluido')
@@ -247,24 +256,26 @@ export default function QuadroProducao() {
           </h4>
           {t.descricao && <p className="text-[11px] text-zinc-600 mb-1.5">{t.descricao}</p>}
 
-          <div className="flex items-center gap-2.5 flex-wrap text-[11px] text-zinc-600">
-            <span className="text-zinc-500 font-semibold">{t.cliente}</span>
+          <div className="flex items-center gap-2.5 text-[11px] text-zinc-600">
+            <span className="text-zinc-500 font-semibold truncate max-w-[110px]" title={t.cliente}>
+              {nomeCurto(t.cliente)}
+            </span>
 
             {t.donoNome ? (
               <span className="inline-flex items-center gap-1.5 font-bold text-[10.5px] min-w-0">
                 <span className="w-[19px] h-[19px] shrink-0 rounded-full bg-zinc-700 text-zinc-300 text-[8.5px] font-black flex items-center justify-center">
                   {iniciais(t.donoNome)}
                 </span>
-                <span className="truncate">{t.donoNome}{meu && ' (você)'}</span>
+                <span className="truncate max-w-[120px]">{t.donoNome}{meu && ' (você)'}</span>
               </span>
             ) : (
-              <span className="inline-flex items-center gap-1.5 font-bold text-[10.5px] text-zinc-600">
+              <span className="inline-flex items-center gap-1.5 font-bold text-[10.5px] text-zinc-600 shrink-0">
                 <span className="w-[19px] h-[19px] shrink-0 rounded-full border border-dashed border-zinc-700" />
                 livre
               </span>
             )}
 
-            <div className="ml-auto flex items-center gap-1.5">
+            <div className="ml-auto shrink-0 flex items-center gap-1.5">
               {!t.donoEmail && t.status !== 'concluido' && (
                 <button onClick={() => assumir(t)} disabled={ocupado}
                   className="text-[9px] font-black uppercase tracking-[0.11em] border border-zinc-700 rounded-lg px-2.5 py-1 text-zinc-400 hover:text-white hover:border-zinc-500 transition-all">
