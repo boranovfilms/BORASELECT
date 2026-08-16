@@ -142,6 +142,8 @@ export default function QuadroProducao() {
           statusReal: t.status,
           donoEmail: t.responsibleEmail || '',
           donoNome: t.responsibleName || '',
+          versaoStatus: (t.versoes?.length ? t.versoes[t.versoes.length - 1].status : null),
+          versaoN: (t.versoes?.length ? t.versoes[t.versoes.length - 1].n : null),
         });
       });
     });
@@ -196,6 +198,8 @@ export default function QuadroProducao() {
   const concluir = (t: any) => { alterarTarefa(t, { status: 'concluido' }); toast.success('Tarefa concluída'); };
   const reabrir = (t: any) => alterarTarefa(t, { status: 'em_andamento' });
   const largar = (t: any) => alterarTarefa(t, { responsibleEmail: '', responsibleName: '', status: 'pendente' });
+
+  const ehInterno = ['master', 'admin', 'redator'].includes(userRole);
 
   const iniciais = (n: string) => n ? n.split(' ').map(x => x[0]).join('').slice(0, 2).toUpperCase() : '';
 
@@ -295,6 +299,22 @@ export default function QuadroProducao() {
                     Concluir
                   </button>
                 </>
+              )}
+              {t.versaoStatus === 'em_revisao' && ehInterno && (
+                <button onClick={e => { e.stopPropagation(); navigate(`/aprovar/${t.postId}/${t.taskIndex}`); }}
+                  className="text-[9px] font-black uppercase tracking-[0.11em] bg-[#8ba3ff] rounded-lg px-2.5 py-1 text-[#0d1330] hover:brightness-110 transition-all">
+                  Revisar v{t.versaoN}
+                </button>
+              )}
+              {t.versaoStatus === 'ajuste' && meu && (
+                <span className="text-[9px] font-black uppercase tracking-[0.11em] bg-[#ff5351]/15 border border-[#ff5351]/35 rounded-lg px-2.5 py-1 text-[#ff8c8b]">
+                  Ajuste pedido
+                </span>
+              )}
+              {t.versaoStatus === 'aprovado_interno' && (
+                <span className="text-[9px] font-black uppercase tracking-[0.11em] bg-amber-500/15 border border-amber-500/35 rounded-lg px-2.5 py-1 text-amber-300">
+                  Com o cliente
+                </span>
               )}
               {t.status === 'concluido' && meu && (
                 <button onClick={e => { e.stopPropagation(); reabrir(t); }} disabled={ocupado}
