@@ -1,7 +1,7 @@
 import React from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {
-  LayoutDashboard, Library, Users, Package, LayoutTemplate, CreditCard, Settings, Shield, HelpCircle, LogOut, Bell, X, Loader2, Image as ImageControl, Trash2, Save, CheckSquare, UsersRound, FileText, Database, ChevronRight, ArrowRight, Tv, TrendingUp, Clapperboard
+  LogOut, Bell, X, Loader2, Image as ImageControl, Trash2, Save, ChevronRight, ArrowRight, Tv
 } from 'lucide-react';
 import { auth, db } from '@/src/lib/firebase';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
@@ -9,8 +9,8 @@ import { cn } from '@/src/lib/utils';
 import { settingsService, GlobalSettings } from '@/src/services/settingsService';
 import { useProjectStore } from '@/src/store/useProjectStore';
 import { PermissionsMatrix } from '@/src/services/permissionsService';
-import { taskService, Task } from '@/src/services/taskService';
 import { notificacaoService, Notificacao } from '@/src/services/notificacaoService';
+import { ALL_MODULES } from '@/src/config/modules';
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -126,36 +126,21 @@ const handleNotificationClick = async (notif: Notificacao) => {
     navigate('/login');
   };
 
-  const ALL_MODULES = [
-    { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard', path: '/' },
-    { id: 'projetos', icon: Library, label: 'Projetos', path: '/projetos' },
-    { id: 'planejamentos', icon: FileText, label: 'Planejamentos', path: '/meus-planejamentos' },
-    { id: 'minhas_demandas', icon: FileText, label: 'Minhas Demandas', path: '/minhas-demandas' },
-    { id: 'producao', icon: Clapperboard, label: 'Produção', path: '/producao' },
-    { id: 'clientes', icon: Users, label: 'Clientes', path: '/clients' },
-    { id: 'prospectar', icon: TrendingUp, label: 'Prospectar', path: '/prospectar', roles: ['master', 'admin', 'redator'] },
-    { id: 'orcamentos', icon: FileText, label: 'Orçamentos', path: '/orcamentos', roles: ['master', 'admin'] },
-    { id: 'equipe', icon: UsersRound, label: 'Equipe', path: '/equipe' },
-    { id: 'pacotes', icon: Package, label: 'Serviços', path: '/packages' },
-    { id: 'modelos', icon: LayoutTemplate, label: 'Modelos', path: '/modelos' },
-    { id: 'creditos', icon: CreditCard, label: 'Créditos', path: '/credits' },
-    { id: 'tarefas', icon: CheckSquare, label: 'Tarefas Diárias', path: '/tarefas' },
-    { id: 'teleprompter', icon: Tv, label: 'Teleprompter', path: '/teleprompter' },
-    { id: 'painel_master', icon: Shield, label: 'Painel Master', path: '/painel-master' },
-    { id: 'diagnostico', icon: Database, label: 'Teste Tabela', path: '/diagnostico' }
-  ];
-
   const navItems = ALL_MODULES.filter(mod => {
     if ((mod as any).roles) return (mod as any).roles.includes(userRole);
+    // TODO: migrar exceção para a matriz de permissões
     if (mod.id === 'planejamentos' && userRole === 'cliente') return false;
+    // TODO: migrar exceção para a matriz de permissões
     if (mod.id === 'painel_master' && userRole === 'master') return true;
+    // TODO: migrar exceção para a matriz de permissões
     if (mod.id === 'diagnostico' && userRole === 'master') return true;
+    // TODO: migrar exceção para a matriz de permissões
     if (mod.id === 'teleprompter' && userRole === 'master') return true;
     return permissions[mod.id]?.[userRole] === true;
   });
 
   if (navItems.length === 0) {
-    navItems.push({ id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard', path: '/' });
+    navItems.push({ id: 'dashboard', icon: (() => null) as any, label: 'Dashboard', path: '/' });
   }
 
   return (
@@ -214,7 +199,7 @@ const handleNotificationClick = async (notif: Notificacao) => {
               <div className="max-h-64 overflow-y-auto">
                 {pendingNotifications.length === 0 ? (
                   <div className="p-8 text-center text-zinc-600">
-                    <CheckSquare className="w-8 h-8 mx-auto mb-2 opacity-20" />
+                    <Save className="w-8 h-8 mx-auto mb-2 opacity-20" />
                     <p className="text-xs font-bold uppercase tracking-widest">Tudo limpo!</p>
                   </div>
                 ) : (
