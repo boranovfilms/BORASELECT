@@ -166,6 +166,11 @@ export default function MinhasDemandas() {
 
               postsDoPlano.forEach(post => {
                 const postTasks = post.tasks || [];
+                /* alguma tarefa com versão liberada pelo redator aguardando o cliente? */
+                const idxAguardando = postTasks.findIndex((t: any) => {
+                  const v = t.versoes?.length ? t.versoes[t.versoes.length - 1] : null;
+                  return v?.status === 'aprovado_interno';
+                });
                 if (postTasks.length === 0) return;
 
                 const taskStatus = postTasks[0].status;
@@ -201,13 +206,15 @@ export default function MinhasDemandas() {
                 itens.push({
                   tipo: 'post',
                   postId: post.id,
+                  taskIndex: idxAguardando,
+                  precisaAprovar: idxAguardando >= 0,
                   demandaId: d.id,
                   demandaNome: data.name,
                   numero: post.number,
                   headline: post.headline,
                   postTipo: post.type,
                   publishDate: post.publishDate,
-                  status: statusClienteMap[statusFinal] || 'em_producao',
+                  status: idxAguardando >= 0 ? 'aguardando_aprovacao_cliente' : (statusClienteMap[statusFinal] || 'em_producao'),
                   taskStatus: statusFinal,
                   progressoCliente: progressoClienteMap[statusFinal] || 10,
                 });
@@ -599,6 +606,10 @@ export default function MinhasDemandas() {
           data={demandas}
           onRowClick={(item) => {
             if (item.tipo === 'post') {
+              if (item.precisaAprovar) {
+                navigate(`/aprovar/${item.postId}/${item.taskIndex}`);
+                return;
+              }
               navigate(`/minha-demanda/${item.demandaId}/${item.postId}`);
             } else {
               navigate(`/planejamento/${item.demandaId}`);
