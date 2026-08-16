@@ -492,7 +492,7 @@ export const contentPlanService = {
         cenas: post.cenas || null,
         publishDate: post.publishDate || '',
         status: 'aguardando_delegacao',
-        tasks: [],
+        tasks: post.tasks || [],
         historico: [{
           acao: 'Post criado a partir do planejamento',
           quem: 'Sistema',
