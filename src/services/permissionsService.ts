@@ -1,62 +1,64 @@
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { ALL_MODULES } from '../config/modules';
 
 export type PermissionsMatrix = Record<string, Record<string, boolean>>;
 
-// Estas são as permissões padrão caso não exista nada salvo no banco aindaa
-const DEFAULT_PERMISSIONS: PermissionsMatrix = {
-  dashboard: { master: true, editor: true, designer: true, cliente: true, equipe: true },
-  projetos: { master: true, editor: true, designer: true, cliente: true, equipe: true },
-  clientes: { master: true, editor: false, designer: false, cliente: false, equipe: false },
-  pacotes: { master: true, editor: false, designer: false, cliente: false, equipe: false },
-  modelos: { master: true, editor: true, designer: true, cliente: false, equipe: false },
-  creditos: { master: true, editor: false, designer: false, cliente: false, equipe: false },
-  configuracoes: { master: true, editor: false, designer: false, cliente: false, equipe: false },
-  painel_master: { master: true, editor: false, designer: false, cliente: false, equipe: false },
-  tarefas: { master: true, editor: true, designer: true, cliente: false, equipe: false },
-  minhas_demandas: {
-    master: true,
-    admin: true,
-    redator: true,
-    editor: true,
-    designer: true,
-    midia_social: true,
-    cliente: true,
-    equipe: true,
-  },
-  producao: {
-    master: true,
-    admin: true,
-    redator: true,
-    editor: true,
-    designer: true,
-    midia_social: true,
-    cliente: true,
-    equipe: true,
-  },
+const ROLES = [
+  'master',
+  'admin',
+  'redator',
+  'editor',
+  'designer',
+  'midia_social',
+  'cliente',
+  'equipe'
+];
+
+/**
+ * Gera permissões padrão a partir da lista central de módulos.
+ * Regra: master sempre tem acesso; todos os demais papéis nascem sem acesso.
+ * Módulos com `roles` explícito no menu também respeitam essa regra base,
+ * pois o AppLayout ainda aplica a restrição `roles` antes da matriz.
+ */
+const buildDefaultPermissions = (): PermissionsMatrix => {
+  const perms: PermissionsMatrix = {};
+  ALL_MODULES.forEach(mod => {
+    const rolePerms: Record<string, boolean> = {};
+    ROLES.forEach(role => {
+      rolePerms[role] = role === 'master';
+    });
+    perms[mod.id] = rolePerms;
+  });
+  return perms;
 };
 
 export const permissionsService = {
   getPermissions: async (): Promise<PermissionsMatrix> => {
+    const defaults = buildDefaultPermissions();
+
     try {
       const docRef = doc(db, 'settings', 'permissions');
       const docSnap = await getDoc(docRef);
+
       if (docSnap.exists()) {
         const dbPerms = docSnap.data() as PermissionsMatrix;
-        
-        // Injeta automaticamente módulos do DEFAULT_PERMISSIONS que não estão no banco
-        Object.keys(DEFAULT_PERMISSIONS).forEach(key => {
+
+        // Preserva tudo o que já existe no Firestore. Apenas adiciona módulos
+        // novos que estão no menu mas ainda não foram salvos no banco.
+        Object.keys(defaults).forEach(key => {
           if (!dbPerms[key]) {
-            dbPerms[key] = DEFAULT_PERMISSIONS[key];
+            dbPerms[key] = defaults[key];
           }
         });
-        
+
         return dbPerms;
       }
-      return DEFAULT_PERMISSIONS;
+
+      return defaults;
     } catch (error) {
       console.error('Erro ao buscar permissões:', error);
-      return DEFAULT_PERMISSIONS;
+      return defaults;
     }
   },
 
