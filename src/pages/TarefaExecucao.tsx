@@ -90,6 +90,7 @@ export default function TarefaExecucao() {
   const [lightbox, setLightbox] = useState(false);
   const [slideLB, setSlideLB] = useState(0);
   const [ativo, setAtivo] = useState(0);            /* qual arquivo está no preview */
+  const [trocando, setTrocando] = useState<number | null>(null);  /* índice do arquivo sendo substituído */
   const [dim, setDim] = useState<{ w: number; h: number } | null>(null);
 
   useEffect(() => { carregar(); }, [postId]);
@@ -192,6 +193,41 @@ export default function TarefaExecucao() {
 
     setEnviando(null);
     toast.success(lista.length > 1 ? `${lista.length} arquivos enviados` : 'Arquivo enviado');
+  };
+
+  /* substitui UM arquivo reprovado, mantendo os aprovados intactos */
+  const trocarArquivo = async (i: number, file: File) => {
+    if (!file || !postId) return;
+    setEnviando({ nome: file.name, pct: 0, i: 1, total: 1 });
+    try {
+      const storage = getStorage();
+      const caminho = `entregas/${postId}/task${idx}/v${versaoAtual.n}/${Date.now()}_${file.name}`;
+      const tarefa = uploadBytesResumable(sref(storage, caminho), file);
+      await new Promise<void>((ok, erro) => {
+        tarefa.on('state_changed',
+          st => setEnviando({ nome: file.name, pct: Math.round((st.bytesTransferred / st.totalBytes) * 100), i: 1, total: 1 }),
+          erro, () => ok());
+      });
+      const url = await getDownloadURL(tarefa.snapshot.ref);
+
+      const novosArquivos = (versaoAtual.arquivos || []).map((a: any, k: number) =>
+        k === i ? { nome: file.name, url, tamanho: file.size, tipo: file.type, caminho } : a);
+      /* o arquivo trocado volta a "sem decisão"; os demais mantêm a decisão anterior */
+      const novasDecisoes = (versaoAtual.decisoes || []).map((d: any, k: number) => k === i ? null : d);
+
+      const novasVersoes = versoes.map((v, k) =>
+        k === versoes.length - 1
+          ? { ...v, arquivos: novosArquivos, decisoes: novasDecisoes }
+          : v);
+
+      await gravarTask({ versoes: novasVersoes });
+      setAtivo(i); setDim(null);
+      toast.success('Arquivo substituído');
+    } catch (e) {
+      console.error(e); toast.error('Falha ao trocar o arquivo');
+    } finally {
+      setEnviando(null); setTrocando(null);
+    }
   };
 
   const removerArquivo = async (i: number) => {
@@ -487,7 +523,14 @@ export default function TarefaExecucao() {
 
             <input ref={fileRef} type="file" className="hidden"
               multiple
-              onChange={e => { if (e.target.files?.length) subirArquivos(e.target.files); e.target.value = ''; }} />
+              onChange={e => {
+                const fs = e.target.files;
+                if (fs?.length) {
+                  if (trocando !== null) trocarArquivo(trocando, fs[0]);
+                  else subirArquivos(fs);
+                }
+                e.target.value = '';
+              }} />
             <div
               onClick={() => fileRef.current?.click()}
               onDragOver={e => e.preventDefault()}
@@ -518,30 +561,69 @@ export default function TarefaExecucao() {
               </div>
             )}
 
-            {versaoAtual?.arquivos?.map((a: any, i: number) => (
-              <div key={i} onClick={() => { setAtivo(i); setDim(null); }}
-                className={cn("bg-[#151515] border rounded-xl p-2.5 mt-2 flex items-center gap-2.5 cursor-pointer transition-colors",
-                  ativo === i ? "border-[#ff5351]" : "border-zinc-800 hover:border-zinc-700")}>
-                <div className="w-7 h-7 rounded-lg bg-zinc-800 flex items-center justify-center text-xs shrink-0">
-                  {a.tipo?.startsWith('video') ? '🎬' : '🖼'}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-[11.5px] font-semibold text-zinc-200 truncate flex-1">{a.nome}</span>
-                    <span className="text-[10.5px] font-black text-zinc-600">100%</span>
+            {versaoAtual?.arquivos?.map((a: any, i: number) => {
+              /* decisão do revisor sobre este arquivo: 'ok' | 'no' | null */
+              const dec = versaoAtual.decisoes?.[i] || null;
+              const aprovado = dec === 'ok';
+              const refazer = dec === 'no';
+              /* motivo específico deste arquivo, extraído das mensagens */
+              const ajuste = (post.mensagens || []).filter((m: any) => m.arquivoIndex === i).slice(-1)[0];
+              return (
+                <div key={i} onClick={() => { setAtivo(i); setDim(null); }}
+                  className={cn("rounded-2xl border p-3 mt-2 flex gap-3 items-start cursor-pointer transition-all",
+                    aprovado ? "bg-emerald-500/[0.08] border-emerald-500/30"
+                      : refazer ? "bg-[#ff5351]/[0.08] border-[#ff5351]/35"
+                        : ativo === i ? "bg-[#151515] border-[#ff5351]"
+                          : "bg-[#151515] border-zinc-800 hover:border-zinc-700")}>
+
+                  <div className={cn("w-9 h-12 rounded-lg shrink-0 flex items-center justify-center text-sm overflow-hidden",
+                    aprovado || refazer ? "bg-black/35" : "bg-zinc-800")}>
+                    {a.tipo?.startsWith('video')
+                      ? '🎬'
+                      : <img src={a.url} alt="" className="w-full h-full object-cover" />}
                   </div>
-                  <div className="text-[10px] text-zinc-600">{tamanho(a.tamanho || 0)} · enviado</div>
-                  <div className="h-[3px] bg-zinc-800 rounded-full mt-1.5 overflow-hidden">
-                    <div className="h-full bg-emerald-500 rounded-full w-full" />
+
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <span className={cn("text-[12.5px] font-bold truncate flex-1",
+                        aprovado || refazer ? "text-white" : "text-zinc-200")}>{a.nome}</span>
+                      {aprovado && (
+                        <span className="shrink-0 text-[8.5px] font-black uppercase tracking-[0.11em] px-2 py-0.5 rounded-md bg-emerald-500 text-[#062a12]">
+                          Aprovado
+                        </span>
+                      )}
+                      {refazer && (
+                        <span className="shrink-0 text-[8.5px] font-black uppercase tracking-[0.11em] px-2 py-0.5 rounded-md bg-[#ff5351] text-white">
+                          Refazer
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[10.5px] text-zinc-500">{tamanho(a.tamanho || 0)} · enviado</div>
+
+                    {refazer && ajuste && (
+                      <div className="text-[11.5px] leading-relaxed mt-2 pt-2 border-t border-dashed border-[#ff5351]/30 text-[#e0bebe]">
+                        {ajuste.texto.replace(/^Ajuste no arquivo \d+ \([^)]*\):\s*/, '')}
+                        <span className="text-[#8a7070]"> — {ajuste.autorNome}</span>
+                      </div>
+                    )}
+
+                    {refazer && (
+                      <button
+                        onClick={e => { e.stopPropagation(); setTrocando(i); fileRef.current?.click(); }}
+                        className="mt-2 text-[9px] font-black uppercase tracking-[0.11em] bg-[#ff5351] text-white rounded-lg px-3 py-1.5 hover:brightness-110">
+                        ⬆ Trocar arquivo
+                      </button>
+                    )}
                   </div>
+
+                  {versaoAtual.status === 'rascunho' && !aprovado && !refazer && (
+                    <button onClick={e => { e.stopPropagation(); removerArquivo(i); }} className="text-zinc-700 hover:text-[#ff8c8b] shrink-0">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
-                {versaoAtual.status === 'rascunho' && (
-                  <button onClick={e => { e.stopPropagation(); removerArquivo(i); }} className="text-zinc-700 hover:text-[#ff8c8b]">
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {/* versões */}
