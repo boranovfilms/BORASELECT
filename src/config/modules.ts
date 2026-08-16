@@ -22,8 +22,11 @@ export interface AppModule {
   icon: LucideIcon;
   label: string;
   path: string;
-  /** Se definido, restringe visualização apenas aos papéis listados.
-   *  Preferencialmente a matriz de permissões deve ser a fonte da verdade. */
+  /**
+   * Papéis que terão acesso por padrão quando o módulo ainda não existir
+   * no documento `settings/permissions` do Firestore. Após salvo, a matriz
+   * de permissões passa a ser a única fonte da verdade.
+   */
   roles?: string[];
 }
 
