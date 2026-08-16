@@ -24,6 +24,16 @@ const DEFAULT_PERMISSIONS: PermissionsMatrix = {
     cliente: true,
     equipe: true,
   },
+  producao: {
+    master: true,
+    admin: true,
+    redator: true,
+    editor: true,
+    designer: true,
+    midia_social: true,
+    cliente: true,
+    equipe: true,
+  },
 };
 
 export const permissionsService = {
