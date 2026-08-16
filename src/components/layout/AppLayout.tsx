@@ -1,7 +1,7 @@
 import React from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {
-  LogOut, Bell, X, Loader2, Image as ImageControl, Trash2, Save, ChevronRight, ArrowRight, Tv
+  LogOut, Bell, X, Loader2, Image as ImageControl, Trash2, Save, ChevronRight, ArrowRight, Tv, CheckSquare
 } from 'lucide-react';
 import { auth, db } from '@/src/lib/firebase';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
@@ -199,7 +199,7 @@ const handleNotificationClick = async (notif: Notificacao) => {
               <div className="max-h-64 overflow-y-auto">
                 {pendingNotifications.length === 0 ? (
                   <div className="p-8 text-center text-zinc-600">
-                    <Save className="w-8 h-8 mx-auto mb-2 opacity-20" />
+                    <CheckSquare className="w-8 h-8 mx-auto mb-2 opacity-20" />
                     <p className="text-xs font-bold uppercase tracking-widest">Tudo limpo!</p>
                   </div>
                 ) : (
