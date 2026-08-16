@@ -234,7 +234,9 @@ export default function QuadroProducao() {
     const meu = t.donoEmail === userEmail;
     const ocupado = salvando === t.chave;
     return (
-      <div className={cn("bg-[#1f1f1f] border border-zinc-800 rounded-2xl flex overflow-hidden transition-all hover:border-zinc-700", t.status === 'concluido' && "opacity-[0.62]", ocupado && "opacity-50")}>
+      <div
+        onClick={() => navigate(`/tarefa/${t.postId}/${t.taskIndex}`)}
+        className={cn("bg-[#1f1f1f] border border-zinc-800 rounded-2xl flex overflow-hidden transition-all hover:border-zinc-700 cursor-pointer", t.status === 'concluido' && "opacity-[0.62]", ocupado && "opacity-50")}>
         <div className="w-[28px] shrink-0 flex items-center justify-center" style={{ background: cor }}>
           <span className="[writing-mode:vertical-rl] rotate-180 text-[8.5px] font-black uppercase tracking-[0.15em] whitespace-nowrap py-2.5 text-white">
             {t.setorLabel}
@@ -277,25 +279,25 @@ export default function QuadroProducao() {
 
             <div className="ml-auto shrink-0 flex items-center gap-1.5">
               {!t.donoEmail && t.status !== 'concluido' && (
-                <button onClick={() => assumir(t)} disabled={ocupado}
+                <button onClick={e => { e.stopPropagation(); assumir(t); }} disabled={ocupado}
                   className="text-[9px] font-black uppercase tracking-[0.11em] border border-zinc-700 rounded-lg px-2.5 py-1 text-zinc-400 hover:text-white hover:border-zinc-500 transition-all">
                   Assumir
                 </button>
               )}
               {meu && t.status === 'em_andamento' && (
                 <>
-                  <button onClick={() => largar(t)} disabled={ocupado}
+                  <button onClick={e => { e.stopPropagation(); largar(t); }} disabled={ocupado}
                     className="text-[9px] font-black uppercase tracking-[0.11em] border border-zinc-800 rounded-lg px-2.5 py-1 text-zinc-600 hover:text-zinc-300 transition-all">
                     Largar
                   </button>
-                  <button onClick={() => concluir(t)} disabled={ocupado}
+                  <button onClick={e => { e.stopPropagation(); concluir(t); }} disabled={ocupado}
                     className="text-[9px] font-black uppercase tracking-[0.11em] bg-emerald-500 rounded-lg px-2.5 py-1 text-[#08240f] hover:brightness-110 transition-all">
                     Concluir
                   </button>
                 </>
               )}
               {t.status === 'concluido' && meu && (
-                <button onClick={() => reabrir(t)} disabled={ocupado}
+                <button onClick={e => { e.stopPropagation(); reabrir(t); }} disabled={ocupado}
                   className="text-[9px] font-black uppercase tracking-[0.11em] border border-zinc-800 rounded-lg px-2.5 py-1 text-zinc-600 hover:text-zinc-300 transition-all">
                   Reabrir
                 </button>
