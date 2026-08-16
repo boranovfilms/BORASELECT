@@ -576,11 +576,11 @@ export default function TarefaExecucao() {
                         : ativo === i ? "bg-[#151515] border-[#ff5351]"
                           : "bg-[#151515] border-zinc-800 hover:border-zinc-700")}>
 
-                  <div className={cn("w-9 h-12 rounded-lg shrink-0 flex items-center justify-center text-sm overflow-hidden",
-                    aprovado || refazer ? "bg-black/35" : "bg-zinc-800")}>
-                    {a.tipo?.startsWith('video')
-                      ? '🎬'
-                      : <img src={a.url} alt="" className="w-full h-full object-cover" />}
+                  <div className={cn("w-7 h-7 rounded-lg shrink-0 flex items-center justify-center text-xs",
+                    aprovado ? "bg-emerald-500/15 text-emerald-400"
+                      : refazer ? "bg-[#ff5351]/15 text-[#ff8c8b]"
+                        : "bg-zinc-800 text-zinc-500")}>
+                    {a.tipo?.startsWith('video') ? '🎬' : '🖼'}
                   </div>
 
                   <div className="flex-1 min-w-0">
