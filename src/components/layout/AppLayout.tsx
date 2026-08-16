@@ -127,7 +127,6 @@ const handleNotificationClick = async (notif: Notificacao) => {
   };
 
   const navItems = ALL_MODULES.filter(mod => {
-    if ((mod as any).roles) return (mod as any).roles.includes(userRole);
     // TODO: migrar exceção para a matriz de permissões
     if (mod.id === 'planejamentos' && userRole === 'cliente') return false;
     // TODO: migrar exceção para a matriz de permissões
@@ -138,10 +137,6 @@ const handleNotificationClick = async (notif: Notificacao) => {
     if (mod.id === 'teleprompter' && userRole === 'master') return true;
     return permissions[mod.id]?.[userRole] === true;
   });
-
-  if (navItems.length === 0) {
-    navItems.push({ id: 'dashboard', icon: (() => null) as any, label: 'Dashboard', path: '/' });
-  }
 
   return (
     <div className="min-h-screen bg-[#131313] text-[#e2e2e2] font-sans selection:bg-[#ff5351]/30 selection:text-white text-left">
