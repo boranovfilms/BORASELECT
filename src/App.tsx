@@ -39,6 +39,7 @@ import ProcessarPlanejamento from './pages/ProcessarPlanejamento';
 import Prospectar from './pages/Prospectar';
 import QuadroProducao from './pages/QuadroProducao';
 import TarefaExecucao from './pages/TarefaExecucao';
+import AprovacaoPeca from './pages/AprovacaoPeca';
 import Orcamentos from './pages/orcamentos/Orcamentos';
 import OrcamentoDetalhe from './pages/orcamentos/OrcamentoDetalhe';
 import OrcamentoTemplates from './pages/orcamentos/OrcamentoTemplates';
@@ -156,6 +157,9 @@ export default function App() {
         <Route path="/minhas-demandas" element={user ? wrapLayout(<MinhasDemandas />) : <Navigate to="/login" />} />
         <Route path="/producao" element={user ? wrapLayout(<QuadroProducao />) : <Navigate to="/login" />} />
         <Route path="/tarefa/:postId/:taskIndex" element={user ? wrapLayout(<TarefaExecucao />) : <Navigate to="/login" />} />
+        
+        <Route path="/aprovar/:postId/:taskIndex" element={user ? wrapLayout(<AprovacaoPeca />) : <Navigate to="/login" />} />
+        
         <Route path="/minha-demanda/:planId/:postId" element={user ? wrapLayout(<MinhaDemandaDetalhe />) : <Navigate to="/login" />} />
         <Route path="/teleprompter" element={user ? wrapLayout(<Teleprompter />) : <Navigate to="/login" />} />
         <Route path="/diagnostico" element={user && isAdmin ? wrapLayout(<DebugTable />) : <Navigate to="/" />} />
