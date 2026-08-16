@@ -82,7 +82,7 @@ export default function TarefaExecucao() {
   const [userEmail, setUserEmail] = useState('');
   const [userName, setUserName] = useState('');
   const [userRole, setUserRole] = useState('');
-  const [enviando, setEnviando] = useState<{ nome: string; pct: number } | null>(null);
+  const [enviando, setEnviando] = useState<{ nome: string; pct: number; i: number; total: number } | null>(null);
   const [msg, setMsg] = useState('');
   const [sugAberta, setSugAberta] = useState(false);
   const [equipe, setEquipe] = useState<any[]>([]);
@@ -134,42 +134,50 @@ export default function TarefaExecucao() {
     setPost((p: any) => ({ ...p, tasks: novas }));
   };
 
-  /* ---------- upload ---------- */
-  const subirArquivo = async (file: File) => {
-    if (!file || !postId) return;
-    setEnviando({ nome: file.name, pct: 0 });
-    try {
-      const storage = getStorage();
-      const nVer = (versaoAtual?.status === 'rascunho' ? versaoAtual.n : versoes.length + 1);
-      const caminho = `entregas/${postId}/task${idx}/v${nVer}/${Date.now()}_${file.name}`;
-      const tarefa = uploadBytesResumable(sref(storage, caminho), file);
+  /* ---------- upload (aceita vários arquivos, envia um por um) ---------- */
+  const subirArquivos = async (files: FileList | File[]) => {
+    const lista = Array.from(files);
+    if (!lista.length || !postId) return;
 
-      await new Promise<void>((ok, erro) => {
-        tarefa.on('state_changed',
-          s => setEnviando({ nome: file.name, pct: Math.round((s.bytesTransferred / s.totalBytes) * 100) }),
-          erro,
-          () => ok()
-        );
-      });
+    const storage = getStorage();
+    /* se a última versão ainda é rascunho, os arquivos entram nela; senão abre uma nova */
+    const continuar = versaoAtual?.status === 'rascunho';
+    const nVer = continuar ? versaoAtual.n : versoes.length + 1;
+    let acumulados: any[] = continuar ? [...(versaoAtual.arquivos || [])] : [];
+    let novasVersoes = versoes;
 
-      const url = await getDownloadURL(tarefa.snapshot.ref);
-      const arquivo = { nome: file.name, url, tamanho: file.size, tipo: file.type, caminho };
+    for (let i = 0; i < lista.length; i++) {
+      const file = lista[i];
+      setEnviando({ nome: file.name, pct: 0, i: i + 1, total: lista.length });
+      try {
+        const caminho = `entregas/${postId}/task${idx}/v${nVer}/${Date.now()}_${file.name}`;
+        const tarefa = uploadBytesResumable(sref(storage, caminho), file);
+        await new Promise<void>((ok, erro) => {
+          tarefa.on('state_changed',
+            st => setEnviando({ nome: file.name, pct: Math.round((st.bytesTransferred / st.totalBytes) * 100), i: i + 1, total: lista.length }),
+            erro,
+            () => ok()
+          );
+        });
+        const url = await getDownloadURL(tarefa.snapshot.ref);
+        acumulados = [...acumulados, { nome: file.name, url, tamanho: file.size, tipo: file.type, caminho }];
 
-      let novasVersoes;
-      if (versaoAtual?.status === 'rascunho') {
-        novasVersoes = versoes.map((v, i) =>
-          i === versoes.length - 1 ? { ...v, arquivos: [...(v.arquivos || []), arquivo] } : v);
-      } else {
-        novasVersoes = [...versoes, {
-          n: versoes.length + 1, arquivos: [arquivo], status: 'rascunho',
-          enviadoPor: userName, enviadoEm: new Date().toISOString(), motivo: null,
-        }];
+        /* grava a cada arquivo concluído, para nada se perder no meio */
+        novasVersoes = continuar
+          ? versoes.map((v, k) => k === versoes.length - 1 ? { ...v, arquivos: acumulados } : v)
+          : [...versoes, {
+              n: nVer, arquivos: acumulados, status: 'rascunho',
+              enviadoPor: userName, enviadoEm: new Date().toISOString(), motivo: null,
+            }];
+        await gravarTask({ versoes: novasVersoes });
+      } catch (e) {
+        console.error(e);
+        toast.error(`Falha ao enviar ${file.name}`);
       }
-      await gravarTask({ versoes: novasVersoes });
-      toast.success('Arquivo enviado');
-    } catch (e) {
-      console.error(e); toast.error('Falha no envio do arquivo');
-    } finally { setEnviando(null); }
+    }
+
+    setEnviando(null);
+    toast.success(lista.length > 1 ? `${lista.length} arquivos enviados` : 'Arquivo enviado');
   };
 
   const removerArquivo = async (i: number) => {
@@ -365,9 +373,9 @@ export default function TarefaExecucao() {
               </h2>
               <div className="mb-7">
                 {slides.map((s: any, i: number) => (
-                  <div key={i} className="flex gap-3.5 py-3 border-t border-zinc-800 first:border-t-0 first:pt-0 group items-start">
-                    <span className="font-display text-[12px] font-black text-[#8ba3ff]/70 w-5 shrink-0 pt-0.5">{String(i + 1).padStart(2, '0')}</span>
-                    <div className="flex-1 min-w-0 text-[14px] font-bold text-white leading-snug">{s.title}</div>
+                  <div key={i} className="flex gap-3 py-1.5 border-t border-zinc-800/60 first:border-t-0 first:pt-0 group items-center">
+                    <span className="font-display text-[11.5px] font-black text-[#8ba3ff]/70 w-5 shrink-0">{String(i + 1).padStart(2, '0')}</span>
+                    <div className="flex-1 min-w-0 text-[13.5px] font-bold text-white leading-snug">{s.title}</div>
                     <div className="opacity-0 group-hover:opacity-100 transition-opacity"><Copiar texto={s.title} /></div>
                   </div>
                 ))}
@@ -437,11 +445,12 @@ export default function TarefaExecucao() {
             )}
 
             <input ref={fileRef} type="file" className="hidden"
-              onChange={e => { const f = e.target.files?.[0]; if (f) subirArquivo(f); e.target.value = ''; }} />
+              multiple
+              onChange={e => { if (e.target.files?.length) subirArquivos(e.target.files); e.target.value = ''; }} />
             <div
               onClick={() => fileRef.current?.click()}
               onDragOver={e => e.preventDefault()}
-              onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files?.[0]; if (f) subirArquivo(f); }}
+              onDrop={e => { e.preventDefault(); if (e.dataTransfer.files?.length) subirArquivos(e.dataTransfer.files); }}
               className="border-[1.5px] border-dashed border-zinc-700 rounded-2xl py-4 px-3 text-center cursor-pointer hover:border-[#ff5351] hover:bg-[#ff5351]/[0.04] transition-all"
             >
               <Upload className="w-4 h-4 mx-auto text-zinc-600" />
@@ -449,7 +458,7 @@ export default function TarefaExecucao() {
                 {versoes.length ? 'Nova versão' : 'Arraste o arquivo ou clique'}
               </div>
               <div className="text-[10.5px] text-zinc-600">
-                {ehVideo(tipo) ? 'MP4 até 200 MB' : 'PNG, JPG ou ZIP até 50 MB'}
+                {ehVideo(tipo) ? 'MP4 até 200 MB' : 'PNG ou JPG · pode selecionar várias'}
               </div>
             </div>
 
@@ -459,7 +468,9 @@ export default function TarefaExecucao() {
                   <span className="text-[11.5px] font-semibold text-zinc-200 truncate flex-1">{enviando.nome}</span>
                   <span className="text-[10.5px] font-black text-emerald-400">{enviando.pct}%</span>
                 </div>
-                <div className="text-[10px] text-zinc-600">enviando…</div>
+                <div className="text-[10px] text-zinc-600">
+                  {enviando.total > 1 ? `enviando ${enviando.i} de ${enviando.total}…` : 'enviando…'}
+                </div>
                 <div className="h-[3px] bg-zinc-800 rounded-full mt-1.5 overflow-hidden">
                   <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${enviando.pct}%` }} />
                 </div>
