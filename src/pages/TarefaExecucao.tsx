@@ -233,6 +233,15 @@ export default function TarefaExecucao() {
 
   const iniciais = (n: string) => n ? n.split(' ').map(x => x[0]).join('').slice(0, 2).toUpperCase() : '?';
 
+  /* "CANAPLAN CONSULTORIA TECNICA LTDA" -> "Canaplan" */
+  const nomeCurto = (n: string) => {
+    if (!n) return '';
+    const limpo = n.replace(/\b(LTDA|ME|EIRELI|S\/A|SA|EPP|MEI)\b\.?/gi, '').trim();
+    const p = limpo.split(/\s+/);
+    const c = p.length > 2 ? p.slice(0, 2).join(' ') : limpo;
+    return c.charAt(0).toUpperCase() + c.slice(1).toLowerCase();
+  };
+
   if (loading || !post) return (
     <div className="min-h-[60vh] flex items-center justify-center">
       <Loader2 className="w-8 h-8 animate-spin text-[#ff5351]" />
@@ -256,7 +265,7 @@ export default function TarefaExecucao() {
         <button onClick={() => navigate('/producao')} className="text-zinc-600 hover:text-white transition-colors">
           <ArrowLeft className="w-4 h-4" />
         </button>
-        <div className="min-w-0">
+        <div className="min-w-0 max-w-[380px]">
           <div className="flex items-center gap-2 mb-0.5 flex-wrap">
             <span className="text-[10px] font-black uppercase tracking-[0.16em] text-[#ff5351]">
               #{String(post.number).padStart(2, '0')} · {post.planNome?.split('-')?.[1]?.trim() || 'Planejamento'}
@@ -273,7 +282,7 @@ export default function TarefaExecucao() {
         <div className="w-px h-8 bg-zinc-800" />
         <div>
           <div className="text-[9px] font-black uppercase tracking-[0.14em] text-zinc-600">Cliente</div>
-          <div className="text-[13px] font-bold text-zinc-200">{cliente}</div>
+          <div className="text-[13px] font-bold text-zinc-200 whitespace-nowrap" title={cliente}>{nomeCurto(cliente)}</div>
         </div>
         <div className="w-px h-8 bg-zinc-800" />
         <div>
@@ -285,8 +294,8 @@ export default function TarefaExecucao() {
             <div className="w-px h-8 bg-zinc-800" />
             <div>
               <div className="text-[9px] font-black uppercase tracking-[0.14em] text-zinc-600">Prazo</div>
-              <div className={cn("text-[13px] font-bold",
-                dias < 0 ? "text-[#ff8c8b]" : dias <= 3 ? "text-[#ff8c8b]" : dias <= 5 ? "text-amber-300" : "text-emerald-400")}>
+              <div className={cn("text-[13px] font-bold whitespace-nowrap",
+                dias < 0 || dias <= 3 ? "text-[#ff8c8b]" : dias <= 5 ? "text-amber-300" : dias <= 10 ? "text-emerald-400" : "text-zinc-400")}>
                 {dias < 0 ? `${Math.abs(dias)} dias atrasado` : dias === 0 ? 'hoje' : `${dias} dia${dias > 1 ? 's' : ''}`}
               </div>
             </div>
@@ -307,14 +316,94 @@ export default function TarefaExecucao() {
       </div>
 
       {/* ---------- grade ---------- */}
-      <div className="grid grid-cols-1 lg:grid-cols-[300px_minmax(0,1fr)] gap-7 items-start">
+      <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_330px] gap-6 md:gap-8 items-start">
 
-        {/* ===== coluna esquerda: entrega ===== */}
+        {/* ===== ESQUERDA: briefing e textos ===== */}
+        <div>
+          {/* metadados */}
+          <div className="flex gap-5 flex-wrap items-baseline pb-4 mb-1">
+            <span className="text-[9.5px] font-black uppercase tracking-[0.15em] text-zinc-700">{task.description}</span>
+            {(SPECS[tipo] || []).map(([k, v], i) => (
+              <React.Fragment key={k}>
+                {i > 0 && <span className="text-zinc-800">·</span>}
+                <span className="text-[12px] text-zinc-500">{k}<b className="text-zinc-200 font-bold ml-1.5">{v}</b></span>
+              </React.Fragment>
+            ))}
+            {post.duracao && <><span className="text-zinc-800">·</span>
+              <span className="text-[12px] text-zinc-500">Duração<b className="text-zinc-200 font-bold ml-1.5">{post.duracao}</b></span></>}
+          </div>
+
+          {/* roteiro / slides */}
+          {cenas.length > 0 && (
+            <>
+              <h2 className="flex items-center gap-2.5 text-[11px] font-black uppercase tracking-[0.18em] text-zinc-500 mb-3">
+                Roteiro <span className="text-[9.5px] text-zinc-700">{cenas.length} cenas</span>
+                <span className="flex-1 h-px bg-zinc-800" />
+              </h2>
+              <div className="mb-7">
+                {cenas.map((c: any, i: number) => (
+                  <div key={i} className="flex gap-3.5 py-3 border-t border-zinc-800 first:border-t-0 first:pt-0 group items-start">
+                    <span className="font-display text-[12px] font-black text-emerald-400/70 w-5 shrink-0 pt-0.5">{String(i + 1).padStart(2, '0')}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[14px] font-bold text-white leading-snug">{c.title}</div>
+                      {c.description && <div className="text-[12.5px] text-zinc-500 mt-1 leading-relaxed">{c.description}</div>}
+                    </div>
+                    <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Copiar texto={`${c.title}${c.description ? ' — ' + c.description : ''}`} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          {slides.length > 0 && (
+            <>
+              <h2 className="flex items-center gap-2.5 text-[11px] font-black uppercase tracking-[0.18em] text-zinc-500 mb-3">
+                Textos das artes <span className="text-[9.5px] text-zinc-700">{slides.length} slides</span>
+                <span className="flex-1 h-px bg-zinc-800" />
+              </h2>
+              <div className="mb-7">
+                {slides.map((s: any, i: number) => (
+                  <div key={i} className="flex gap-3.5 py-3 border-t border-zinc-800 first:border-t-0 first:pt-0 group items-start">
+                    <span className="font-display text-[12px] font-black text-[#8ba3ff]/70 w-5 shrink-0 pt-0.5">{String(i + 1).padStart(2, '0')}</span>
+                    <div className="flex-1 min-w-0 text-[14px] font-bold text-white leading-snug">{s.title}</div>
+                    <div className="opacity-0 group-hover:opacity-100 transition-opacity"><Copiar texto={s.title} /></div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          {/* textos */}
+          <h2 className="flex items-center gap-2.5 text-[11px] font-black uppercase tracking-[0.18em] text-zinc-500 mb-3">
+            Textos <span className="flex-1 h-px bg-zinc-800" />
+          </h2>
+          <div className="mb-7">
+            {([
+              [ehVideo(tipo) ? 'Capa do reel' : 'Sugestão visual', post.sugestaoVisual],
+              ['Texto da arte', post.textoArte],
+              ['Legenda', post.caption],
+              ['Hashtags', post.hashtags],
+              ['CTA', post.cta],
+            ] as [string, string][]).filter(([, v]) => v).map(([k, v]) => (
+              <div key={k} className="flex gap-3.5 py-3 border-t border-zinc-800 first:border-t-0 first:pt-0 group items-start">
+                <div className="flex-1 min-w-0">
+                  <span className="text-[9.5px] font-black uppercase tracking-[0.15em] text-zinc-600">{k}</span>
+                  <div className={cn("text-[13.5px] mt-1 leading-relaxed", k === 'Hashtags' ? "text-[#8ba3ff]" : "text-zinc-300")}>{v}</div>
+                </div>
+                <div className="opacity-0 group-hover:opacity-100 transition-opacity"><Copiar texto={v} /></div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* ===== DIREITA: entrega, versões e conversa ===== */}
         <div className="space-y-4">
           <div className="bg-[#1f1f1f] border border-zinc-800 rounded-[20px] p-5">
             <div className="flex justify-center mb-3.5 relative">
               <div className="relative rounded-xl overflow-hidden bg-[#232323] border border-zinc-700 flex items-center justify-center"
-                style={{ width: ehVideo(tipo) ? 150 : 190, aspectRatio: proporcao(tipo) }}>
+                style={{ width: versaoAtual?.arquivos?.length ? (ehVideo(tipo) ? 148 : 186) : (ehVideo(tipo) ? 104 : 132), aspectRatio: proporcao(tipo) }}>
                 {versaoAtual?.arquivos?.[0]?.url && !ehVideo(tipo) ? (
                   <img src={versaoAtual.arquivos[0].url} alt="" className="w-full h-full object-cover" />
                 ) : versaoAtual?.arquivos?.[0]?.url ? (
@@ -430,86 +519,6 @@ export default function TarefaExecucao() {
               ))}
             </div>
           )}
-        </div>
-
-        {/* ===== área principal ===== */}
-        <div>
-          {/* metadados */}
-          <div className="flex gap-5 flex-wrap items-baseline pb-4 mb-1">
-            <span className="text-[9.5px] font-black uppercase tracking-[0.15em] text-zinc-700">{task.description}</span>
-            {(SPECS[tipo] || []).map(([k, v], i) => (
-              <React.Fragment key={k}>
-                {i > 0 && <span className="text-zinc-800">·</span>}
-                <span className="text-[12px] text-zinc-500">{k}<b className="text-zinc-200 font-bold ml-1.5">{v}</b></span>
-              </React.Fragment>
-            ))}
-            {post.duracao && <><span className="text-zinc-800">·</span>
-              <span className="text-[12px] text-zinc-500">Duração<b className="text-zinc-200 font-bold ml-1.5">{post.duracao}</b></span></>}
-          </div>
-
-          {/* roteiro / slides */}
-          {cenas.length > 0 && (
-            <>
-              <h2 className="flex items-center gap-2.5 text-[11px] font-black uppercase tracking-[0.18em] text-zinc-500 mb-3">
-                Roteiro <span className="text-[9.5px] text-zinc-700">{cenas.length} cenas</span>
-                <span className="flex-1 h-px bg-zinc-800" />
-              </h2>
-              <div className="mb-7">
-                {cenas.map((c: any, i: number) => (
-                  <div key={i} className="flex gap-3.5 py-3 border-t border-zinc-800 first:border-t-0 first:pt-0 group items-start">
-                    <span className="font-display text-[12px] font-black text-emerald-400/70 w-5 shrink-0 pt-0.5">{String(i + 1).padStart(2, '0')}</span>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-[14px] font-bold text-white leading-snug">{c.title}</div>
-                      {c.description && <div className="text-[12.5px] text-zinc-500 mt-1 leading-relaxed">{c.description}</div>}
-                    </div>
-                    <div className="opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Copiar texto={`${c.title}${c.description ? ' — ' + c.description : ''}`} />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
-
-          {slides.length > 0 && (
-            <>
-              <h2 className="flex items-center gap-2.5 text-[11px] font-black uppercase tracking-[0.18em] text-zinc-500 mb-3">
-                Textos das artes <span className="text-[9.5px] text-zinc-700">{slides.length} slides</span>
-                <span className="flex-1 h-px bg-zinc-800" />
-              </h2>
-              <div className="mb-7">
-                {slides.map((s: any, i: number) => (
-                  <div key={i} className="flex gap-3.5 py-3 border-t border-zinc-800 first:border-t-0 first:pt-0 group items-start">
-                    <span className="font-display text-[12px] font-black text-[#8ba3ff]/70 w-5 shrink-0 pt-0.5">{String(i + 1).padStart(2, '0')}</span>
-                    <div className="flex-1 min-w-0 text-[14px] font-bold text-white leading-snug">{s.title}</div>
-                    <div className="opacity-0 group-hover:opacity-100 transition-opacity"><Copiar texto={s.title} /></div>
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
-
-          {/* textos */}
-          <h2 className="flex items-center gap-2.5 text-[11px] font-black uppercase tracking-[0.18em] text-zinc-500 mb-3">
-            Textos <span className="flex-1 h-px bg-zinc-800" />
-          </h2>
-          <div className="mb-7">
-            {([
-              [ehVideo(tipo) ? 'Capa do reel' : 'Sugestão visual', post.sugestaoVisual],
-              ['Texto da arte', post.textoArte],
-              ['Legenda', post.caption],
-              ['Hashtags', post.hashtags],
-              ['CTA', post.cta],
-            ] as [string, string][]).filter(([, v]) => v).map(([k, v]) => (
-              <div key={k} className="flex gap-3.5 py-3 border-t border-zinc-800 first:border-t-0 first:pt-0 group items-start">
-                <div className="flex-1 min-w-0">
-                  <span className="text-[9.5px] font-black uppercase tracking-[0.15em] text-zinc-600">{k}</span>
-                  <div className={cn("text-[13.5px] mt-1 leading-relaxed", k === 'Hashtags' ? "text-[#8ba3ff]" : "text-zinc-300")}>{v}</div>
-                </div>
-                <div className="opacity-0 group-hover:opacity-100 transition-opacity"><Copiar texto={v} /></div>
-              </div>
-            ))}
-          </div>
 
           {/* conversa */}
           <h2 className="flex items-center gap-2.5 text-[11px] font-black uppercase tracking-[0.18em] text-zinc-500 mb-3">
