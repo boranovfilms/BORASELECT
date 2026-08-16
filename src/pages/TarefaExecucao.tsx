@@ -89,8 +89,22 @@ export default function TarefaExecucao() {
   const [salvando, setSalvando] = useState(false);
   const [lightbox, setLightbox] = useState(false);
   const [slideLB, setSlideLB] = useState(0);
+  const [ativo, setAtivo] = useState(0);            /* qual arquivo está no preview */
+  const [dim, setDim] = useState<{ w: number; h: number } | null>(null);
 
   useEffect(() => { carregar(); }, [postId]);
+
+  /* ESC fecha a tela cheia */
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      if (!lightbox) return;
+      if (e.key === 'Escape') setLightbox(false);
+      if (e.key === 'ArrowRight') setSlideLB(s => (s + 1) % (versaoAtual?.arquivos?.length || 1));
+      if (e.key === 'ArrowLeft') setSlideLB(s => (s - 1 + (versaoAtual?.arquivos?.length || 1)) % (versaoAtual?.arquivos?.length || 1));
+    };
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+  });
 
   const carregar = async () => {
     if (!postId) return;
@@ -410,30 +424,57 @@ export default function TarefaExecucao() {
         <div className="space-y-4">
           <div className="bg-[#1f1f1f] border border-zinc-800 rounded-[20px] p-5">
             <div className="flex justify-center mb-3.5 relative">
-              <div className="relative rounded-xl overflow-hidden bg-[#232323] border border-zinc-700 flex items-center justify-center"
+              <div className="relative bg-[#232323] border border-zinc-700 flex items-center justify-center overflow-hidden"
                 style={{ width: versaoAtual?.arquivos?.length ? (ehVideo(tipo) ? 148 : 186) : (ehVideo(tipo) ? 104 : 132), aspectRatio: proporcao(tipo) }}>
-                {versaoAtual?.arquivos?.[0]?.url && !ehVideo(tipo) ? (
-                  <img src={versaoAtual.arquivos[0].url} alt="" className="w-full h-full object-cover" />
-                ) : versaoAtual?.arquivos?.[0]?.url ? (
-                  <div className="w-9 h-9 rounded-full bg-black/50 border-2 border-white/70 flex items-center justify-center text-white text-xs pl-0.5">▶</div>
+                {versaoAtual?.arquivos?.[ativo] ? (
+                  versaoAtual.arquivos[ativo].tipo?.startsWith('video') ? (
+                    <video
+                      src={versaoAtual.arquivos[ativo].url}
+                      className="w-full h-full object-contain bg-black"
+                      onLoadedMetadata={e => setDim({ w: (e.target as HTMLVideoElement).videoWidth, h: (e.target as HTMLVideoElement).videoHeight })}
+                      muted playsInline
+                    />
+                  ) : (
+                    <img
+                      src={versaoAtual.arquivos[ativo].url} alt=""
+                      className="w-full h-full object-contain bg-black"
+                      onLoad={e => setDim({ w: (e.target as HTMLImageElement).naturalWidth, h: (e.target as HTMLImageElement).naturalHeight })}
+                    />
+                  )
                 ) : (
                   <span className="text-[10px] text-zinc-600 font-bold px-3 text-center">sem arquivo</span>
                 )}
-                <span className="absolute bottom-1.5 left-1.5 text-[8px] font-black bg-black/60 rounded px-1.5 py-0.5 text-zinc-300">
-                  {SPECS[tipo]?.[0]?.[1]}
+                <span className="absolute bottom-1.5 left-1.5 text-[8px] font-black bg-black/70 rounded px-1.5 py-0.5 text-zinc-300">
+                  {dim ? `${dim.w}×${dim.h}` : SPECS[tipo]?.[0]?.[1]}
                 </span>
+                {versaoAtual?.arquivos?.length > 1 && (
+                  <span className="absolute bottom-1.5 right-1.5 text-[8px] font-black bg-black/70 rounded px-1.5 py-0.5 text-zinc-300">
+                    {ativo + 1} / {versaoAtual.arquivos.length}
+                  </span>
+                )}
                 {versaoAtual?.arquivos?.length > 0 && (
-                  <button onClick={() => { setSlideLB(0); setLightbox(true); }}
-                    className="absolute top-2 right-2 bg-black/65 border border-zinc-700 rounded-lg px-2 py-1 text-[9px] font-black uppercase tracking-[0.09em] text-zinc-300 hover:bg-[#ff5351] hover:text-white hover:border-[#ff5351]">
-                    <Maximize2 className="w-3 h-3 inline -mt-px" /> Tela cheia
+                  <button onClick={() => { setSlideLB(ativo); setLightbox(true); }}
+                    className="absolute top-1.5 right-1.5 bg-black/70 border border-zinc-700 rounded-md px-2 py-1 text-[9px] font-black uppercase tracking-[0.09em] text-zinc-300 hover:bg-[#ff5351] hover:text-white hover:border-[#ff5351]">
+                    <Maximize2 className="w-3 h-3 inline -mt-px" /> Ampliar
                   </button>
                 )}
               </div>
             </div>
 
+            {dim && (() => {
+              const alvo = ehVideo(tipo) || tipo === 'STORIES' ? 9 / 16 : 4 / 5;
+              const real = dim.w / dim.h;
+              const fora = Math.abs(real - alvo) / alvo > 0.03;
+              return fora ? (
+                <div className="flex gap-2 bg-amber-500/[0.07] border border-amber-500/30 rounded-xl px-3 py-2 mb-3 text-[10.5px] text-amber-100/80 leading-snug">
+                  ⚠ <span>O arquivo está <b className="text-amber-300">{dim.w}×{dim.h}</b> e o formato pedido é <b className="text-amber-300">{SPECS[tipo]?.[0]?.[1]}</b>. Confira se é proposital.</span>
+                </div>
+              ) : null;
+            })()}
+
             {versaoAtual && (
               <div className="text-center mb-3.5">
-                <div className="font-display text-[12.5px] font-black text-white truncate">{versaoAtual.arquivos?.[0]?.nome || '—'}</div>
+                <div className="font-display text-[12.5px] font-black text-white truncate">{versaoAtual.arquivos?.[ativo]?.nome || '—'}</div>
                 <span className={cn("inline-block text-[8.5px] font-black uppercase tracking-[0.1em] px-2 py-0.5 rounded-md mt-1.5",
                   versaoAtual.status === 'rascunho' ? "bg-amber-500/15 text-amber-300"
                     : versaoAtual.status === 'em_revisao' ? "bg-blue-500/15 text-blue-300"
@@ -478,7 +519,9 @@ export default function TarefaExecucao() {
             )}
 
             {versaoAtual?.arquivos?.map((a: any, i: number) => (
-              <div key={i} className="bg-[#151515] border border-zinc-800 rounded-xl p-2.5 mt-2 flex items-center gap-2.5">
+              <div key={i} onClick={() => { setAtivo(i); setDim(null); }}
+                className={cn("bg-[#151515] border rounded-xl p-2.5 mt-2 flex items-center gap-2.5 cursor-pointer transition-colors",
+                  ativo === i ? "border-[#ff5351]" : "border-zinc-800 hover:border-zinc-700")}>
                 <div className="w-7 h-7 rounded-lg bg-zinc-800 flex items-center justify-center text-xs shrink-0">
                   {a.tipo?.startsWith('video') ? '🎬' : '🖼'}
                 </div>
@@ -493,7 +536,7 @@ export default function TarefaExecucao() {
                   </div>
                 </div>
                 {versaoAtual.status === 'rascunho' && (
-                  <button onClick={() => removerArquivo(i)} className="text-zinc-700 hover:text-[#ff8c8b]">
+                  <button onClick={e => { e.stopPropagation(); removerArquivo(i); }} className="text-zinc-700 hover:text-[#ff8c8b]">
                     <X className="w-3.5 h-3.5" />
                   </button>
                 )}
@@ -611,29 +654,29 @@ export default function TarefaExecucao() {
 
       {/* ---------- lightbox ---------- */}
       {lightbox && versaoAtual?.arquivos?.length > 0 && (
-        <div className="fixed inset-0 bg-black/95 z-[100] flex flex-col p-6">
-          <div className="flex items-center gap-4 mb-4">
+        <div className="fixed inset-0 bg-black/95 z-[9999] flex flex-col p-6" onClick={() => setLightbox(false)}>
+          <div className="flex items-center gap-4 mb-4" onClick={e => e.stopPropagation()}>
             <div>
               <div className="font-display text-[15px] font-black text-white">{post.headline}</div>
               <div className="text-[12px] text-zinc-500">
-                {versaoAtual.arquivos[slideLB]?.nome} · {SPECS[tipo]?.[1]?.[1]}
+                {versaoAtual.arquivos[slideLB]?.nome} · {versaoAtual.arquivos.length > 1 ? `${slideLB + 1} de ${versaoAtual.arquivos.length} · ` : ''}Esc para fechar
               </div>
             </div>
             <button onClick={() => setLightbox(false)}
-              className="ml-auto border border-zinc-700 rounded-xl px-4 py-2 text-[10px] font-black uppercase tracking-[0.12em] text-zinc-400 hover:text-white">
-              Fechar ✕
+              className="ml-auto flex items-center gap-2 bg-[#ff5351] rounded-xl px-5 py-2.5 text-[10px] font-black uppercase tracking-[0.12em] text-white hover:brightness-110">
+              <X className="w-3.5 h-3.5" /> Fechar
             </button>
           </div>
-          <div className="flex-1 flex items-center justify-center gap-5 min-h-0">
+          <div className="flex-1 flex items-center justify-center gap-5 min-h-0" onClick={e => e.stopPropagation()}>
             {versaoAtual.arquivos.length > 1 && (
               <button onClick={() => setSlideLB(s => (s - 1 + versaoAtual.arquivos.length) % versaoAtual.arquivos.length)}
                 className="w-11 h-11 shrink-0 rounded-full border border-zinc-700 text-zinc-300 text-xl hover:bg-[#ff5351] hover:text-white hover:border-[#ff5351]">‹</button>
             )}
             <div className="h-full flex items-center justify-center">
               {versaoAtual.arquivos[slideLB]?.tipo?.startsWith('video') ? (
-                <video src={versaoAtual.arquivos[slideLB].url} controls className="max-h-full rounded-2xl" />
+                <video src={versaoAtual.arquivos[slideLB].url} controls autoPlay className="max-h-full" />
               ) : (
-                <img src={versaoAtual.arquivos[slideLB]?.url} alt="" className="max-h-full rounded-2xl object-contain" />
+                <img src={versaoAtual.arquivos[slideLB]?.url} alt="" className="max-h-full object-contain" />
               )}
             </div>
             {versaoAtual.arquivos.length > 1 && (
@@ -642,7 +685,7 @@ export default function TarefaExecucao() {
             )}
           </div>
           {versaoAtual.arquivos.length > 1 && (
-            <div className="flex gap-2 justify-center mt-4">
+            <div className="flex gap-2 justify-center mt-4" onClick={e => e.stopPropagation()}>
               {versaoAtual.arquivos.map((_: any, i: number) => (
                 <button key={i} onClick={() => setSlideLB(i)}
                   className={cn("w-9 h-12 rounded-lg border-2 flex items-center justify-center text-[11px] font-black",
