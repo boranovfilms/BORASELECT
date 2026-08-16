@@ -17,16 +17,17 @@ const ROLES = [
 
 /**
  * Gera permissões padrão a partir da lista central de módulos.
- * Regra: master sempre tem acesso; todos os demais papéis nascem sem acesso.
- * Módulos com `roles` explícito no menu também respeitam essa regra base,
- * pois o AppLayout ainda aplica a restrição `roles` antes da matriz.
+ * Regra base: master sempre tem acesso; todos os demais papéis nascem sem acesso.
+ * Se o módulo declarar `roles` em ALL_MODULES, esses papéis também nascem
+ * marcados — mas apenas na primeira vez, antes de o módulo existir no Firestore.
+ * Depois de salvo, a matriz é a única fonte da verdade.
  */
 const buildDefaultPermissions = (): PermissionsMatrix => {
   const perms: PermissionsMatrix = {};
   ALL_MODULES.forEach(mod => {
     const rolePerms: Record<string, boolean> = {};
     ROLES.forEach(role => {
-      rolePerms[role] = role === 'master';
+      rolePerms[role] = role === 'master' || (mod.roles?.includes(role) ?? false);
     });
     perms[mod.id] = rolePerms;
   });
