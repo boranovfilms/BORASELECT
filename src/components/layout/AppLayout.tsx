@@ -1,7 +1,7 @@
 import React from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {
-  LayoutDashboard, Library, Users, Package, LayoutTemplate, CreditCard, Settings, Shield, HelpCircle, LogOut, Bell, X, Loader2, Image as ImageControl, Trash2, Save, CheckSquare, UsersRound, FileText, Database, ChevronRight, ArrowRight, Tv, TrendingUp
+  LayoutDashboard, Library, Users, Package, LayoutTemplate, CreditCard, Settings, Shield, HelpCircle, LogOut, Bell, X, Loader2, Image as ImageControl, Trash2, Save, CheckSquare, UsersRound, FileText, Database, ChevronRight, ArrowRight, Tv, TrendingUp, Clapperboard
 } from 'lucide-react';
 import { auth, db } from '@/src/lib/firebase';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
@@ -131,6 +131,7 @@ const handleNotificationClick = async (notif: Notificacao) => {
     { id: 'projetos', icon: Library, label: 'Projetos', path: '/projetos' },
     { id: 'planejamentos', icon: FileText, label: 'Planejamentos', path: '/meus-planejamentos' },
     { id: 'minhas_demandas', icon: FileText, label: 'Minhas Demandas', path: '/minhas-demandas' },
+    { id: 'producao', icon: Clapperboard, label: 'Produção', path: '/producao' },
     { id: 'clientes', icon: Users, label: 'Clientes', path: '/clients' },
     { id: 'prospectar', icon: TrendingUp, label: 'Prospectar', path: '/prospectar', roles: ['master', 'admin', 'redator'] },
     { id: 'orcamentos', icon: FileText, label: 'Orçamentos', path: '/orcamentos', roles: ['master', 'admin'] },
