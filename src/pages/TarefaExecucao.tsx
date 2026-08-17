@@ -360,7 +360,7 @@ export default function TarefaExecucao() {
           </>
         )}
 
-        <div className="ml-auto flex gap-2.5">
+        <div className="ml-auto">
           <button
             onClick={enviarParaRevisao}
             disabled={salvando || !versaoAtual?.arquivos?.length}
@@ -373,25 +373,24 @@ export default function TarefaExecucao() {
         </div>
       </div>
 
-      {/* ---------- grade ---------- */}
-      <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_330px] gap-6 md:gap-8 items-start">
+      {/* ---------- metadados ---------- */}
+      <div className="flex gap-5 flex-wrap items-baseline pb-4">
+        <span className="text-[9.5px] font-black uppercase tracking-[0.15em] text-zinc-700">{task.description}</span>
+        {(SPECS[tipo] || []).map(([k, v], i) => (
+          <React.Fragment key={k}>
+            {i > 0 && <span className="text-zinc-800">·</span>}
+            <span className="text-[12px] text-zinc-500">{k}<b className="text-zinc-200 font-bold ml-1.5">{v}</b></span>
+          </React.Fragment>
+        ))}
+        {post.duracao && <><span className="text-zinc-800">·</span>
+          <span className="text-[12px] text-zinc-500">Duração<b className="text-zinc-200 font-bold ml-1.5">{post.duracao}</b></span></>}
+      </div>
+
+      {/* ---------- três colunas: textos · arquivos e conversa · preview ---------- */}
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_300px_250px] gap-6 lg:gap-7 items-start">
 
         {/* ===== ESQUERDA: briefing e textos ===== */}
         <div>
-          {/* metadados */}
-          <div className="flex gap-5 flex-wrap items-baseline pb-4 mb-1">
-            <span className="text-[9.5px] font-black uppercase tracking-[0.15em] text-zinc-700">{task.description}</span>
-            {(SPECS[tipo] || []).map(([k, v], i) => (
-              <React.Fragment key={k}>
-                {i > 0 && <span className="text-zinc-800">·</span>}
-                <span className="text-[12px] text-zinc-500">{k}<b className="text-zinc-200 font-bold ml-1.5">{v}</b></span>
-              </React.Fragment>
-            ))}
-            {post.duracao && <><span className="text-zinc-800">·</span>
-              <span className="text-[12px] text-zinc-500">Duração<b className="text-zinc-200 font-bold ml-1.5">{post.duracao}</b></span></>}
-          </div>
-
-          {/* roteiro / slides */}
           {cenas.length > 0 && (
             <>
               <h2 className="flex items-center gap-2.5 text-[11px] font-black uppercase tracking-[0.18em] text-zinc-500 mb-3">
@@ -433,11 +432,10 @@ export default function TarefaExecucao() {
             </>
           )}
 
-          {/* textos */}
           <h2 className="flex items-center gap-2.5 text-[11px] font-black uppercase tracking-[0.18em] text-zinc-500 mb-3">
             Textos <span className="flex-1 h-px bg-zinc-800" />
           </h2>
-          <div className="mb-7">
+          <div>
             {([
               [ehVideo(tipo) ? 'Capa do reel' : 'Sugestão visual', post.sugestaoVisual],
               ['Texto da arte', post.textoArte],
@@ -456,24 +454,212 @@ export default function TarefaExecucao() {
           </div>
         </div>
 
-        {/* ===== DIREITA: entrega, versões e conversa ===== */}
-        <div className="space-y-4">
-          <div className="bg-[#1f1f1f] border border-zinc-800 rounded-[20px] p-5">
-            <div className="flex justify-center mb-3.5 relative">
-              <div className="relative bg-[#232323] border border-zinc-700 flex items-center justify-center overflow-hidden"
-                style={{ width: versaoAtual?.arquivos?.length ? (ehVideo(tipo) ? 148 : 186) : (ehVideo(tipo) ? 104 : 132), aspectRatio: proporcao(tipo) }}>
+        {/* ===== MEIO: arquivos entregues, versões e conversa ===== */}
+        <div className="space-y-5">
+          <div>
+            <h2 className="flex items-center gap-2.5 text-[11px] font-black uppercase tracking-[0.18em] text-zinc-500 mb-3">
+              Arquivos <span className="text-[9.5px] text-zinc-700">{versaoAtual?.arquivos?.length || 0}</span>
+              <span className="flex-1 h-px bg-zinc-800" />
+            </h2>
+
+            {!versaoAtual?.arquivos?.length && (
+              <p className="text-[12px] text-zinc-700">Nenhum arquivo enviado ainda.</p>
+            )}
+
+            {versaoAtual?.arquivos?.map((a: any, i: number) => {
+              const dec = versaoAtual.decisoes?.[i] || null;
+              const aprovado = dec === 'ok';
+              const refazer = dec === 'no';
+              const ajuste = (post.mensagens || []).filter((m: any) => m.arquivoIndex === i).slice(-1)[0];
+              return (
+                <div key={i} onClick={() => { setAtivo(i); setDim(null); }}
+                  className={cn("rounded-2xl border p-3 mb-2 flex gap-3 items-start cursor-pointer transition-all",
+                    aprovado ? "bg-emerald-500/[0.08] border-emerald-500/30"
+                      : refazer ? "bg-[#ff5351]/[0.08] border-[#ff5351]/35"
+                        : ativo === i ? "bg-[#151515] border-[#ff5351]"
+                          : "bg-[#151515] border-zinc-800 hover:border-zinc-700")}>
+
+                  <div className={cn("w-7 h-7 rounded-lg shrink-0 flex items-center justify-center text-xs",
+                    aprovado ? "bg-emerald-500/15 text-emerald-400"
+                      : refazer ? "bg-[#ff5351]/15 text-[#ff8c8b]"
+                        : "bg-zinc-800 text-zinc-500")}>
+                    {a.tipo?.startsWith('video') ? '🎬' : '🖼'}
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <span className="text-[12px] font-bold text-white truncate flex-1">{a.nome}</span>
+                      {aprovado && (
+                        <span className="shrink-0 text-[8px] font-black uppercase tracking-[0.1em] px-2 py-0.5 rounded-md bg-emerald-500 text-[#062a12]">
+                          Aprovado
+                        </span>
+                      )}
+                      {refazer && (
+                        <span className="shrink-0 text-[8px] font-black uppercase tracking-[0.1em] px-2 py-0.5 rounded-md bg-[#ff5351] text-white">
+                          Refazer
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[10px] text-zinc-500">{tamanho(a.tamanho || 0)} · enviado</div>
+
+                    {refazer && ajuste && (
+                      <div className="text-[11px] leading-relaxed mt-2 pt-2 border-t border-dashed border-[#ff5351]/30 text-[#e0bebe]">
+                        {String(ajuste.texto).replace(/^Ajuste no arquivo \d+ \([^)]*\):\s*/, '')}
+                        <span className="text-[#8a7070]"> — {ajuste.autorNome}</span>
+                      </div>
+                    )}
+
+                    {refazer && (
+                      <button
+                        onClick={e => { e.stopPropagation(); setTrocando(i); fileRef.current?.click(); }}
+                        className="mt-2 text-[8.5px] font-black uppercase tracking-[0.1em] bg-[#ff5351] text-white rounded-lg px-3 py-1.5 hover:brightness-110">
+                        Trocar arquivo
+                      </button>
+                    )}
+                  </div>
+
+                  {versaoAtual.status === 'rascunho' && !aprovado && !refazer && (
+                    <button onClick={e => { e.stopPropagation(); removerArquivo(i); }} className="text-zinc-700 hover:text-[#ff8c8b] shrink-0">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* versões */}
+          {versoes.length > 1 && (
+            <div>
+              <h2 className="flex items-center gap-2.5 text-[11px] font-black uppercase tracking-[0.18em] text-zinc-500 mb-3">
+                Versões <span className="flex-1 h-px bg-zinc-800" />
+              </h2>
+              {[...versoes].reverse().map((v: any) => (
+                <div key={v.n} className="flex gap-2.5 py-2.5 border-t border-zinc-800 first:border-t-0 first:pt-0">
+                  <span className={cn("font-display text-[11px] font-black w-5 shrink-0",
+                    v === versaoAtual ? "text-[#ff5351]" : "text-zinc-600")}>v{v.n}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-[11.5px] font-semibold text-zinc-400">
+                        {new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date(v.enviadoEm))}
+                      </span>
+                      <span className={cn("text-[8px] font-black uppercase tracking-[0.1em] px-2 py-0.5 rounded-md",
+                        v.status === 'ajuste' ? "bg-[#ff5351]/15 text-[#ff8c8b]"
+                          : v.status === 'aprovado' ? "bg-emerald-500/15 text-emerald-400"
+                            : v.status === 'em_revisao' ? "bg-blue-500/15 text-blue-300"
+                              : "bg-amber-500/15 text-amber-300")}>
+                        {v.status === 'ajuste' ? 'ajuste' : v.status === 'aprovado' ? 'aprovado' : v.status === 'em_revisao' ? 'em revisão' : 'rascunho'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* conversa */}
+          <div>
+            <h2 className="flex items-center gap-2.5 text-[11px] font-black uppercase tracking-[0.18em] text-zinc-500 mb-3">
+              Conversa <span className="text-[9.5px] text-zinc-700">{mensagens.length}</span>
+              <span className="flex-1 h-px bg-zinc-800" />
+            </h2>
+
+            <div className="flex flex-col gap-3 max-h-[230px] overflow-y-auto pr-1 mb-3">
+              {mensagens.length === 0 && <p className="text-[12px] text-zinc-700">Nenhuma mensagem ainda.</p>}
+              {mensagens.map((m: any) => (
+                <div key={m.id} className="flex gap-2.5">
+                  <span className="w-[23px] h-[23px] shrink-0 rounded-full bg-zinc-800 text-zinc-400 text-[8px] font-black flex items-center justify-center">
+                    {iniciais(m.autorNome)}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-[10.5px] font-black text-zinc-300">{m.autorNome}</span>
+                      <span className="text-[9px] text-zinc-700">
+                        {new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date(m.criadoEm))}
+                      </span>
+                    </div>
+                    <div className={cn("text-[12px] text-zinc-300 leading-relaxed mt-0.5",
+                      m.visivelCliente && "border-l-2 border-amber-500/50 pl-2.5")}>
+                      {m.texto}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="relative">
+              {sugAberta && (
+                <div className="absolute bottom-[calc(100%+6px)] left-0 right-0 bg-[#242424] border border-zinc-700 rounded-xl p-1.5 z-10">
+                  {equipe.map((m: any) => (
+                    <button key={m.id} onClick={() => inserirMencao(m.name || m.email)}
+                      className="flex w-full items-center gap-2.5 px-2.5 py-2 rounded-lg hover:bg-zinc-800 text-left">
+                      <span className="w-5 h-5 rounded-full bg-zinc-700 text-[8px] font-black flex items-center justify-center text-zinc-300">
+                        {iniciais(m.name || m.email)}
+                      </span>
+                      <span className="text-[12px] font-bold text-zinc-200 truncate">{m.name || m.email}</span>
+                    </button>
+                  ))}
+                  <button onClick={() => inserirMencao('cliente')}
+                    className="flex w-full items-center gap-2.5 px-2.5 py-2 rounded-lg hover:bg-zinc-800 text-left">
+                    <span className="w-5 h-5 rounded-full bg-amber-500/20 text-amber-300 text-[8px] font-black flex items-center justify-center">CL</span>
+                    <span className="text-[12px] font-bold text-zinc-200 truncate">{cliente}</span>
+                  </button>
+                </div>
+              )}
+              <textarea
+                rows={2} value={msg}
+                onChange={e => { setMsg(e.target.value); setSugAberta(e.target.value.split(/\s/).pop() === '@'); }}
+                placeholder="Escreva aqui. Use @ para chamar alguém…"
+                className="w-full bg-[#151515] border border-zinc-800 rounded-xl px-3 py-2.5 text-[12.5px] text-zinc-200 outline-none focus:border-[#ff5351] resize-none"
+              />
+            </div>
+
+            {mencionaCliente && (
+              <div className="flex gap-2 bg-amber-500/[0.07] border border-amber-500/30 rounded-xl px-3 py-2 mt-2 text-[10.5px] text-amber-100/80 leading-snug">
+                👁 <span><b className="text-amber-300">Visível para o cliente.</b></span>
+              </div>
+            )}
+
+            <div className="flex items-center gap-2 mt-2">
+              <span className="text-[10px] text-zinc-700 flex-1">Use <b className="text-zinc-500">@</b> para mencionar</span>
+              <button onClick={enviarMensagem} disabled={!msg.trim()}
+                className={cn("px-4 py-2 rounded-xl text-[9.5px] font-black uppercase tracking-[0.13em] transition-all",
+                  msg.trim() ? "bg-[#ff5351] text-white hover:brightness-110" : "bg-zinc-800 text-zinc-600 cursor-not-allowed")}>
+                Enviar
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* ===== DIREITA: preview e envio ===== */}
+        <div className="lg:sticky lg:top-4">
+          <div className="bg-[#1f1f1f] border border-zinc-800 rounded-[20px] p-4">
+            {dim && (() => {
+              const alvo = ehVideo(tipo) || tipo === 'STORIES' ? 9 / 16 : 4 / 5;
+              const real = dim.w / dim.h;
+              const fora = Math.abs(real - alvo) / alvo > 0.03;
+              return fora ? (
+                <div className="flex gap-2 bg-amber-500/[0.07] border border-amber-500/30 rounded-xl px-3 py-2 mb-3 text-[10px] text-amber-100/80 leading-snug">
+                  ⚠ <span>Arquivo <b className="text-amber-300">{dim.w}×{dim.h}</b>, pedido <b className="text-amber-300">{SPECS[tipo]?.[0]?.[1]}</b>.</span>
+                </div>
+              ) : null;
+            })()}
+
+            <div className="flex justify-center mb-3">
+              <div className="relative bg-black border border-zinc-700 flex items-center justify-center overflow-hidden w-full"
+                style={{ aspectRatio: proporcao(tipo) }}>
                 {versaoAtual?.arquivos?.[ativo] ? (
                   versaoAtual.arquivos[ativo].tipo?.startsWith('video') ? (
                     <video
                       src={versaoAtual.arquivos[ativo].url}
-                      className="w-full h-full object-contain bg-black"
+                      className="w-full h-full object-contain"
                       onLoadedMetadata={e => setDim({ w: (e.target as HTMLVideoElement).videoWidth, h: (e.target as HTMLVideoElement).videoHeight })}
                       muted playsInline
                     />
                   ) : (
                     <img
                       src={versaoAtual.arquivos[ativo].url} alt=""
-                      className="w-full h-full object-contain bg-black"
+                      className="w-full h-full object-contain"
                       onLoad={e => setDim({ w: (e.target as HTMLImageElement).naturalWidth, h: (e.target as HTMLImageElement).naturalHeight })}
                     />
                   )
@@ -490,39 +676,31 @@ export default function TarefaExecucao() {
                 )}
                 {versaoAtual?.arquivos?.length > 0 && (
                   <button onClick={() => { setSlideLB(ativo); setLightbox(true); }}
-                    className="absolute top-1.5 right-1.5 bg-black/70 border border-zinc-700 rounded-md px-2 py-1 text-[9px] font-black uppercase tracking-[0.09em] text-zinc-300 hover:bg-[#ff5351] hover:text-white hover:border-[#ff5351]">
+                    className="absolute top-1.5 right-1.5 bg-black/70 border border-zinc-700 rounded-md px-2 py-1 text-[8.5px] font-black uppercase tracking-[0.08em] text-zinc-300 hover:bg-[#ff5351] hover:text-white hover:border-[#ff5351]">
                     <Maximize2 className="w-3 h-3 inline -mt-px" /> Ampliar
                   </button>
                 )}
               </div>
             </div>
 
-            {dim && (() => {
-              const alvo = ehVideo(tipo) || tipo === 'STORIES' ? 9 / 16 : 4 / 5;
-              const real = dim.w / dim.h;
-              const fora = Math.abs(real - alvo) / alvo > 0.03;
-              return fora ? (
-                <div className="flex gap-2 bg-amber-500/[0.07] border border-amber-500/30 rounded-xl px-3 py-2 mb-3 text-[10.5px] text-amber-100/80 leading-snug">
-                  ⚠ <span>O arquivo está <b className="text-amber-300">{dim.w}×{dim.h}</b> e o formato pedido é <b className="text-amber-300">{SPECS[tipo]?.[0]?.[1]}</b>. Confira se é proposital.</span>
-                </div>
-              ) : null;
-            })()}
-
             {versaoAtual && (
-              <div className="text-center mb-3.5">
-                <div className="font-display text-[12.5px] font-black text-white truncate">{versaoAtual.arquivos?.[ativo]?.nome || '—'}</div>
-                <span className={cn("inline-block text-[8.5px] font-black uppercase tracking-[0.1em] px-2 py-0.5 rounded-md mt-1.5",
+              <div className="text-center mb-3">
+                <div className="font-display text-[11.5px] font-black text-white break-all leading-tight">
+                  {versaoAtual.arquivos?.[ativo]?.nome || '—'}
+                </div>
+                <span className={cn("inline-block text-[8px] font-black uppercase tracking-[0.1em] px-2 py-0.5 rounded-md mt-1.5",
                   versaoAtual.status === 'rascunho' ? "bg-amber-500/15 text-amber-300"
                     : versaoAtual.status === 'em_revisao' ? "bg-blue-500/15 text-blue-300"
-                      : "bg-emerald-500/15 text-emerald-400")}>
+                      : versaoAtual.status === 'ajuste' ? "bg-[#ff5351]/15 text-[#ff8c8b]"
+                        : "bg-emerald-500/15 text-emerald-400")}>
                   {versaoAtual.status === 'rascunho' ? `rascunho v${versaoAtual.n}`
-                    : versaoAtual.status === 'em_revisao' ? `v${versaoAtual.n} em revisão` : `v${versaoAtual.n}`}
+                    : versaoAtual.status === 'em_revisao' ? `v${versaoAtual.n} em revisão`
+                      : versaoAtual.status === 'ajuste' ? `v${versaoAtual.n} com ajustes` : `v${versaoAtual.n}`}
                 </span>
               </div>
             )}
 
-            <input ref={fileRef} type="file" className="hidden"
-              multiple
+            <input ref={fileRef} type="file" className="hidden" multiple
               onChange={e => {
                 const fs = e.target.files;
                 if (fs?.length) {
@@ -531,17 +709,18 @@ export default function TarefaExecucao() {
                 }
                 e.target.value = '';
               }} />
+
             <div
-              onClick={() => fileRef.current?.click()}
+              onClick={() => { setTrocando(null); fileRef.current?.click(); }}
               onDragOver={e => e.preventDefault()}
-              onDrop={e => { e.preventDefault(); if (e.dataTransfer.files?.length) subirArquivos(e.dataTransfer.files); }}
-              className="border-[1.5px] border-dashed border-zinc-700 rounded-2xl py-4 px-3 text-center cursor-pointer hover:border-[#ff5351] hover:bg-[#ff5351]/[0.04] transition-all"
+              onDrop={e => { e.preventDefault(); setTrocando(null); if (e.dataTransfer.files?.length) subirArquivos(e.dataTransfer.files); }}
+              className="border-[1.5px] border-dashed border-zinc-700 rounded-xl py-3 px-2 text-center cursor-pointer hover:border-[#ff5351] hover:bg-[#ff5351]/[0.04] transition-all"
             >
               <Upload className="w-4 h-4 mx-auto text-zinc-600" />
-              <div className="text-[12px] font-bold text-zinc-400 mt-1.5">
-                {versoes.length ? 'Nova versão' : 'Arraste o arquivo ou clique'}
+              <div className="text-[11.5px] font-bold text-zinc-400 mt-1">
+                {versoes.length ? 'Nova versão' : 'Enviar arquivos'}
               </div>
-              <div className="text-[10.5px] text-zinc-600">
+              <div className="text-[10px] text-zinc-600">
                 {ehVideo(tipo) ? 'MP4 até 200 MB' : 'PNG ou JPG · pode selecionar várias'}
               </div>
             </div>
@@ -549,10 +728,10 @@ export default function TarefaExecucao() {
             {enviando && (
               <div className="bg-[#151515] border border-zinc-800 rounded-xl p-2.5 mt-2">
                 <div className="flex items-baseline gap-2">
-                  <span className="text-[11.5px] font-semibold text-zinc-200 truncate flex-1">{enviando.nome}</span>
-                  <span className="text-[10.5px] font-black text-emerald-400">{enviando.pct}%</span>
+                  <span className="text-[11px] font-semibold text-zinc-200 truncate flex-1">{enviando.nome}</span>
+                  <span className="text-[10px] font-black text-emerald-400">{enviando.pct}%</span>
                 </div>
-                <div className="text-[10px] text-zinc-600">
+                <div className="text-[9.5px] text-zinc-600">
                   {enviando.total > 1 ? `enviando ${enviando.i} de ${enviando.total}…` : 'enviando…'}
                 </div>
                 <div className="h-[3px] bg-zinc-800 rounded-full mt-1.5 overflow-hidden">
@@ -560,176 +739,6 @@ export default function TarefaExecucao() {
                 </div>
               </div>
             )}
-
-            {versaoAtual?.arquivos?.map((a: any, i: number) => {
-              /* decisão do revisor sobre este arquivo: 'ok' | 'no' | null */
-              const dec = versaoAtual.decisoes?.[i] || null;
-              const aprovado = dec === 'ok';
-              const refazer = dec === 'no';
-              /* motivo específico deste arquivo, extraído das mensagens */
-              const ajuste = (post.mensagens || []).filter((m: any) => m.arquivoIndex === i).slice(-1)[0];
-              return (
-                <div key={i} onClick={() => { setAtivo(i); setDim(null); }}
-                  className={cn("rounded-2xl border p-3 mt-2 flex gap-3 items-start cursor-pointer transition-all",
-                    aprovado ? "bg-emerald-500/[0.08] border-emerald-500/30"
-                      : refazer ? "bg-[#ff5351]/[0.08] border-[#ff5351]/35"
-                        : ativo === i ? "bg-[#151515] border-[#ff5351]"
-                          : "bg-[#151515] border-zinc-800 hover:border-zinc-700")}>
-
-                  <div className={cn("w-7 h-7 rounded-lg shrink-0 flex items-center justify-center text-xs",
-                    aprovado ? "bg-emerald-500/15 text-emerald-400"
-                      : refazer ? "bg-[#ff5351]/15 text-[#ff8c8b]"
-                        : "bg-zinc-800 text-zinc-500")}>
-                    {a.tipo?.startsWith('video') ? '🎬' : '🖼'}
-                  </div>
-
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-0.5">
-                      <span className={cn("text-[12.5px] font-bold truncate flex-1",
-                        aprovado || refazer ? "text-white" : "text-zinc-200")}>{a.nome}</span>
-                      {aprovado && (
-                        <span className="shrink-0 text-[8.5px] font-black uppercase tracking-[0.11em] px-2 py-0.5 rounded-md bg-emerald-500 text-[#062a12]">
-                          Aprovado
-                        </span>
-                      )}
-                      {refazer && (
-                        <span className="shrink-0 text-[8.5px] font-black uppercase tracking-[0.11em] px-2 py-0.5 rounded-md bg-[#ff5351] text-white">
-                          Refazer
-                        </span>
-                      )}
-                    </div>
-                    <div className="text-[10.5px] text-zinc-500">{tamanho(a.tamanho || 0)} · enviado</div>
-
-                    {refazer && ajuste && (
-                      <div className="text-[11.5px] leading-relaxed mt-2 pt-2 border-t border-dashed border-[#ff5351]/30 text-[#e0bebe]">
-                        {ajuste.texto.replace(/^Ajuste no arquivo \d+ \([^)]*\):\s*/, '')}
-                        <span className="text-[#8a7070]"> — {ajuste.autorNome}</span>
-                      </div>
-                    )}
-
-                    {refazer && (
-                      <button
-                        onClick={e => { e.stopPropagation(); setTrocando(i); fileRef.current?.click(); }}
-                        className="mt-2 text-[9px] font-black uppercase tracking-[0.11em] bg-[#ff5351] text-white rounded-lg px-3 py-1.5 hover:brightness-110">
-                        ⬆ Trocar arquivo
-                      </button>
-                    )}
-                  </div>
-
-                  {versaoAtual.status === 'rascunho' && !aprovado && !refazer && (
-                    <button onClick={e => { e.stopPropagation(); removerArquivo(i); }} className="text-zinc-700 hover:text-[#ff8c8b] shrink-0">
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-
-          {/* versões */}
-          {versoes.length > 0 && (
-            <div className="bg-[#1f1f1f] border border-zinc-800 rounded-[20px] p-5">
-              <h2 className="text-[11px] font-black uppercase tracking-[0.16em] text-zinc-500 mb-3">Versões</h2>
-              {[...versoes].reverse().map((v: any) => (
-                <div key={v.n} className="flex gap-2.5 py-2.5 border-t border-zinc-800 first:border-t-0 first:pt-0">
-                  <span className={cn("font-display text-[11px] font-black w-5 shrink-0",
-                    v === versaoAtual ? "text-[#ff5351]" : "text-zinc-600")}>v{v.n}</span>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-[12px] font-semibold text-zinc-300">
-                        {new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date(v.enviadoEm))}
-                      </span>
-                      <span className={cn("text-[8.5px] font-black uppercase tracking-[0.1em] px-2 py-0.5 rounded-md",
-                        v.status === 'ajuste' ? "bg-[#ff5351]/15 text-[#ff8c8b]"
-                          : v.status === 'aprovado' ? "bg-emerald-500/15 text-emerald-400"
-                            : v.status === 'em_revisao' ? "bg-blue-500/15 text-blue-300"
-                              : "bg-amber-500/15 text-amber-300")}>
-                        {v.status === 'ajuste' ? 'ajuste' : v.status === 'aprovado' ? 'aprovado' : v.status === 'em_revisao' ? 'em revisão' : 'rascunho'}
-                      </span>
-                    </div>
-                    {v.motivo && (
-                      <p className="text-[11.5px] text-zinc-500 mt-1.5 border-l-2 border-[#3a2020] pl-2.5 leading-snug">{v.motivo}</p>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* conversa */}
-          <h2 className="flex items-center gap-2.5 text-[11px] font-black uppercase tracking-[0.18em] text-zinc-500 mb-3">
-            Conversa <span className="text-[9.5px] text-zinc-700">{mensagens.length} mensagens</span>
-            <span className="flex-1 h-px bg-zinc-800" />
-          </h2>
-
-          <div className="flex flex-col gap-3 max-h-[280px] overflow-y-auto pr-1 mb-3">
-            {mensagens.length === 0 && <p className="text-[12px] text-zinc-700">Nenhuma mensagem ainda.</p>}
-            {mensagens.map((m: any) => (
-              <div key={m.id} className="flex gap-2.5">
-                <span className="w-[25px] h-[25px] shrink-0 rounded-full bg-zinc-800 text-zinc-400 text-[8.5px] font-black flex items-center justify-center">
-                  {iniciais(m.autorNome)}
-                </span>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap mb-0.5">
-                    <span className="text-[11px] font-black text-zinc-300">{m.autorNome}</span>
-                    <span className="text-[9.5px] text-zinc-700">
-                      {new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date(m.criadoEm))}
-                    </span>
-                  </div>
-                  <div className={cn("text-[12.5px] text-zinc-300 leading-relaxed",
-                    m.visivelCliente && "border-l-2 border-amber-500/50 pl-2.5")}>
-                    {m.texto}
-                  </div>
-                  {m.visivelCliente && (
-                    <div className="text-[9px] font-black uppercase text-amber-300 mt-1">visível para o cliente</div>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="relative">
-            {sugAberta && (
-              <div className="absolute bottom-[calc(100%+6px)] left-0 right-0 bg-[#242424] border border-zinc-700 rounded-xl p-1.5 z-10">
-                {equipe.map((m: any) => (
-                  <button key={m.id} onClick={() => inserirMencao(m.name || m.email)}
-                    className="flex w-full items-center gap-2.5 px-2.5 py-2 rounded-lg hover:bg-zinc-800 text-left">
-                    <span className="w-5 h-5 rounded-full bg-zinc-700 text-[8px] font-black flex items-center justify-center text-zinc-300">
-                      {iniciais(m.name || m.email)}
-                    </span>
-                    <span className="text-[12px] font-bold text-zinc-200">{m.name || m.email}</span>
-                    <span className="text-[9.5px] text-zinc-500 ml-auto">{m.role}</span>
-                  </button>
-                ))}
-                <button onClick={() => inserirMencao('cliente')}
-                  className="flex w-full items-center gap-2.5 px-2.5 py-2 rounded-lg hover:bg-zinc-800 text-left">
-                  <span className="w-5 h-5 rounded-full bg-amber-500/20 text-amber-300 text-[8px] font-black flex items-center justify-center">CL</span>
-                  <span className="text-[12px] font-bold text-zinc-200">{cliente}</span>
-                  <span className="text-[9.5px] text-amber-300 ml-auto">cliente</span>
-                </button>
-              </div>
-            )}
-            <textarea
-              rows={2} value={msg}
-              onChange={e => { setMsg(e.target.value); setSugAberta(e.target.value.split(/\s/).pop() === '@'); }}
-              placeholder="Escreva aqui. Use @ para chamar alguém…"
-              className="w-full bg-[#151515] border border-zinc-800 rounded-xl px-3.5 py-2.5 text-[13px] text-zinc-200 outline-none focus:border-[#ff5351] resize-none"
-            />
-          </div>
-
-          {mencionaCliente && (
-            <div className="flex gap-2 bg-amber-500/[0.07] border border-amber-500/30 rounded-xl px-3 py-2.5 mt-2 text-[11px] text-amber-100/80 leading-snug">
-              👁 <span><b className="text-amber-300">Visível para o cliente.</b> Remova a menção para falar só com a equipe.</span>
-            </div>
-          )}
-
-          <div className="flex items-center gap-2 mt-2">
-            <span className="text-[10.5px] text-zinc-700 flex-1">Digite <b className="text-zinc-500">@</b> para mencionar</span>
-            <button onClick={enviarMensagem} disabled={!msg.trim()}
-              className={cn("px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-[0.13em] transition-all",
-                msg.trim() ? "bg-[#ff5351] text-white hover:brightness-110" : "bg-zinc-800 text-zinc-600 cursor-not-allowed")}>
-              Enviar
-            </button>
           </div>
         </div>
       </div>
@@ -738,8 +747,8 @@ export default function TarefaExecucao() {
       {lightbox && versaoAtual?.arquivos?.length > 0 && (
         <div className="fixed inset-0 bg-black/95 z-[9999] flex flex-col p-6" onClick={() => setLightbox(false)}>
           <div className="flex items-center gap-4 mb-4" onClick={e => e.stopPropagation()}>
-            <div>
-              <div className="font-display text-[15px] font-black text-white">{post.headline}</div>
+            <div className="min-w-0">
+              <div className="font-display text-[15px] font-black text-white truncate">{post.headline}</div>
               <div className="text-[12px] text-zinc-500">
                 {versaoAtual.arquivos[slideLB]?.nome} · {versaoAtual.arquivos.length > 1 ? `${slideLB + 1} de ${versaoAtual.arquivos.length} · ` : ''}Esc para fechar
               </div>
@@ -749,16 +758,17 @@ export default function TarefaExecucao() {
               <X className="w-3.5 h-3.5" /> Fechar
             </button>
           </div>
+
           <div className="flex-1 flex items-center justify-center gap-5 min-h-0" onClick={e => e.stopPropagation()}>
             {versaoAtual.arquivos.length > 1 && (
               <button onClick={() => setSlideLB(s => (s - 1 + versaoAtual.arquivos.length) % versaoAtual.arquivos.length)}
                 className="w-11 h-11 shrink-0 rounded-full border border-zinc-700 text-zinc-300 text-xl hover:bg-[#ff5351] hover:text-white hover:border-[#ff5351]">‹</button>
             )}
-            <div className="h-full flex items-center justify-center">
+            <div className="h-full flex items-center justify-center min-w-0">
               {versaoAtual.arquivos[slideLB]?.tipo?.startsWith('video') ? (
-                <video src={versaoAtual.arquivos[slideLB].url} controls autoPlay className="max-h-full" />
+                <video src={versaoAtual.arquivos[slideLB].url} controls autoPlay className="max-h-full max-w-full" />
               ) : (
-                <img src={versaoAtual.arquivos[slideLB]?.url} alt="" className="max-h-full object-contain" />
+                <img src={versaoAtual.arquivos[slideLB]?.url} alt="" className="max-h-full max-w-full object-contain" />
               )}
             </div>
             {versaoAtual.arquivos.length > 1 && (
@@ -766,6 +776,7 @@ export default function TarefaExecucao() {
                 className="w-11 h-11 shrink-0 rounded-full border border-zinc-700 text-zinc-300 text-xl hover:bg-[#ff5351] hover:text-white hover:border-[#ff5351]">›</button>
             )}
           </div>
+
           {versaoAtual.arquivos.length > 1 && (
             <div className="flex gap-2 justify-center mt-4" onClick={e => e.stopPropagation()}>
               {versaoAtual.arquivos.map((_: any, i: number) => (
