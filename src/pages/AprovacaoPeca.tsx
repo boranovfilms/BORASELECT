@@ -45,6 +45,7 @@ export default function AprovacaoPeca() {
   const [atual, setAtual] = useState(0);
   const [motivo, setMotivo] = useState('');
   const [decisoes, setDecisoes] = useState<Record<number, { d: 'ok' | 'no'; motivo: string }>>({});
+  const [novosDesde, setNovosDesde] = useState(0);   /* arquivos trocados desde a última revisão */
 
   useEffect(() => { carregar(); }, [postId]);
 
@@ -60,6 +61,22 @@ export default function AprovacaoPeca() {
       if (!snap.exists()) { toast.error('Peça não encontrada'); navigate(-1); return; }
       const p = { id: snap.id, ...snap.data() } as any;
       setPost(p);
+
+      /* traz as decisões da revisão anterior: o que já foi aprovado continua aprovado.
+         Só os arquivos trocados desde então voltam a ficar sem decisão. */
+      const t = p.tasks?.[idx];
+      const v = t?.versoes?.length ? t.versoes[t.versoes.length - 1] : null;
+      if (v?.decisoes?.length) {
+        const anteriores: Record<number, { d: 'ok' | 'no'; motivo: string }> = {};
+        v.decisoes.forEach((d: any, i: number) => {
+          if (d === 'ok') anteriores[i] = { d: 'ok', motivo: '' };
+        });
+        setDecisoes(anteriores);
+        setNovosDesde(v.decisoes.filter((d: any) => d === null || d === undefined).length);
+        /* abre já no primeiro arquivo pendente */
+        const primeiro = v.decisoes.findIndex((d: any) => d !== 'ok');
+        if (primeiro >= 0) setAtual(primeiro);
+      }
 
       const cs = await getDoc(doc(db, 'clientes', p.clientId));
       if (cs.exists()) { setCliente(cs.data().name || ''); setClienteEmail(cs.data().email?.toLowerCase() || ''); }
@@ -260,6 +277,18 @@ export default function AprovacaoPeca() {
           </div>
         </div>
 
+        {novosDesde > 0 && (
+          <>
+            <div className="w-px h-8 bg-zinc-800" />
+            <div className="flex gap-2 items-center bg-amber-500/[0.08] border border-amber-500/30 rounded-xl px-3.5 py-2">
+              <span className="font-display text-[15px] font-black text-amber-300 leading-none">{novosDesde}</span>
+              <span className="text-[9px] font-black uppercase tracking-[0.11em] text-amber-200/70 leading-tight">
+                arquivo{novosDesde > 1 ? 's' : ''}<br />trocado{novosDesde > 1 ? 's' : ''}
+              </span>
+            </div>
+          </>
+        )}
+
         <div className="w-px h-8 bg-zinc-800" />
 
         <div className="flex gap-2">
@@ -323,6 +352,7 @@ export default function AprovacaoPeca() {
                 const d = decisoes[i]?.d;
                 return (
                   <button key={i} onClick={() => { setAtual(i); setMotivo(decisoes[i]?.motivo || ''); }}
+                    title={decisoes[i]?.d === 'ok' ? 'já aprovado na revisão anterior' : ''}
                     className={cn("w-10 h-[52px] rounded-lg border-2 flex items-center justify-center text-[11px] font-black relative",
                       i === atual ? "border-white text-white" : d === 'ok' ? "border-emerald-500 bg-emerald-500/10 text-emerald-400"
                         : d === 'no' ? "border-[#ff5351] bg-[#ff5351]/10 text-[#ff8c8b]" : "border-zinc-800 text-zinc-600")}>
