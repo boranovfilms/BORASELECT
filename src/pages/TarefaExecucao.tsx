@@ -212,12 +212,17 @@ export default function TarefaExecucao() {
 
       const novosArquivos = (versaoAtual.arquivos || []).map((a: any, k: number) =>
         k === i ? { nome: file.name, url, tamanho: file.size, tipo: file.type, caminho } : a);
-      /* o arquivo trocado volta a "sem decisão"; os demais mantêm a decisão anterior */
-      const novasDecisoes = (versaoAtual.decisoes || []).map((d: any, k: number) => k === i ? null : d);
+      /* o arquivo trocado volta a "sem decisão" nas DUAS fases; os demais mantêm a sua */
+      const zera = (lista: any[]) => (lista || []).map((d: any, k: number) => k === i ? null : d);
 
       const novasVersoes = versoes.map((v, k) =>
         k === versoes.length - 1
-          ? { ...v, arquivos: novosArquivos, decisoes: novasDecisoes }
+          ? {
+              ...v,
+              arquivos: novosArquivos,
+              decisoes: zera(v.decisoes),
+              ...(v.decisoesCliente ? { decisoesCliente: zera(v.decisoesCliente) } : {}),
+            }
           : v);
 
       await gravarTask({ versoes: novasVersoes });
