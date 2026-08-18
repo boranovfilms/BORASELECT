@@ -62,19 +62,36 @@ export default function AprovacaoPeca() {
       const p = { id: snap.id, ...snap.data() } as any;
       setPost(p);
 
-      /* traz as decisões da revisão anterior: o que já foi aprovado continua aprovado.
-         Só os arquivos trocados desde então voltam a ficar sem decisão. */
+      /* Cada fase tem a SUA lista de decisões:
+           versao.decisoes        -> revisão interna (redator)
+           versao.decisoesCliente -> aprovação do cliente
+         O cliente NUNCA herda o que o redator aprovou — para ele a peça chega limpa.
+         Dentro da mesma fase, porém, o que já foi aprovado continua aprovado quando
+         o designer troca só um arquivo e reenvia. */
       const t = p.tasks?.[idx];
       const v = t?.versoes?.length ? t.versoes[t.versoes.length - 1] : null;
-      if (v?.decisoes?.length) {
+
+      /* descobre o papel antes de decidir qual lista usar */
+      let papelAtual = '';
+      if (email === 'admin@boraselect.com.br') papelAtual = 'master';
+      else {
+        const bq = await getDocs(query(collection(db, 'boraselect'), where('email', '==', email)));
+        if (!bq.empty) papelAtual = bq.docs[0].data().role || 'redator';
+        else {
+          const cq2 = await getDocs(query(collection(db, 'clientes'), where('email', '==', email)));
+          if (!cq2.empty) papelAtual = cq2.docs[0].data().role || 'cliente';
+        }
+      }
+      const daFase = ['cliente', 'equipe'].includes(papelAtual) ? v?.decisoesCliente : v?.decisoes;
+
+      if (daFase?.length) {
         const anteriores: Record<number, { d: 'ok' | 'no'; motivo: string }> = {};
-        v.decisoes.forEach((d: any, i: number) => {
+        daFase.forEach((d: any, i: number) => {
           if (d === 'ok') anteriores[i] = { d: 'ok', motivo: '' };
         });
         setDecisoes(anteriores);
-        setNovosDesde(v.decisoes.filter((d: any) => d === null || d === undefined).length);
-        /* abre já no primeiro arquivo pendente */
-        const primeiro = v.decisoes.findIndex((d: any) => d !== 'ok');
+        setNovosDesde(daFase.filter((d: any) => d === null || d === undefined).length);
+        const primeiro = daFase.findIndex((d: any) => d !== 'ok');
         if (primeiro >= 0) setAtual(primeiro);
       }
 
@@ -176,6 +193,8 @@ export default function AprovacaoPeca() {
         ? reprovados.map(r => `#${r.i + 1} ${r.a.nome}: ${r.d!.motivo}`).join(' · ')
         : null;
 
+      const listaDecisoes = arquivos.map((_, i2) => decisoes[i2]?.d || null);
+
       const novasVersoes = versoes.map((v, i) =>
         i === versoes.length - 1
           ? {
@@ -184,7 +203,12 @@ export default function AprovacaoPeca() {
               motivo: resumo,
               revisadoPor: userName,
               revisadoEm: new Date().toISOString(),
-              decisoes: arquivos.map((_, i2) => decisoes[i2]?.d || null),
+              /* cada fase grava na sua própria lista */
+              ...(ehCliente
+                ? { decisoesCliente: listaDecisoes }
+                : { decisoes: listaDecisoes }),
+              /* liberou para o cliente: a lista dele começa zerada */
+              ...(!ehCliente && !houveReprovacao ? { decisoesCliente: arquivos.map(() => null) } : {}),
             }
           : v);
 
